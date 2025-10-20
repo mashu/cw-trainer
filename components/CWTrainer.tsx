@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useReducer } from 'react';
 import ProgressHeader from './ProgressHeader';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import GroupsList from './GroupsList';
 import TrainingControls from './TrainingControls';
 import StatsView, { SessionResult as StatsSessionResult } from './StatsView';
@@ -603,6 +603,7 @@ const CWTrainer: React.FC = () => {
                         tick={{ fontSize: 10, fill: '#475569' }}
                         label={{ value: 'Accuracy (%)', angle: -90, position: 'insideLeft', offset: 10, fill: '#475569', fontSize: 10 }}
                       />
+                      <ReferenceLine y={90} stroke="#ef4444" strokeDasharray="4 4" />
                       <Tooltip formatter={(v: any) => [`${v}%`, 'Accuracy']} />
                       <Line type="monotone" dataKey="y" stroke="#6366f1" strokeWidth={2} dot={false} />
                     </LineChart>

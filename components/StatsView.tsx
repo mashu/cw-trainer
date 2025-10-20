@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar, Brush } from 'recharts';
+import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar, Brush, ReferenceLine } from 'recharts';
 
 interface SessionGroup {
   sent: string;
@@ -92,6 +92,7 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="x" />
                   <YAxis domain={[0, 100]} />
+                  <ReferenceLine y={90} stroke="#ef4444" strokeDasharray="4 4" />
                   <Tooltip />
                   <Legend />
                   <Line type="monotone" dataKey="accuracy" stroke="#2563eb" strokeWidth={1.5} dot={{ r: 3 }} name="Session" />
