@@ -234,6 +234,7 @@ const CWTrainer: React.FC = () => {
     setSentGroups([]);
     setUserInput([]);
     setCurrentInput('');
+    setConfirmedGroups({});
     startedAtRef.current = Date.now();
     
     const groups: string[] = [];
