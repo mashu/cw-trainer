@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import GroupItem from './GroupItem';
 import StatsView, { SessionResult as StatsSessionResult } from './StatsView';
+import { initFirebase, googleSignIn, googleSignOut } from '@/lib/firebaseClient';
+import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'firebase/firestore';
 
 // Koch Method Sequence
 const KOCH_SEQUENCE = ['K', 'M', 'R', 'S', 'U', 'A', 'P', 'T', 'L', 'O', 'W', 'I', 
@@ -38,6 +40,8 @@ interface TrainingSettings {
 interface SessionResult {
   date: string;
   timestamp: number;
+  startedAt: number;
+  finishedAt: number;
   groups: Array<{
     sent: string;
     received: string;
@@ -85,36 +89,66 @@ const CWTrainer: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const trainingAbortRef = useRef<boolean>(false);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const startedAtRef = useRef<number | null>(null);
+
+  const firebaseRef = useRef<ReturnType<typeof initFirebase> | null>(null);
+  const [firebaseReady, setFirebaseReady] = useState(false);
 
   useEffect(() => {
+    firebaseRef.current = initFirebase();
+    setFirebaseReady(!!firebaseRef.current);
     loadData();
   }, [user]);
 
-  const loadData = () => {
+  const loadData = async () => {
+    // Firestore if available and user has Google auth
+    if (firebaseRef.current && user && (user as any).uid) {
+      const db = firebaseRef.current.db;
+      const sessionsSnap = await getDocs(query(collection(db, 'users', (user as any).uid, 'sessions'), orderBy('timestamp', 'asc')));
+      const loaded: SessionResult[] = [];
+      sessionsSnap.forEach((d: any) => loaded.push(d.data() as SessionResult));
+      setSessionResults(loaded);
+      return;
+    }
+
+    // Fallback to local storage
     const key = user ? `morse_results_${user.email}` : 'morse_results_local';
     const saved = localStorage.getItem(key);
-    if (saved) {
-      setSessionResults(JSON.parse(saved));
-    }
-    
+    if (saved) setSessionResults(JSON.parse(saved));
     if (!user) {
       const savedSettings = localStorage.getItem('morse_settings_local');
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+      if (savedSettings) setSettings(JSON.parse(savedSettings));
+    }
+  };
+
+  const saveData = async (results: SessionResult[]) => {
+    // Firestore if available and Google user
+    if (firebaseRef.current && user && (user as any).uid) {
+      const db = firebaseRef.current.db;
+      await Promise.all(results.map(r => setDoc(doc(db, 'users', (user as any).uid, 'sessions', String(r.timestamp)), r)));
+      // settings
+      await setDoc(doc(db, 'users', (user as any).uid, 'settings', 'default'), settings);
+    } else {
+      const key = user ? `morse_results_${user.email}` : 'morse_results_local';
+      localStorage.setItem(key, JSON.stringify(results));
+      if (!user) localStorage.setItem('morse_settings_local', JSON.stringify(settings));
+    }
+  };
+
+  const handleLogin = async () => {
+    // Prefer Google if Firebase available
+    if (firebaseRef.current) {
+      try {
+        const fu = await googleSignIn(firebaseRef.current);
+        const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
+        setUser(newUser);
+        setShowAuth(false);
+        await loadData();
+        return;
+      } catch {
+        // fall back to manual email
       }
     }
-  };
-
-  const saveData = (results: SessionResult[]) => {
-    const key = user ? `morse_results_${user.email}` : 'morse_results_local';
-    localStorage.setItem(key, JSON.stringify(results));
-    
-    if (!user) {
-      localStorage.setItem('morse_settings_local', JSON.stringify(settings));
-    }
-  };
-
-  const handleLogin = () => {
     if (email) {
       const newUser: User = { email, username: username || undefined };
       setUser(newUser);
@@ -123,7 +157,10 @@ const CWTrainer: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (firebaseRef.current) {
+      try { await googleSignOut(firebaseRef.current); } catch {}
+    }
     setUser(null);
     localStorage.removeItem('morse_user');
   };
@@ -197,6 +234,7 @@ const CWTrainer: React.FC = () => {
     setSentGroups([]);
     setUserInput([]);
     setCurrentInput('');
+    startedAtRef.current = Date.now();
     
     const groups: string[] = [];
     for (let i = 0; i < settings.numGroups; i++) {
@@ -291,6 +329,8 @@ const CWTrainer: React.FC = () => {
     const result: SessionResult = {
       date: new Date().toISOString().split('T')[0],
       timestamp: Date.now(),
+      startedAt: startedAtRef.current || Date.now(),
+      finishedAt: Date.now(),
       groups,
       accuracy,
       letterAccuracy
@@ -298,7 +338,7 @@ const CWTrainer: React.FC = () => {
 
     const newResults = [...sessionResults, result];
     setSessionResults(newResults);
-    saveData(newResults);
+    void saveData(newResults);
     setShowStats(true);
   };
 
@@ -319,10 +359,13 @@ const CWTrainer: React.FC = () => {
     }));
   };
 
-  const deleteSession = (timestamp: number) => {
+  const deleteSession = async (timestamp: number) => {
     const filtered = sessionResults.filter(r => r.timestamp !== timestamp);
     setSessionResults(filtered);
-    saveData(filtered);
+    if (firebaseRef.current && user && (user as any).uid) {
+      await deleteDoc(doc(firebaseRef.current.db, 'users', (user as any).uid, 'sessions', String(timestamp)));
+    }
+    void saveData(filtered);
   };
 
   const getLetterStats = () => {
@@ -387,6 +430,14 @@ const CWTrainer: React.FC = () => {
         {showAuth && !user && (
           <div className="mb-8 p-4 border border-gray-300 rounded-lg bg-gray-50">
             <h3 className="text-lg font-semibold mb-4">Sign In</h3>
+            {firebaseReady && (
+              <button
+                onClick={handleLogin}
+                className="w-full px-4 py-2 mb-3 bg-white border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Continue with Google
+              </button>
+            )}
             <input
               type="email"
               placeholder="Email (required)"
