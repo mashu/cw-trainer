@@ -1,5 +1,5 @@
 import { app as coreApp, auth as coreAuth, db as coreDb } from './firebase';
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, User as FirebaseUser } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User as FirebaseUser } from 'firebase/auth';
 
 export type FirebaseServices = {
   app: any;
@@ -16,9 +16,15 @@ export function initFirebase(): FirebaseServices | null {
 }
 
 export async function googleSignIn(services: FirebaseServices): Promise<FirebaseUser | null> {
-  // Use redirect flow to avoid COOP/popup issues
-  await signInWithRedirect(services.auth, services.provider);
-  return null;
+  try {
+    try { console.info('[Auth] Trying popup sign-in'); } catch {}
+    const res = await signInWithPopup(services.auth, services.provider);
+    return res.user;
+  } catch (err: any) {
+    try { console.warn('[Auth] Popup sign-in failed, falling back to redirect', err?.code || err); } catch {}
+    await signInWithRedirect(services.auth, services.provider);
+    return null;
+  }
 }
 
 export async function googleSignOut(services: FirebaseServices): Promise<void> {
@@ -29,7 +35,9 @@ export async function getRedirectedUser(services: FirebaseServices): Promise<Fir
   try {
     const res = await getRedirectResult(services.auth);
     return res?.user ?? null;
-  } catch {
+  } catch (e) {
+    // Surface redirect completion issues for easier debugging in production
+    try { console.error('[Auth] getRedirectResult error', e); } catch {}
     return null;
   }
 }
