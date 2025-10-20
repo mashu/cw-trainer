@@ -374,13 +374,13 @@ const CWTrainer: React.FC = () => {
     // Stop session and process what we have
     trainingAbortRef.current = true;
     setIsTraining(false);
-    const answers = (userInput.length ? userInput : currentInput.split(' ')).map(a => (a || '').toUpperCase());
+    const answers = (userInput.length ? userInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
     processResults(answers);
   };
 
   const confirmGroupAnswer = (index: number, overrideValue?: string) => {
     if (!sentGroups.length) return;
-    const normalized = (overrideValue ?? userInput[index] ?? '').toUpperCase();
+    const normalized = (overrideValue ?? userInput[index] ?? '').trim().toUpperCase();
     const nextAnswers = [...userInput];
     nextAnswers[index] = normalized;
     setUserInput(nextAnswers);
@@ -424,11 +424,15 @@ const CWTrainer: React.FC = () => {
   };
 
   const processResults = (answers: string[]) => {
-    const groups = sentGroups.map((sent, idx) => ({
-      sent,
-      received: answers[idx] || '',
-      correct: sent === (answers[idx] || '')
-    }));
+    const groups = sentGroups.map((sent, idx) => {
+      const receivedRaw = answers[idx] || '';
+      const received = receivedRaw.trim().toUpperCase();
+      return {
+        sent,
+        received,
+        correct: sent === received,
+      };
+    });
 
     const letterAccuracy: Record<string, { correct: number; total: number }> = {};
     
