@@ -53,7 +53,8 @@ interface User {
 const CWTrainer: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [showAuth, setShowAuth] = useState(false);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [authInProgress, setAuthInProgress] = useState(false);
   
   const [settings, setSettings] = useState<TrainingSettings>({
     kochLevel: 2,
@@ -114,12 +115,14 @@ const CWTrainer: React.FC = () => {
           if (fu) {
             const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
             setUser(newUser);
+            setAuthInProgress(false);
           }
         });
         const redirected = await getRedirectedUser(firebaseRef.current);
         if (redirected) {
           const newUser: User & { uid: string } = { email: redirected.email || '', username: redirected.displayName || undefined, uid: redirected.uid };
           setUser(newUser);
+          setAuthInProgress(false);
         }
       }
     })();
