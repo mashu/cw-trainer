@@ -35,7 +35,7 @@ jobs:
         if: ${{ hashFiles('**/package-lock.json') == '' }}
         run: npm install
 
-      - name: Build (static export via next.config.js output: export)
+      - name: "Build (static export via next.config.js output: export)"
         env:
           BASE_PATH: /${{ github.event.repository.name }}
         run: npm run build
