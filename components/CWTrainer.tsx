@@ -1,27 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import GroupItem from './GroupItem';
+import React, { useState, useEffect, useRef, useReducer } from 'react';
+import ProgressHeader from './ProgressHeader';
+import GroupsList from './GroupsList';
+import TrainingControls from './TrainingControls';
 import StatsView, { SessionResult as StatsSessionResult } from './StatsView';
 import { initFirebase, googleSignIn, googleSignOut } from '@/lib/firebaseClient';
+import { playMorseCode as externalPlayMorseCode } from '@/lib/morseAudio';
+import { trainingReducer as externalTrainingReducer } from '@/lib/trainingMachine';
+import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
+import { getDailyStats as computeDailyStats, getLetterStats as computeLetterStats } from '@/lib/stats';
+import Sidebar from './Sidebar';
 import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'firebase/firestore';
 
-// Koch Method Sequence
-const KOCH_SEQUENCE = ['K', 'M', 'R', 'S', 'U', 'A', 'P', 'T', 'L', 'O', 'W', 'I', 
-                        'N', 'J', 'E', 'F', '0', 'Y', 'V', 'G', '5', 'Q', '9', 
-                        'Z', 'H', '3', '8', 'B', '?', '4', '2', '7', 'C', '1', 
-                        '6', 'D', 'X', '/', '=', '+'];
-
-// Morse Code Map
-const MORSE_CODE: Record<string, string> = {
-  'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
-  'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
-  'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.',
-  'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
-  'Y': '-.--', 'Z': '--..', '0': '-----', '1': '.----', '2': '..---',
-  '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...',
-  '8': '---..', '9': '----.', '/': '-..-.', '=': '-...-', '+': '.-.-.',
-  '?': '..--..'
-};
+// Constants and MORSE code moved to lib/morseConstants
 
 interface TrainingSettings {
   kochLevel: number;
@@ -51,6 +41,8 @@ interface SessionResult {
   letterAccuracy: Record<string, { correct: number; total: number }>;
 }
 
+// Training state machine moved to lib/trainingMachine
+
 interface User {
   email: string;
   username?: string;
@@ -68,7 +60,7 @@ const CWTrainer: React.FC = () => {
     steepness: 5,
     sessionDuration: 5,
     charsPerGroup: 5,
-    numGroups: 20,
+    numGroups: 5,
     wpm: 20,
     groupSpacing: 2,
     minGroupSize: 2,
@@ -87,17 +79,20 @@ const CWTrainer: React.FC = () => {
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [currentFocusedGroup, setCurrentFocusedGroup] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [machine, dispatchMachine] = useReducer(externalTrainingReducer, { status: 'idle', currentGroupIndex: 0, sessionId: 0 });
   
   // Stop training when navigating away from training panel
   const stopTrainingIfActive = () => {
     if (isTraining) {
       trainingAbortRef.current = true;
       setIsTraining(false);
+      dispatchMachine({ type: 'STOP' });
     }
   };
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const trainingAbortRef = useRef<boolean>(false);
+  const sessionIdRef = useRef<number>(0);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const startedAtRef = useRef<number | null>(null);
 
@@ -110,12 +105,44 @@ const CWTrainer: React.FC = () => {
     loadData();
   }, [user]);
 
+  // Persist settings on change (both local and Firestore if available)
+  useEffect(() => {
+    // Avoid persisting on first render if defaults equal
+    const persist = async () => {
+      try {
+        if (firebaseRef.current && user && (user as any).uid) {
+          const db = firebaseRef.current.db;
+          await setDoc(doc(db, 'users', (user as any).uid, 'settings', 'default'), settings);
+        }
+      } catch {}
+      try {
+        localStorage.setItem('morse_settings_local', JSON.stringify(settings));
+      } catch {}
+    };
+    void persist();
+  }, [settings, user]);
+
+  // preview function removed for now to avoid unused code
+
+  // Keep the currently focused group's input fully visible at the top of the scroll area
+  useEffect(() => {
+    const target = inputRefs.current[currentFocusedGroup];
+    if (target) {
+      try {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {
+        // no-op
+      }
+    }
+  }, [currentFocusedGroup]);
+
   // Stop training when component unmounts or when navigating away
   useEffect(() => {
     return () => {
       if (isTraining) {
         trainingAbortRef.current = true;
         setIsTraining(false);
+        dispatchMachine({ type: 'ABORT' });
       }
     };
   }, [isTraining]);
@@ -124,6 +151,8 @@ const CWTrainer: React.FC = () => {
     // Firestore if available and user has Google auth
     if (firebaseRef.current && user && (user as any).uid) {
       const db = firebaseRef.current.db;
+      // Try to load settings snapshot via sessions collection (store latest settings alongside session if needed)
+      // Fallback relies on local storage below
       const sessionsSnap = await getDocs(query(collection(db, 'users', (user as any).uid, 'sessions'), orderBy('timestamp', 'asc')));
       const loaded: SessionResult[] = [];
       sessionsSnap.forEach((d: any) => loaded.push(d.data() as SessionResult));
@@ -137,7 +166,10 @@ const CWTrainer: React.FC = () => {
     if (saved) setSessionResults(JSON.parse(saved));
     if (!user) {
       const savedSettings = localStorage.getItem('morse_settings_local');
-      if (savedSettings) setSettings(JSON.parse(savedSettings));
+      if (savedSettings) {
+        const s = JSON.parse(savedSettings);
+        setSettings(prev => ({ ...prev, ...s }));
+      }
     }
   };
 
@@ -151,7 +183,7 @@ const CWTrainer: React.FC = () => {
     } else {
       const key = user ? `morse_results_${user.email}` : 'morse_results_local';
       localStorage.setItem(key, JSON.stringify(results));
-      if (!user) localStorage.setItem('morse_settings_local', JSON.stringify(settings));
+      localStorage.setItem('morse_settings_local', JSON.stringify(settings));
     }
   };
 
@@ -185,85 +217,38 @@ const CWTrainer: React.FC = () => {
     localStorage.removeItem('morse_user');
   };
 
-  const generateGroup = (): string => {
-    const availableChars = KOCH_SEQUENCE.slice(0, settings.kochLevel);
-    const groupSize = Math.floor(Math.random() * 
-      (settings.maxGroupSize - settings.minGroupSize + 1)) + settings.minGroupSize;
-    
-    let group = '';
-    for (let i = 0; i < groupSize; i++) {
-      group += availableChars[Math.floor(Math.random() * availableChars.length)];
-    }
-    return group;
-  };
+  const generateGroup = (): string => externalGenerateGroup({ kochLevel: settings.kochLevel, minGroupSize: settings.minGroupSize, maxGroupSize: settings.maxGroupSize });
 
-  const playMorseCode = async (text: string) => {
-    // Only play sound if training is still active
-    if (trainingAbortRef.current) {
-      return 0;
-    }
-    
+  const playMorseCode = async (text: string, sessionId: number) => {
+    if (trainingAbortRef.current || sessionIdRef.current !== sessionId) return 0;
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
-    
     const ctx = audioContextRef.current;
-    const dotDuration = 1.2 / settings.wpm;
-    const dashDuration = dotDuration * 3;
-    const symbolSpace = dotDuration;
-    const charSpace = dotDuration * 3;
-    const riseTime = settings.steepness / 1000;
-    
-    let currentTime = ctx.currentTime;
+    return await externalPlayMorseCode(
+      ctx,
+      text,
+      { wpm: settings.wpm, sideTone: settings.sideTone, steepness: settings.steepness },
+      () => (trainingAbortRef.current || sessionIdRef.current !== sessionId)
+    );
+  };
 
-    for (let i = 0; i < text.length; i++) {
-      // Check if training was stopped during playback
-      if (trainingAbortRef.current) {
-        return 0;
-      }
-      
-      const char = text[i].toUpperCase();
-      const morse = MORSE_CODE[char];
-      
-      if (!morse) continue;
-
-      for (let j = 0; j < morse.length; j++) {
-        // Check if training was stopped during symbol playback
-        if (trainingAbortRef.current) {
-          return 0;
-        }
-        
-        const symbol = morse[j];
-        const duration = symbol === '.' ? dotDuration : dashDuration;
-        
-        const oscillator = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        
-        oscillator.type = 'sine';
-        oscillator.frequency.value = settings.sideTone;
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(ctx.destination);
-        
-        gainNode.gain.setValueAtTime(0, currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.3, currentTime + riseTime);
-        gainNode.gain.setValueAtTime(0.3, currentTime + duration - riseTime);
-        gainNode.gain.linearRampToValueAtTime(0, currentTime + duration);
-        
-        oscillator.start(currentTime);
-        oscillator.stop(currentTime + duration);
-        
-        currentTime += duration + symbolSpace;
-      }
-      
-      currentTime += charSpace - symbolSpace;
+  const sleepCancelable = async (ms: number, sessionId: number) => {
+    const stepMs = 50;
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      if (trainingAbortRef.current || sessionIdRef.current !== sessionId) return;
+      const remaining = end - Date.now();
+      await new Promise(r => setTimeout(r, Math.min(stepMs, Math.max(0, remaining))));
     }
-    
-    return currentTime - ctx.currentTime;
   };
 
   const startTraining = async () => {
+    // Abort any previous session and start a new session id
     trainingAbortRef.current = false;
+    dispatchMachine({ type: 'START' });
+    const mySession = sessionIdRef.current + 1;
+    sessionIdRef.current = mySession;
     setIsTraining(true);
     setCurrentGroup(0);
     setSentGroups([]);
@@ -278,30 +263,33 @@ const CWTrainer: React.FC = () => {
       groups.push(generateGroup());
     }
     setSentGroups(groups);
+    dispatchMachine({ type: 'PREPARED' });
     
     for (let i = 0; i < groups.length; i++) {
-      if (trainingAbortRef.current) break;
+      if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
       setCurrentGroup(i);
-      const duration = await playMorseCode(groups[i]);
-      await new Promise(resolve => setTimeout(resolve, (duration + settings.groupSpacing) * 1000));
-      if (trainingAbortRef.current) break;
+      dispatchMachine({ type: 'GROUP_START', index: i });
+      const duration = await playMorseCode(groups[i], mySession);
+      await sleepCancelable((duration + settings.groupSpacing) * 1000, mySession);
+      if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
       if (settings.interactiveMode) {
-        await new Promise(resolve => {
-          const checkInput = setInterval(() => {
-            if (trainingAbortRef.current) {
-              clearInterval(checkInput);
-              resolve(null);
-              return;
-            }
-            if ((userInput[i] && userInput[i].length > 0)) {
-              clearInterval(checkInput);
-              resolve(null);
-            }
-          }, 100);
-        });
+        // Poll user input while allowing abort/session switch
+        dispatchMachine({ type: 'WAIT_INPUT' });
+        while (true) {
+          if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
+          const answer = (userInput[i] || '').trim();
+          if (answer.length > 0) break;
+          await sleepCancelable(100, mySession);
+        }
+        if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
+          dispatchMachine({ type: 'INPUT_RECEIVED' });
+        }
       }
     }
     setIsTraining(false);
+    if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
+      dispatchMachine({ type: 'COMPLETE' });
+    }
   };
 
   const submitAnswer = () => {
@@ -395,22 +383,7 @@ const CWTrainer: React.FC = () => {
     setShowStats(true);
   };
 
-  const getDailyStats = () => {
-    const dailyData: Record<string, number[]> = {};
-    
-    sessionResults.forEach(result => {
-      if (!dailyData[result.date]) {
-        dailyData[result.date] = [];
-      }
-      dailyData[result.date].push(result.accuracy * 100);
-    });
-
-    return Object.keys(dailyData).sort().map(date => ({
-      date,
-      average: dailyData[date].reduce((a, b) => a + b, 0) / dailyData[date].length,
-      sessions: dailyData[date]
-    }));
-  };
+  const getDailyStats = () => computeDailyStats(sessionResults);
 
   const deleteSession = async (timestamp: number) => {
     const filtered = sessionResults.filter(r => r.timestamp !== timestamp);
@@ -421,25 +394,7 @@ const CWTrainer: React.FC = () => {
     void saveData(filtered);
   };
 
-  const getLetterStats = () => {
-    const letterStats: Record<string, { correct: number; total: number }> = {};
-    
-    sessionResults.forEach(result => {
-      Object.keys(result.letterAccuracy).forEach(letter => {
-        if (!letterStats[letter]) {
-          letterStats[letter] = { correct: 0, total: 0 };
-        }
-        letterStats[letter].correct += result.letterAccuracy[letter].correct;
-        letterStats[letter].total += result.letterAccuracy[letter].total;
-      });
-    });
-
-    return Object.keys(letterStats).map(letter => ({
-      letter,
-      accuracy: (letterStats[letter].correct / letterStats[letter].total) * 100,
-      total: letterStats[letter].total
-    })).sort((a, b) => a.accuracy - b.accuracy);
-  };
+  const getLetterStats = () => computeLetterStats(sessionResults);
 
   if (showStats) {
     // Stop training when viewing stats
@@ -457,120 +412,23 @@ const CWTrainer: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-2 sm:p-4 lg:p-6 relative">
-      {/* Sidebar Overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-      
-      {/* Sidebar */}
-      <div className={`fixed top-0 right-0 h-full w-80 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-50 ${
-        sidebarOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}>
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-slate-800">Settings & Account</h2>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          {/* User Info */}
-          {user ? (
-            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold">
-                  {(user.username || user.email).charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-semibold text-slate-800">{user.username || 'User'}</p>
-                  <p className="text-sm text-slate-600">{user.email}</p>
-                </div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          ) : (
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-4 text-slate-800">Sign In</h3>
-              {firebaseReady && (
-                <button
-                  onClick={handleLogin}
-                  className="w-full px-4 py-3 mb-3 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                  </svg>
-                  Continue with Google
-                </button>
-              )}
-              <div className="space-y-3">
-                <input
-                  type="email"
-                  placeholder="Email (required)"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <input
-                  type="text"
-                  placeholder="Username (optional)"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={handleLogin}
-                  className="w-full px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all"
-                >
-                  Sign In
-                </button>
-              </div>
-            </div>
-          )}
-          
-          {/* Session Stats */}
-          {sessionResults.length > 0 && (
-            <div className="p-4 bg-slate-50 rounded-xl">
-              <h4 className="font-semibold text-slate-800 mb-2">Quick Stats</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Total Sessions:</span>
-                  <span className="font-medium">{sessionResults.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Latest Accuracy:</span>
-                  <span className="font-medium">{Math.round(sessionResults[sessionResults.length - 1]?.accuracy * 100)}%</span>
-                </div>
-                <button
-                  onClick={() => {
-                    stopTrainingIfActive();
-                    setSidebarOpen(false);
-                    setShowStats(true);
-                  }}
-                  className="w-full mt-3 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                >
-                  View Full Statistics
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        user={user}
+        firebaseReady={firebaseReady}
+        email={email}
+        username={username}
+        onEmailChange={setEmail}
+        onUsernameChange={setUsername}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+        settings={settings}
+        setSettings={setSettings}
+        sessionResultsCount={sessionResults.length}
+        latestAccuracyPercent={Math.round((sessionResults[sessionResults.length - 1]?.accuracy || 0) * 100)}
+        onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setShowStats(true); }}
+      />
       
       <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl ring-1 ring-black/5 p-3 sm:p-6 lg:p-8 border border-white/20">
         <div className="flex justify-between items-center mb-8">
@@ -578,7 +436,7 @@ const CWTrainer: React.FC = () => {
             <h1 className="text-3xl sm:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
               Morse Code Trainer
             </h1>
-            <p className="text-slate-600 mt-2">Master the art of Morse code communication</p>
+            <p className="text-slate-600 mt-2">Train Morse. Fast. Focused. Fun.</p>
           </div>
           
           {/* Menu Button */}
@@ -598,121 +456,7 @@ const CWTrainer: React.FC = () => {
 
         {!isTraining ? (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Koch Level (1-{KOCH_SEQUENCE.length})
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max={KOCH_SEQUENCE.length}
-                  value={settings.kochLevel}
-                  onChange={(e) => setSettings({...settings, kochLevel: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Characters: {KOCH_SEQUENCE.slice(0, settings.kochLevel).join(' ')}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Side Tone (Hz)
-                </label>
-                <input
-                  type="number"
-                  value={settings.sideTone}
-                  onChange={(e) => setSettings({...settings, sideTone: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Steepness (ms)
-                </label>
-                <input
-                  type="number"
-                  value={settings.steepness}
-                  onChange={(e) => setSettings({...settings, steepness: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Speed (WPM)
-                </label>
-                <input
-                  type="number"
-                  value={settings.wpm}
-                  onChange={(e) => setSettings({...settings, wpm: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Number of Groups
-                </label>
-                <input
-                  type="number"
-                  value={settings.numGroups}
-                  onChange={(e) => setSettings({...settings, numGroups: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Group Spacing (seconds)
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={settings.groupSpacing}
-                  onChange={(e) => setSettings({...settings, groupSpacing: parseFloat(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Min Group Size
-                </label>
-                <input
-                  type="number"
-                  value={settings.minGroupSize}
-                  onChange={(e) => setSettings({...settings, minGroupSize: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Max Group Size
-                </label>
-                <input
-                  type="number"
-                  value={settings.maxGroupSize}
-                  onChange={(e) => setSettings({...settings, maxGroupSize: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={settings.interactiveMode}
-                onChange={(e) => setSettings({...settings, interactiveMode: e.target.checked})}
-                className="w-4 h-4"
-              />
-              <label className="text-sm font-medium text-gray-700">
-                Interactive Mode (submit after each group)
-              </label>
-            </div>
+            {/* Settings moved into Sidebar collapsible section */}
 
             <div className="flex justify-center">
               <button
@@ -725,20 +469,7 @@ const CWTrainer: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="text-center bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
-              <p className="text-2xl font-bold text-slate-800 mb-4">
-                Playing Group {currentGroup + 1} of {settings.numGroups}
-              </p>
-              <div className="w-full bg-slate-200 rounded-full h-6 shadow-inner">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-indigo-500 h-6 rounded-full transition-all duration-500 shadow-lg"
-                  style={{ width: `${((currentGroup + 1) / settings.numGroups) * 100}%` }}
-                />
-              </div>
-              <p className="text-sm text-slate-600 mt-3">
-                {Math.round(((currentGroup + 1) / settings.numGroups) * 100)}% Complete
-              </p>
-            </div>
+            <ProgressHeader currentGroup={currentGroup} totalGroups={settings.numGroups} />
 
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -767,43 +498,22 @@ const CWTrainer: React.FC = () => {
                 </div>
               </div>
               
-              <div className="max-h-[50vh] sm:max-h-[60vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                <div className="space-y-2 sm:space-y-3 px-1 py-1">
-                  {sentGroups.map((group, idx) => (
-                    <GroupItem
-                      key={idx}
-                      index={idx}
-                      groupText={group}
-                      value={userInput[idx] || ''}
-                      confirmed={!!confirmedGroups[idx]}
-                      isFocused={currentFocusedGroup === idx}
-                      onChange={(v) => handleAnswerChange(idx, v)}
-                      onConfirm={() => confirmGroupAnswer(idx)}
-                      onFocus={() => setCurrentFocusedGroup(idx)}
-                      inputRef={(el) => { inputRefs.current[idx] = el; }}
-                    />
-                  ))}
-                </div>
-              </div>
+              <GroupsList
+                sentGroups={sentGroups}
+                userInput={userInput}
+                confirmedGroups={confirmedGroups}
+                currentFocusedGroup={currentFocusedGroup}
+                onChange={handleAnswerChange}
+                onConfirm={confirmGroupAnswer}
+                onFocus={(idx) => setCurrentFocusedGroup(idx)}
+                inputRef={(idx, el) => { inputRefs.current[idx] = el; }}
+              />
               <p className="text-xs text-slate-500 mt-2">
                 💡 Auto-advances when group is complete • Use Enter to confirm • Scroll to review past groups
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4">
-              <button
-                onClick={submitAnswer}
-                className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-lg font-bold rounded-xl hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                ✅ Submit Results
-              </button>
-              <button
-                onClick={() => { trainingAbortRef.current = true; setIsTraining(false); }}
-                className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-slate-200 to-slate-300 text-slate-800 text-lg font-bold rounded-xl hover:from-slate-300 hover:to-slate-400 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                ⏹️ Stop Session
-              </button>
-            </div>
+            <TrainingControls onSubmit={submitAnswer} onStop={() => { trainingAbortRef.current = true; setIsTraining(false); }} />
           </div>
         )}
       </div>

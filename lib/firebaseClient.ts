@@ -27,6 +27,10 @@ export function initFirebase(): FirebaseServices | null {
   const auth = getAuth(app);
   const db = getFirestore(app);
   const provider = new GoogleAuthProvider();
+  try {
+    // Ensure account chooser appears
+    (provider as any).setCustomParameters?.({ prompt: 'select_account' });
+  } catch {}
   return { app, auth, db, provider };
 }
 
