@@ -374,7 +374,8 @@ const CWTrainer: React.FC = () => {
     // Stop session and process what we have
     trainingAbortRef.current = true;
     setIsTraining(false);
-    const answers = (userInput.length ? userInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
+    const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
+    const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
     processResults(answers);
   };
 
