@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useReducer } from 'react';
 import ProgressHeader from './ProgressHeader';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import GroupsList from './GroupsList';
 import TrainingControls from './TrainingControls';
 import StatsView, { SessionResult as StatsSessionResult } from './StatsView';
@@ -455,7 +456,53 @@ const CWTrainer: React.FC = () => {
 
 
         {!isTraining ? (
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* Quick Stats */}
+            {sessionResults.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
+                  <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Last Accuracy</p>
+                  <p className="text-3xl font-extrabold text-emerald-800 mt-1">{Math.round(sessionResults[sessionResults.length-1].accuracy * 100)}%</p>
+                  <p className="text-xs text-emerald-700/70 mt-1">from your last session</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
+                  <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Sessions</p>
+                  <p className="text-3xl font-extrabold text-blue-800 mt-1">{sessionResults.length}</p>
+                  <p className="text-xs text-blue-700/70 mt-1">total completed</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50 to-white border border-purple-100">
+                  <p className="text-xs uppercase tracking-wide text-purple-700 font-semibold">Koch Level</p>
+                  <p className="text-3xl font-extrabold text-purple-800 mt-1">{settings.kochLevel}</p>
+                  <p className="text-xs text-purple-700/70 mt-1">active characters</p>
+                </div>
+              </div>
+            )}
+
+            {/* Mini Trend */}
+            {sessionResults.length > 1 && (
+              <div className="rounded-2xl p-4 border border-slate-200 bg-white/70">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Accuracy Trend</h3>
+                <div className="w-full h-[140px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={sessionResults.map((s) => ({ x: new Date(s.timestamp).toLocaleDateString(), y: Math.round(s.accuracy*100) }))}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="x"
+                        tick={{ fontSize: 10, fill: '#475569' }}
+                        label={{ value: 'Date', position: 'insideBottomRight', offset: -2, fill: '#475569', fontSize: 10 }}
+                      />
+                      <YAxis
+                        domain={[0,100]}
+                        tick={{ fontSize: 10, fill: '#475569' }}
+                        label={{ value: 'Accuracy (%)', angle: -90, position: 'insideLeft', offset: 10, fill: '#475569', fontSize: 10 }}
+                      />
+                      <Tooltip formatter={(v: any) => [`${v}%`, 'Accuracy']} />
+                      <Line type="monotone" dataKey="y" stroke="#6366f1" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
             {/* Settings moved into Sidebar collapsible section */}
 
             <div className="flex justify-center">

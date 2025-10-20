@@ -53,6 +53,27 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, e
             )}
           </div>
 
+          {/* Statistics first */}
+          {sessionResultsCount > 0 && (
+            <div className="p-4 bg-slate-50 rounded-xl mb-6">
+              <h4 className="font-semibold text-slate-800 mb-2">Quick Stats</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Total Sessions:</span>
+                  <span className="font-medium">{sessionResultsCount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Latest Accuracy:</span>
+                  <span className="font-medium">{latestAccuracyPercent ?? 0}%</span>
+                </div>
+                <button onClick={onViewStats} className="w-full mt-3 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm">
+                  View Full Statistics
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Account/Login last */}
           {user ? (
             <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
               <div className="flex items-center gap-3 mb-3">
@@ -92,24 +113,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, e
             </div>
           )}
 
-          {sessionResultsCount > 0 && (
-            <div className="p-4 bg-slate-50 rounded-xl">
-              <h4 className="font-semibold text-slate-800 mb-2">Quick Stats</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Total Sessions:</span>
-                  <span className="font-medium">{sessionResultsCount}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Latest Accuracy:</span>
-                  <span className="font-medium">{latestAccuracyPercent ?? 0}%</span>
-                </div>
-                <button onClick={onViewStats} className="w-full mt-3 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm">
-                  View Full Statistics
-                </button>
-              </div>
-            </div>
-          )}
+          
         </div>
       </div>
     </>
