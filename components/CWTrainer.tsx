@@ -22,7 +22,7 @@ interface TrainingSettings {
   charsPerGroup: number;
   numGroups: number;
   wpm: number;
-  groupSpacing: number;
+  groupTimeout: number; // seconds to wait before auto-advancing
   minGroupSize: number;
   maxGroupSize: number;
   interactiveMode: boolean;
@@ -61,7 +61,7 @@ const CWTrainer: React.FC = () => {
     charsPerGroup: 5,
     numGroups: 5,
     wpm: 20,
-    groupSpacing: 2,
+    groupTimeout: 8,
     minGroupSize: 2,
     maxGroupSize: 3,
     interactiveMode: false
@@ -298,20 +298,19 @@ const CWTrainer: React.FC = () => {
       setCurrentGroup(i);
       dispatchMachine({ type: 'GROUP_START', index: i });
       const duration = await playMorseCode(groups[i], mySession);
-      await sleepCancelable((duration + settings.groupSpacing) * 1000, mySession);
+      // Wait either for input or until timeout
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
-      if (settings.interactiveMode) {
-        // Poll user input while allowing abort/session switch
-        dispatchMachine({ type: 'WAIT_INPUT' });
-        while (true) {
-          if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
-          const answer = (userInput[i] || '').trim();
-          if (answer.length > 0) break;
-          await sleepCancelable(100, mySession);
-        }
-        if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
-          dispatchMachine({ type: 'INPUT_RECEIVED' });
-        }
+      dispatchMachine({ type: 'WAIT_INPUT' });
+      const deadline = Date.now() + Math.max(0, (settings.groupTimeout || 0)) * 1000;
+      while (true) {
+        if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
+        const answer = (userInput[i] || '').trim();
+        if (answer.length > 0) break;
+        if (settings.groupTimeout && Date.now() >= deadline) break;
+        await sleepCancelable(100, mySession);
+      }
+      if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
+        dispatchMachine({ type: 'INPUT_RECEIVED' });
       }
     }
     setIsTraining(false);
