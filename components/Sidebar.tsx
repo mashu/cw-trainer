@@ -6,11 +6,7 @@ interface SidebarProps {
   onClose: () => void;
   user: { email: string; username?: string } | null;
   firebaseReady: boolean;
-  email: string;
-  username: string;
-  onEmailChange: (v: string) => void;
-  onUsernameChange: (v: string) => void;
-  onLogin: () => void;
+  onGoogleLogin: () => void;
   onLogout: () => void;
   settings: TrainingSettings;
   setSettings: (s: TrainingSettings) => void;
@@ -19,7 +15,7 @@ interface SidebarProps {
   onViewStats: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, email, username, onEmailChange, onUsernameChange, onLogin, onLogout, settings, setSettings, sessionResultsCount, latestAccuracyPercent, onViewStats }) => {
+const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, settings, setSettings, sessionResultsCount, latestAccuracyPercent, onViewStats }) => {
   const [settingsOpen, setSettingsOpen] = useState(true);
   return (
     <>
@@ -27,7 +23,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, e
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={onClose} />
       )}
       <div className={`fixed top-0 right-0 h-full w-80 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-50 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="p-6">
+        <div className="p-6 h-full overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-800">Settings & Account</h2>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -93,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, e
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-4 text-slate-800">Sign In</h3>
               {firebaseReady && (
-                <button onClick={onLogin} className="w-full px-4 py-3 mb-3 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                <button onClick={onGoogleLogin} className="w-full px-4 py-3 mb-3 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -103,13 +99,6 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, e
                   Continue with Google
                 </button>
               )}
-              <div className="space-y-3">
-                <input type="email" placeholder="Email (required)" value={email} onChange={(e) => onEmailChange(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <input type="text" placeholder="Username (optional)" value={username} onChange={(e) => onUsernameChange(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <button onClick={onLogin} className="w-full px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all">
-                  Sign In
-                </button>
-              </div>
             </div>
           )}
 

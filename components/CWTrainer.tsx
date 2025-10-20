@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import GroupsList from './GroupsList';
 import TrainingControls from './TrainingControls';
 import StatsView, { SessionResult as StatsSessionResult } from './StatsView';
-import { initFirebase, googleSignIn, googleSignOut } from '@/lib/firebaseClient';
+import { initFirebase, googleSignIn, googleSignOut, getRedirectedUser } from '@/lib/firebaseClient';
 import { playMorseCode as externalPlayMorseCode } from '@/lib/morseAudio';
 import { trainingReducer as externalTrainingReducer } from '@/lib/trainingMachine';
 import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
@@ -51,8 +51,6 @@ interface User {
 
 const CWTrainer: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState('');
-  const [username, setUsername] = useState('');
   const [showAuth, setShowAuth] = useState(false);
   
   const [settings, setSettings] = useState<TrainingSettings>({
@@ -103,7 +101,17 @@ const CWTrainer: React.FC = () => {
   useEffect(() => {
     firebaseRef.current = initFirebase();
     setFirebaseReady(!!firebaseRef.current);
-    loadData();
+    // Complete redirect-based login if present
+    (async () => {
+      if (firebaseRef.current) {
+        const redirected = await getRedirectedUser(firebaseRef.current);
+        if (redirected) {
+          const newUser: User & { uid: string } = { email: redirected.email || '', username: redirected.displayName || undefined, uid: redirected.uid };
+          setUser(newUser);
+        }
+      }
+      loadData();
+    })();
   }, [user]);
 
   // Persist settings on change (both local and Firestore if available)
@@ -151,14 +159,18 @@ const CWTrainer: React.FC = () => {
   const loadData = async () => {
     // Firestore if available and user has Google auth
     if (firebaseRef.current && user && (user as any).uid) {
-      const db = firebaseRef.current.db;
-      // Try to load settings snapshot via sessions collection (store latest settings alongside session if needed)
-      // Fallback relies on local storage below
-      const sessionsSnap = await getDocs(query(collection(db, 'users', (user as any).uid, 'sessions'), orderBy('timestamp', 'asc')));
-      const loaded: SessionResult[] = [];
-      sessionsSnap.forEach((d: any) => loaded.push(d.data() as SessionResult));
-      setSessionResults(loaded);
-      return;
+      try {
+        const db = firebaseRef.current.db;
+        // Try to load settings snapshot via sessions collection (store latest settings alongside session if needed)
+        // Fallback relies on local storage below
+        const sessionsSnap = await getDocs(query(collection(db, 'users', (user as any).uid, 'sessions'), orderBy('timestamp', 'asc')));
+        const loaded: SessionResult[] = [];
+        sessionsSnap.forEach((d: any) => loaded.push(d.data() as SessionResult));
+        setSessionResults(loaded);
+        return;
+      } catch (e) {
+        console.warn('Firestore unavailable or unauthorized, falling back to local storage.', e);
+      }
     }
 
     // Fallback to local storage
@@ -177,36 +189,51 @@ const CWTrainer: React.FC = () => {
   const saveData = async (results: SessionResult[]) => {
     // Firestore if available and Google user
     if (firebaseRef.current && user && (user as any).uid) {
-      const db = firebaseRef.current.db;
-      await Promise.all(results.map(r => setDoc(doc(db, 'users', (user as any).uid, 'sessions', String(r.timestamp)), r)));
-      // settings
-      await setDoc(doc(db, 'users', (user as any).uid, 'settings', 'default'), settings);
-    } else {
-      const key = user ? `morse_results_${user.email}` : 'morse_results_local';
-      localStorage.setItem(key, JSON.stringify(results));
-      localStorage.setItem('morse_settings_local', JSON.stringify(settings));
+      try {
+        const db = firebaseRef.current.db;
+        await Promise.all(results.map(r => setDoc(doc(db, 'users', (user as any).uid, 'sessions', String(r.timestamp)), r)));
+        // settings
+        await setDoc(doc(db, 'users', (user as any).uid, 'settings', 'default'), settings);
+        // aggregated statistics (daily trend + per-letter)
+        const daily = computeDailyStats(results as any);
+        const letters = computeLetterStats(results as any);
+        await Promise.all([
+          setDoc(doc(db, 'users', (user as any).uid, 'stats', 'daily'), { items: daily, updatedAt: Date.now() }),
+          setDoc(doc(db, 'users', (user as any).uid, 'stats', 'letters'), { items: letters, updatedAt: Date.now() }),
+        ]);
+        return;
+      } catch (e) {
+        console.warn('Failed to write to Firestore, saving locally instead.', e);
+      }
     }
+    const key = user ? `morse_results_${user.email}` : 'morse_results_local';
+    localStorage.setItem(key, JSON.stringify(results));
+    localStorage.setItem('morse_settings_local', JSON.stringify(settings));
   };
 
   const handleLogin = async () => {
-    // Prefer Google if Firebase available
-    if (firebaseRef.current) {
-      try {
-        const fu = await googleSignIn(firebaseRef.current);
-        const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
-        setUser(newUser);
-        setShowAuth(false);
-        await loadData();
-        return;
-      } catch {
-        // fall back to manual email
-      }
-    }
-    if (email) {
-      const newUser: User = { email, username: username || undefined };
+    if (!firebaseRef.current) return;
+    try {
+      const fu = await googleSignIn(firebaseRef.current);
+      const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
       setUser(newUser);
-      localStorage.setItem('morse_user', JSON.stringify(newUser));
       setShowAuth(false);
+      await loadData();
+    } catch {
+      // no-op
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    if (!firebaseRef.current) return;
+    try {
+      const fu = await googleSignIn(firebaseRef.current);
+      const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
+      setUser(newUser);
+      setShowAuth(false);
+      await loadData();
+    } catch {
+      // no-op
     }
   };
 
@@ -390,7 +417,11 @@ const CWTrainer: React.FC = () => {
     const filtered = sessionResults.filter(r => r.timestamp !== timestamp);
     setSessionResults(filtered);
     if (firebaseRef.current && user && (user as any).uid) {
-      await deleteDoc(doc(firebaseRef.current.db, 'users', (user as any).uid, 'sessions', String(timestamp)));
+      try {
+        await deleteDoc(doc(firebaseRef.current.db, 'users', (user as any).uid, 'sessions', String(timestamp)));
+      } catch (e) {
+        console.warn('Failed to delete from Firestore, will update local cache only.', e);
+      }
     }
     void saveData(filtered);
   };
@@ -418,11 +449,7 @@ const CWTrainer: React.FC = () => {
         onClose={() => setSidebarOpen(false)}
         user={user}
         firebaseReady={firebaseReady}
-        email={email}
-        username={username}
-        onEmailChange={setEmail}
-        onUsernameChange={setUsername}
-        onLogin={handleLogin}
+        onGoogleLogin={handleLogin}
         onLogout={handleLogout}
         settings={settings}
         setSettings={setSettings}

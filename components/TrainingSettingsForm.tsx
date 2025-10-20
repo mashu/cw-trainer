@@ -9,7 +9,7 @@ export interface TrainingSettings {
   charsPerGroup: number;
   numGroups: number;
   wpm: number;
-  groupSpacing: number;
+  groupTimeout: number; // seconds to wait for input before auto-advance
   minGroupSize: number;
   maxGroupSize: number;
   interactiveMode: boolean;
@@ -51,8 +51,8 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Group Spacing (seconds)</label>
-          <input type="number" step="0.5" value={settings.groupSpacing} onChange={(e) => setSettings({ ...settings, groupSpacing: parseFloat(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+          <label className="block text-sm font-medium text-gray-700 mb-1">Group Timeout (seconds)</label>
+          <input type="number" step="0.5" value={settings.groupTimeout} onChange={(e) => setSettings({ ...settings, groupTimeout: parseFloat(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
         </div>
 
         <div>

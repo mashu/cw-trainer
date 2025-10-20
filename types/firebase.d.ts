@@ -1,14 +1,21 @@
 declare module 'firebase/app' {
   export const initializeApp: any;
   export const getApps: any;
+  export const getApp: any;
 }
 
 declare module 'firebase/auth' {
   export const getAuth: any;
   export class GoogleAuthProvider {}
   export const signInWithPopup: any;
+  export const signInWithRedirect: any;
+  export const getRedirectResult: any;
   export const signOut: any;
   export type User = any;
+  export const createUserWithEmailAndPassword: any;
+  export const signInWithEmailAndPassword: any;
+  export const onAuthStateChanged: any;
+  export type UserCredential = any;
 }
 
 declare module 'firebase/firestore' {
