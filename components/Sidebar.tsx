@@ -8,6 +8,7 @@ interface SidebarProps {
   firebaseReady: boolean;
   onGoogleLogin: () => void;
   onLogout: () => void;
+  onSwitchAccount: () => void;
   settings: TrainingSettings;
   setSettings: (s: TrainingSettings) => void;
   sessionResultsCount: number;
@@ -15,7 +16,7 @@ interface SidebarProps {
   onViewStats: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, settings, setSettings, sessionResultsCount, latestAccuracyPercent, onViewStats }) => {
+const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, settings, setSettings, sessionResultsCount, latestAccuracyPercent, onViewStats }) => {
   const [settingsOpen, setSettingsOpen] = useState(true);
   return (
     <>
@@ -81,13 +82,21 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                   <p className="text-sm text-slate-600">{user.email}</p>
                 </div>
               </div>
-              <button onClick={onLogout} className="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
-                Logout
-              </button>
+              <div className="flex flex-col gap-2">
+                <button onClick={onLogout} className="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+                  Logout
+                </button>
+                {firebaseReady && (
+                  <button onClick={onSwitchAccount} className="w-full px-4 py-2 bg-white border-2 border-gray-300 text-slate-700 rounded-lg hover:bg-gray-50 transition-colors">
+                    Switch Google Account
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-4 text-slate-800">Sign In</h3>
+              <p className="text-xs text-slate-600 mb-2">Login is only needed to sync settings and history across devices. Without login, data stays on this device.</p>
               {firebaseReady && (
                 <button onClick={onGoogleLogin} className="w-full px-4 py-3 mb-3 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
                   <svg className="w-5 h-5" viewBox="0 0 24 24">

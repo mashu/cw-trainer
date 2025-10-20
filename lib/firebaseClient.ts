@@ -1,5 +1,5 @@
 import { app as coreApp, auth as coreAuth, db as coreDb } from './firebase';
-import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User as FirebaseUser } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, User as FirebaseUser } from 'firebase/auth';
 
 export type FirebaseServices = {
   app: any;
@@ -15,19 +15,10 @@ export function initFirebase(): FirebaseServices | null {
   return { app: coreApp, auth: coreAuth, db: coreDb, provider };
 }
 
-export async function googleSignIn(services: FirebaseServices): Promise<FirebaseUser> {
-  try {
-    const res = await signInWithPopup(services.auth, services.provider);
-    return res.user;
-  } catch (err: any) {
-    // Fallback to redirect in environments that block popups or COOP interferes
-    try {
-      await signInWithRedirect(services.auth, services.provider);
-      throw new Error('redirect-initiated');
-    } catch {
-      throw err;
-    }
-  }
+export async function googleSignIn(services: FirebaseServices): Promise<FirebaseUser | null> {
+  // Use redirect flow to avoid COOP/popup issues
+  await signInWithRedirect(services.auth, services.provider);
+  return null;
 }
 
 export async function googleSignOut(services: FirebaseServices): Promise<void> {

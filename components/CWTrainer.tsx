@@ -11,6 +11,7 @@ import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
 import { getDailyStats as computeDailyStats, getLetterStats as computeLetterStats } from '@/lib/stats';
 import Sidebar from './Sidebar';
 import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
 // Constants and MORSE code moved to lib/morseConstants
 
@@ -101,17 +102,27 @@ const CWTrainer: React.FC = () => {
   useEffect(() => {
     firebaseRef.current = initFirebase();
     setFirebaseReady(!!firebaseRef.current);
-    // Complete redirect-based login if present
+    let unsubscribe: any;
     (async () => {
       if (firebaseRef.current) {
+        unsubscribe = onAuthStateChanged(firebaseRef.current.auth, (fu: any) => {
+          if (fu) {
+            const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
+            setUser(newUser);
+          }
+        });
         const redirected = await getRedirectedUser(firebaseRef.current);
         if (redirected) {
           const newUser: User & { uid: string } = { email: redirected.email || '', username: redirected.displayName || undefined, uid: redirected.uid };
           setUser(newUser);
         }
       }
-      loadData();
     })();
+    return () => { try { unsubscribe?.(); } catch {} };
+  }, []);
+
+  useEffect(() => {
+    loadData();
   }, [user]);
 
   // Persist settings on change (both local and Firestore if available)
@@ -214,11 +225,8 @@ const CWTrainer: React.FC = () => {
   const handleLogin = async () => {
     if (!firebaseRef.current) return;
     try {
-      const fu = await googleSignIn(firebaseRef.current);
-      const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
-      setUser(newUser);
-      setShowAuth(false);
-      await loadData();
+      await googleSignIn(firebaseRef.current); // redirect flow
+      // We will complete login in the redirect handler useEffect
     } catch {
       // no-op
     }
@@ -227,11 +235,7 @@ const CWTrainer: React.FC = () => {
   const handleGoogleLogin = async () => {
     if (!firebaseRef.current) return;
     try {
-      const fu = await googleSignIn(firebaseRef.current);
-      const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
-      setUser(newUser);
-      setShowAuth(false);
-      await loadData();
+      await googleSignIn(firebaseRef.current); // redirect flow
     } catch {
       // no-op
     }
@@ -450,6 +454,11 @@ const CWTrainer: React.FC = () => {
         firebaseReady={firebaseReady}
         onGoogleLogin={handleLogin}
         onLogout={handleLogout}
+        onSwitchAccount={async () => {
+          // Force account chooser by signing out then starting login again (redirect)
+          await handleLogout();
+          await handleLogin();
+        }}
         settings={settings}
         setSettings={setSettings}
         sessionResultsCount={sessionResults.length}
