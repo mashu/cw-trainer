@@ -23,7 +23,7 @@ interface TrainingSettings {
   charsPerGroup: number;
   numGroups: number;
   wpm: number;
-  groupTimeout: number; // seconds to wait before auto-advancing
+  groupTimeout: number; // absolute max time per group (seconds)
   minGroupSize: number;
   maxGroupSize: number;
   interactiveMode: boolean;
@@ -97,6 +97,8 @@ const CWTrainer: React.FC = () => {
   const sessionIdRef = useRef<number>(0);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const startedAtRef = useRef<number | null>(null);
+  const userInputRef = useRef<string[]>([]);
+  const confirmedGroupsRef = useRef<Record<number, boolean>>({});
 
   const firebaseRef = useRef<ReturnType<typeof initFirebase> | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
@@ -330,6 +332,8 @@ const CWTrainer: React.FC = () => {
     setConfirmedGroups({});
     setCurrentFocusedGroup(0);
     startedAtRef.current = Date.now();
+    userInputRef.current = [];
+    confirmedGroupsRef.current = {};
     
     const groups: string[] = [];
     for (let i = 0; i < settings.numGroups; i++) {
@@ -349,8 +353,10 @@ const CWTrainer: React.FC = () => {
       const deadline = Date.now() + Math.max(0, (settings.groupTimeout || 0)) * 1000;
       while (true) {
         if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
-        const answer = (userInput[i] || '').trim();
-        if (answer.length > 0) break;
+        const currentValue = (userInputRef.current[i] || '').trim().toUpperCase();
+        const isConfirmed = !!confirmedGroupsRef.current[i];
+        const targetLen = groups[i].length;
+        if (isConfirmed || (targetLen > 0 && currentValue.length === targetLen)) break;
         if (settings.groupTimeout && Date.now() >= deadline) break;
         await sleepCancelable(100, mySession);
       }
@@ -378,7 +384,10 @@ const CWTrainer: React.FC = () => {
     const nextAnswers = [...userInput];
     nextAnswers[index] = normalized;
     setUserInput(nextAnswers);
-    setConfirmedGroups(prev => ({ ...prev, [index]: true }));
+    userInputRef.current = nextAnswers;
+    const nextConfirmed = { ...confirmedGroupsRef.current, [index]: true };
+    setConfirmedGroups(nextConfirmed);
+    confirmedGroupsRef.current = nextConfirmed;
 
     // Focus next input
     const nextIndex = index + 1;
@@ -401,6 +410,7 @@ const CWTrainer: React.FC = () => {
     const nextAnswers = [...userInput];
     nextAnswers[index] = value;
     setUserInput(nextAnswers);
+    userInputRef.current = nextAnswers;
     
     // Auto-advance if current group is fully typed and matches expected length
     // Only auto-advance if we're in interactive mode or if the group has been played
