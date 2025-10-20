@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import GroupItem from './GroupItem';
+import StatsView, { SessionResult as StatsSessionResult } from './StatsView';
 
 // Koch Method Sequence
 const KOCH_SEQUENCE = ['K', 'M', 'R', 'S', 'U', 'A', 'P', 'T', 'L', 'O', 'W', 'I', 
@@ -65,8 +67,8 @@ const CWTrainer: React.FC = () => {
     numGroups: 20,
     wpm: 20,
     groupSpacing: 2,
-    minGroupSize: 3,
-    maxGroupSize: 7,
+    minGroupSize: 2,
+    maxGroupSize: 3,
     interactiveMode: false
   });
 
@@ -77,9 +79,12 @@ const CWTrainer: React.FC = () => {
   const [currentInput, setCurrentInput] = useState('');
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
   const [showStats, setShowStats] = useState(false);
+  const [confirmedGroups, setConfirmedGroups] = useState<Record<number, boolean>>({});
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
+  const trainingAbortRef = useRef<boolean>(false);
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
     loadData();
@@ -186,6 +191,7 @@ const CWTrainer: React.FC = () => {
   };
 
   const startTraining = async () => {
+    trainingAbortRef.current = false;
     setIsTraining(true);
     setCurrentGroup(0);
     setSentGroups([]);
@@ -199,14 +205,20 @@ const CWTrainer: React.FC = () => {
     setSentGroups(groups);
     
     for (let i = 0; i < groups.length; i++) {
+      if (trainingAbortRef.current) break;
       setCurrentGroup(i);
       const duration = await playMorseCode(groups[i]);
       await new Promise(resolve => setTimeout(resolve, (duration + settings.groupSpacing) * 1000));
-      
+      if (trainingAbortRef.current) break;
       if (settings.interactiveMode) {
         await new Promise(resolve => {
           const checkInput = setInterval(() => {
-            if (userInput.length > i) {
+            if (trainingAbortRef.current) {
+              clearInterval(checkInput);
+              resolve(null);
+              return;
+            }
+            if ((userInput[i] && userInput[i].length > 0)) {
               clearInterval(checkInput);
               resolve(null);
             }
@@ -214,19 +226,42 @@ const CWTrainer: React.FC = () => {
         });
       }
     }
-    
     setIsTraining(false);
   };
 
   const submitAnswer = () => {
-    if (settings.interactiveMode) {
-      setUserInput([...userInput, currentInput.toUpperCase()]);
-      setCurrentInput('');
-    } else {
-      const answers = currentInput.split(' ').map(a => a.toUpperCase());
-      setUserInput(answers);
-      processResults(answers);
+    // Stop session and process what we have
+    trainingAbortRef.current = true;
+    setIsTraining(false);
+    const answers = (userInput.length ? userInput : currentInput.split(' ')).map(a => (a || '').toUpperCase());
+    processResults(answers);
+  };
+
+  const confirmGroupAnswer = (index: number) => {
+    if (!sentGroups.length) return;
+    const normalized = (userInput[index] || '').toUpperCase();
+    const nextAnswers = [...userInput];
+    nextAnswers[index] = normalized;
+    setUserInput(nextAnswers);
+    setConfirmedGroups(prev => ({ ...prev, [index]: true }));
+
+    // Focus next input
+    const nextIndex = index + 1;
+    if (nextIndex < sentGroups.length) {
+      inputRefs.current[nextIndex]?.focus();
     }
+
+    // If all groups answered, auto-submit
+    const allAnswered = nextAnswers.length === sentGroups.length && nextAnswers.every(a => a && a.length > 0);
+    if (allAnswered) {
+      submitAnswer();
+    }
+  };
+
+  const handleAnswerChange = (index: number, value: string) => {
+    const nextAnswers = [...userInput];
+    nextAnswers[index] = value;
+    setUserInput(nextAnswers);
   };
 
   const processResults = (answers: string[]) => {
@@ -284,6 +319,12 @@ const CWTrainer: React.FC = () => {
     }));
   };
 
+  const deleteSession = (timestamp: number) => {
+    const filtered = sessionResults.filter(r => r.timestamp !== timestamp);
+    setSessionResults(filtered);
+    saveData(filtered);
+  };
+
   const getLetterStats = () => {
     const letterStats: Record<string, { correct: number; total: number }> = {};
     
@@ -305,82 +346,21 @@ const CWTrainer: React.FC = () => {
   };
 
   if (showStats) {
-    const dailyStats = getDailyStats();
-    const letterStats = getLetterStats();
-    
-    const chartData = dailyStats.flatMap(day => 
-      day.sessions.map((acc, idx) => ({
-        date: `${day.date}-${idx}`,
-        accuracy: acc,
-        average: day.average
-      }))
-    );
-
     return (
-      <div className="min-h-screen bg-gray-100 p-8">
-        <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-lg p-8">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-bold text-gray-800">Training Statistics</h2>
-            <button
-              onClick={() => {
-                setShowStats(false);
-                setShowDetailedStats(false);
-              }}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              Back to Training
-            </button>
-          </div>
-
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold mb-4">Accuracy Over Time</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="accuracy" stroke="#3b82f6" strokeWidth={0} dot={{ r: 4 }} name="Session" />
-                <Line type="monotone" dataKey="average" stroke="#ef4444" strokeWidth={2} dot={false} name="Average" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="mb-4">
-            <button
-              onClick={() => setShowDetailedStats(!showDetailedStats)}
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-            >
-              {showDetailedStats ? 'Hide' : 'Show'} Per-Letter Statistics
-            </button>
-          </div>
-
-          {showDetailedStats && (
-            <div>
-              <h3 className="text-xl font-semibold mb-4">Letter Accuracy</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={letterStats}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="letter" />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip />
-                  <Bar dataKey="accuracy" fill="#8b5cf6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
-      </div>
+      <StatsView
+        sessionResults={sessionResults as unknown as StatsSessionResult[]}
+        onBack={() => setShowStats(false)}
+        onDelete={deleteSession}
+      />
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800">Morse Code Trainer</h1>
-          <div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 sm:p-6">
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl ring-1 ring-black/5 p-4 sm:p-8">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+          <h1 className="text-2xl sm:text-4xl font-bold text-slate-800">Morse Code Trainer</h1>
+          <div className="w-full sm:w-auto">
             {user ? (
               <div className="flex items-center gap-4">
                 <span className="text-sm text-gray-600">
@@ -388,7 +368,7 @@ const CWTrainer: React.FC = () => {
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+                  className="px-3 py-1 bg-rose-500 text-white rounded-lg text-sm hover:bg-rose-600"
                 >
                   Logout
                 </button>
@@ -396,7 +376,7 @@ const CWTrainer: React.FC = () => {
             ) : (
               <button
                 onClick={() => setShowAuth(!showAuth)}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Login
               </button>
@@ -432,7 +412,7 @@ const CWTrainer: React.FC = () => {
 
         {!isTraining ? (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Koch Level (1-{KOCH_SEQUENCE.length})
@@ -548,10 +528,10 @@ const CWTrainer: React.FC = () => {
               </label>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={startTraining}
-                className="flex-1 px-6 py-3 bg-green-500 text-white text-lg font-semibold rounded hover:bg-green-600"
+                className="flex-1 px-6 py-3 bg-emerald-500 text-white text-lg font-semibold rounded-lg hover:bg-emerald-600"
               >
                 Start Training
               </button>
@@ -559,7 +539,7 @@ const CWTrainer: React.FC = () => {
               {sessionResults.length > 0 && (
                 <button
                   onClick={() => setShowStats(true)}
-                  className="flex-1 px-6 py-3 bg-purple-500 text-white text-lg font-semibold rounded hover:bg-purple-600"
+                  className="flex-1 px-6 py-3 bg-purple-600 text-white text-lg font-semibold rounded-lg hover:bg-purple-700"
                 >
                   View Statistics
                 </button>
@@ -581,54 +561,42 @@ const CWTrainer: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {settings.interactiveMode ? 'Current Group Answer:' : 'All Answers (space-separated):'}
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Enter answers per group (press Enter to confirm each):
               </label>
-              <input
-                type="text"
-                value={currentInput}
-                onChange={(e) => setCurrentInput(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    submitAnswer();
-                  }
-                }}
-                className="w-full px-4 py-2 border border-gray-300 rounded text-lg"
-                placeholder={settings.interactiveMode ? "Type answer..." : "Type all answers separated by spaces..."}
-              />
-            </div>
-
-            {settings.interactiveMode && (
-              <button
-                onClick={submitAnswer}
-                disabled={!currentInput}
-                className="w-full px-6 py-3 bg-blue-500 text-white text-lg font-semibold rounded hover:bg-blue-600 disabled:bg-gray-300"
-              >
-                Submit Answer
-              </button>
-            )}
-
-            {!settings.interactiveMode && currentGroup === settings.numGroups && (
-              <button
-                onClick={submitAnswer}
-                className="w-full px-6 py-3 bg-green-500 text-white text-lg font-semibold rounded hover:bg-green-600"
-              >
-                Submit All Answers
-              </button>
-            )}
-
-            {userInput.length > 0 && (
-              <div className="mt-4 p-4 bg-gray-50 rounded">
-                <p className="font-semibold mb-2">Submitted Answers:</p>
-                <div className="space-y-1">
-                  {userInput.map((answer, idx) => (
-                    <p key={idx} className="text-sm">
-                      Group {idx + 1}: {answer}
-                    </p>
+              <div className="max-h-[420px] overflow-y-auto pr-2">
+                <div className="grid grid-cols-1 gap-3">
+                  {sentGroups.map((group, idx) => (
+                    <GroupItem
+                      key={idx}
+                      index={idx}
+                      groupText={group}
+                      value={userInput[idx] || ''}
+                      confirmed={!!confirmedGroups[idx]}
+                      onChange={(v) => handleAnswerChange(idx, v)}
+                      onConfirm={() => confirmGroupAnswer(idx)}
+                      inputRef={(el) => { inputRefs.current[idx] = el; }}
+                    />
                   ))}
                 </div>
               </div>
-            )}
+              <p className="text-xs text-slate-500 mt-2">Tip: Use Enter to confirm and auto-advance. You can scroll to review past groups. Only confirmed groups reveal the correct text.</p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={submitAnswer}
+                className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white text-lg font-semibold rounded-lg hover:bg-blue-700"
+              >
+                Submit Results
+              </button>
+              <button
+                onClick={() => { trainingAbortRef.current = true; setIsTraining(false); }}
+                className="w-full sm:w-auto px-6 py-3 bg-slate-200 text-slate-800 text-lg font-semibold rounded-lg hover:bg-slate-300"
+              >
+                Stop Session
+              </button>
+            </div>
           </div>
         )}
       </div>
