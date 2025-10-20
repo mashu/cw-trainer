@@ -116,6 +116,9 @@ const CWTrainer: React.FC = () => {
             const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
             setUser(newUser);
             setAuthInProgress(false);
+            console.info('[Auth] Logged in as', newUser.email);
+          } else {
+            console.info('[Auth] No user logged in');
           }
         });
         const redirected = await getRedirectedUser(firebaseRef.current);
@@ -123,6 +126,7 @@ const CWTrainer: React.FC = () => {
           const newUser: User & { uid: string } = { email: redirected.email || '', username: redirected.displayName || undefined, uid: redirected.uid };
           setUser(newUser);
           setAuthInProgress(false);
+          console.info('[Auth] Redirect login completed for', newUser.email);
         }
       }
     })();
@@ -252,25 +256,35 @@ const CWTrainer: React.FC = () => {
   const handleLogin = async () => {
     if (!firebaseRef.current) return;
     try {
+      console.info('[Auth] Starting Google sign-in (redirect)');
+      setAuthInProgress(true);
+      setToast({ message: 'Redirecting to Google…', type: 'info' });
       await googleSignIn(firebaseRef.current); // redirect flow
-      // We will complete login in the redirect handler useEffect
-    } catch {
-      // no-op
+      // Redirect will navigate away; completion handled after return
+    } catch (e) {
+      console.error('[Auth] Google sign-in start failed', e);
+      setAuthInProgress(false);
+      setToast({ message: 'Failed to start Google sign-in.', type: 'error' });
     }
   };
 
   const handleGoogleLogin = async () => {
     if (!firebaseRef.current) return;
     try {
+      console.info('[Auth] Google sign-in button clicked');
+      setAuthInProgress(true);
+      setToast({ message: 'Redirecting to Google…', type: 'info' });
       await googleSignIn(firebaseRef.current); // redirect flow
-    } catch {
-      // no-op
+    } catch (e) {
+      console.error('[Auth] Google sign-in start failed', e);
+      setAuthInProgress(false);
+      setToast({ message: 'Failed to start Google sign-in.', type: 'error' });
     }
   };
 
   const handleLogout = async () => {
     if (firebaseRef.current) {
-      try { await googleSignOut(firebaseRef.current); } catch {}
+      try { console.info('[Auth] Signing out'); await googleSignOut(firebaseRef.current); } catch (e) { console.error('[Auth] Sign out error', e); }
     }
     setUser(null);
     localStorage.removeItem('morse_user');
