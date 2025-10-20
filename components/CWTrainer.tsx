@@ -11,7 +11,7 @@ import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
 import { getDailyStats as computeDailyStats, getLetterStats as computeLetterStats } from '@/lib/stats';
 import Sidebar from './Sidebar';
 import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
 
 // Constants and MORSE code moved to lib/morseConstants
 
@@ -53,6 +53,7 @@ interface User {
 const CWTrainer: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [showAuth, setShowAuth] = useState(false);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   
   const [settings, setSettings] = useState<TrainingSettings>({
     kochLevel: 2,
@@ -98,6 +99,8 @@ const CWTrainer: React.FC = () => {
 
   const firebaseRef = useRef<ReturnType<typeof initFirebase> | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
+  const prevUserRef = useRef<User | null>(null);
+  const toastTimerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     firebaseRef.current = initFirebase();
@@ -105,6 +108,8 @@ const CWTrainer: React.FC = () => {
     let unsubscribe: any;
     (async () => {
       if (firebaseRef.current) {
+        // Ensure auth persistence so user stays logged in across reloads
+        try { await setPersistence(firebaseRef.current.auth, browserLocalPersistence); } catch {}
         unsubscribe = onAuthStateChanged(firebaseRef.current.auth, (fu: any) => {
           if (fu) {
             const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
@@ -124,6 +129,25 @@ const CWTrainer: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [user]);
+
+  useEffect(() => {
+    if (prevUserRef.current === null && user) {
+      setToast({ message: `Signed in as ${user.email || 'user'}`, type: 'success' });
+    } else if (prevUserRef.current && !user) {
+      setToast({ message: 'Signed out', type: 'info' });
+    }
+    prevUserRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    if (toast) {
+      try { window.clearTimeout(toastTimerRef.current); } catch {}
+      toastTimerRef.current = window.setTimeout(() => setToast(null), 4000) as unknown as number;
+    }
+    return () => {
+      try { window.clearTimeout(toastTimerRef.current); } catch {}
+    };
+  }, [toast]);
 
   // Persist settings on change (both local and Firestore if available)
   useEffect(() => {
@@ -447,6 +471,22 @@ const CWTrainer: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-2 sm:p-4 lg:p-6 relative">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50">
+          <div
+            className={`px-4 py-3 rounded-xl shadow-lg border text-sm ${
+              toast.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : toast.type === 'error'
+                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                : 'bg-slate-50 text-slate-800 border-slate-200'
+            }`}
+            onClick={() => setToast(null)}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

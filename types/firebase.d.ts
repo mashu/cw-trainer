@@ -16,6 +16,8 @@ declare module 'firebase/auth' {
   export const signInWithEmailAndPassword: any;
   export const onAuthStateChanged: any;
   export type UserCredential = any;
+  export const setPersistence: any;
+  export const browserLocalPersistence: any;
 }
 
 declare module 'firebase/firestore' {
