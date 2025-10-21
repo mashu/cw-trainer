@@ -92,7 +92,7 @@ const CWTrainer: React.FC = () => {
   const [currentFocusedGroup, setCurrentFocusedGroup] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMode, setActiveMode] = useState<'group' | 'icr'>('group');
-  const [icrSettings, setIcrSettings] = useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60 });
+  const [icrSettings, setIcrSettings] = useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60, bucketGreenMaxMs: 900, bucketYellowMaxMs: 1200 });
 
   // Load & save ICR settings with localStorage for persistence
   useEffect(() => {
@@ -699,7 +699,7 @@ const CWTrainer: React.FC = () => {
         latestAccuracyPercent={Math.round((sessionResults[sessionResults.length - 1]?.accuracy || 0) * 100)}
         onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setShowStats(true); }}
         icrSettings={icrSettings}
-        setIcrSettings={setIcrSettings}
+        setIcrSettings={setIcrSettings as any}
       />
       
       <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl ring-1 ring-black/5 p-3 sm:p-6 lg:p-8 border border-white/20">

@@ -49,10 +49,12 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
   }, []);
 
   const getBarFill = (ms: number): string => {
-    if (!ms && ms !== 0) return '#60a5fa';
-    if (ms < 900) return '#10b981'; // green
-    if (ms <= 1200) return '#f59e0b'; // yellow
-    return '#ef4444'; // red
+    if (ms === undefined || ms === null) return '#60a5fa';
+    const greenMax = (icrSettings as any).bucketGreenMaxMs ?? 900;
+    const yellowMax = (icrSettings as any).bucketYellowMaxMs ?? 1200;
+    if (ms <= greenMax) return '#10b981';
+    if (ms <= yellowMax) return '#f59e0b';
+    return '#ef4444';
   };
 
   // Persist current ICR settings (from parent)
@@ -405,8 +407,14 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
                 if (e.key === 'Enter') { e.preventDefault(); }
               }}
               ref={inputRef}
+              disabled={!isRunning}
             />
           </div>
+          {!isRunning && trials.length > 0 && (
+            <div className="mt-3 text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded">
+              Session complete. Press Start to run another session.
+            </div>
+          )}
           {trials.length > 0 && (
             <div className="mt-3 text-sm">
               <div>Last Reaction: {trials[currentIndex]?.reactionMs ?? trials[trials.length - 1]?.reactionMs ?? '—'} ms</div>

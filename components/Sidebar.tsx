@@ -19,8 +19,8 @@ interface SidebarProps {
   onViewStats: () => void;
   activeMode?: 'group' | 'icr';
   onChangeMode?: (mode: 'group' | 'icr') => void;
-  icrSettings?: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string };
-  setIcrSettings?: (s: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string }) => void;
+  icrSettings?: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number };
+  setIcrSettings?: (s: any) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, sessionResultsCount, latestAccuracyPercent, onViewStats, activeMode, onChangeMode, icrSettings, setIcrSettings }) => {
@@ -88,6 +88,18 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                       <input type="range" min={20} max={200} step={5} value={icrSettings.vadHoldMs} onChange={(e) => setIcrSettings({ ...icrSettings, vadHoldMs: Number(e.target.value) })} />
                     </div>
                     <div className="text-xs text-slate-600">Calibrate: while quiet the bar should be low; when saying "TEST" it should spike above 100%.</div>
+                    <div className="mt-3 p-3 border rounded bg-white">
+                      <h5 className="font-semibold text-slate-800 mb-2 text-sm">Performance Buckets (ICR)</h5>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <label>Green &lt;= (ms)
+                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketGreenMaxMs} onChange={(e) => setIcrSettings((prev: any) => ({ ...prev, bucketGreenMaxMs: parseInt(e.target.value || '900') }))} />
+                        </label>
+                        <label>Yellow &lt;= (ms)
+                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketYellowMaxMs} onChange={(e) => setIcrSettings((prev: any) => ({ ...prev, bucketYellowMaxMs: parseInt(e.target.value || '1200') }))} />
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1">Bars: green &lt;= Green; yellow between Green..Yellow; red &gt; Yellow.</p>
+                    </div>
                   </div>
                 )}
                 <div className="flex justify-end mt-4">
