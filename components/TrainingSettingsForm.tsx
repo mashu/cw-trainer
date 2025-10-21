@@ -59,7 +59,7 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
             <div>
               <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Koch Level (1-{KOCH_SEQUENCE.length})</label>
               <input type="number" min="1" max={KOCH_SEQUENCE.length} value={settings.kochLevel} onChange={(e) => setSettings({ ...settings, kochLevel: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
-              <p className="text-xs text-gray-500 mt-1 h-4">Characters: {KOCH_SEQUENCE.slice(0, settings.kochLevel).join(' ')}</p>
+              <p className="text-xs text-gray-500 mt-1 whitespace-normal break-words">Characters: {KOCH_SEQUENCE.slice(0, settings.kochLevel).join(' ')}</p>
             </div>
             <div>
               <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Number of Groups</label>
