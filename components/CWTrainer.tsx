@@ -71,7 +71,7 @@ const CWTrainer: React.FC = () => {
     charsPerGroup: 5,
     numGroups: 5,
     wpm: 20,
-    groupTimeout: 8,
+    groupTimeout: 10,
     groupDelay: 1000,
     minGroupSize: 2,
     maxGroupSize: 3,
@@ -158,6 +158,7 @@ const CWTrainer: React.FC = () => {
   const startedAtRef = useRef<number | null>(null);
   const userInputRef = useRef<string[]>([]);
   const confirmedGroupsRef = useRef<Record<number, boolean>>({});
+  const resultsProcessedRef = useRef<boolean>(false);
 
   const firebaseRef = useRef<ReturnType<typeof initFirebase> | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
@@ -453,6 +454,7 @@ const CWTrainer: React.FC = () => {
   const startTraining = async () => {
     // Abort any previous session and start a new session id
     trainingAbortRef.current = false;
+    resultsProcessedRef.current = false;
     dispatchMachine({ type: 'START' });
     const mySession = sessionIdRef.current + 1;
     sessionIdRef.current = mySession;
@@ -504,6 +506,12 @@ const CWTrainer: React.FC = () => {
     setIsTraining(false);
     if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
       dispatchMachine({ type: 'COMPLETE' });
+      // As a safety net, process results on completion if not already processed
+      if (!resultsProcessedRef.current) {
+        const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
+        const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
+        processResults(answers);
+      }
     }
   };
 
@@ -562,6 +570,8 @@ const CWTrainer: React.FC = () => {
   };
 
   const processResults = (answers: string[]) => {
+    if (resultsProcessedRef.current) return;
+    resultsProcessedRef.current = true;
     const groups = sentGroups.map((sent, idx) => {
       const receivedRaw = answers[idx] || '';
       const received = receivedRaw.trim().toUpperCase();
