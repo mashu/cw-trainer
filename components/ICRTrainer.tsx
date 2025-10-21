@@ -22,8 +22,8 @@ const pickRandomChar = (kochLevel: number) => {
 
 interface ICRTrainerProps {
   sharedAudio: { kochLevel: number; wpm: number; sideTone: number; steepness: number; envelopeSmoothing?: number };
-  icrSettings: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string };
-  setIcrSettings: (s: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string }) => void;
+  icrSettings: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number };
+  setIcrSettings: React.Dispatch<React.SetStateAction<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>>;
 }
 
 const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIcrSettings }) => {
