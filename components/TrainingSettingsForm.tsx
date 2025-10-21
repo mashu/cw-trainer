@@ -11,6 +11,7 @@ export interface TrainingSettings {
   numGroups: number;
   wpm: number;
   groupTimeout: number; // seconds to wait for input before auto-advance
+  groupDelay: number; // ms to wait before playing next group
   minGroupSize: number;
   maxGroupSize: number;
   interactiveMode: boolean;
@@ -56,24 +57,28 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
           <h4 className="text-sm font-semibold text-slate-700 mb-3">Session & Groups</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Koch Level (1-{KOCH_SEQUENCE.length})</label>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Koch Level (1-{KOCH_SEQUENCE.length})</label>
               <input type="number" min="1" max={KOCH_SEQUENCE.length} value={settings.kochLevel} onChange={(e) => setSettings({ ...settings, kochLevel: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
               <p className="text-xs text-gray-500 mt-1 h-4">Characters: {KOCH_SEQUENCE.slice(0, settings.kochLevel).join(' ')}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Number of Groups</label>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Number of Groups</label>
               <input type="number" value={settings.numGroups} onChange={(e) => setSettings({ ...settings, numGroups: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Group Timeout (seconds)</label>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Group Timeout (seconds)</label>
               <input type="number" step="0.5" value={settings.groupTimeout} onChange={(e) => setSettings({ ...settings, groupTimeout: parseFloat(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Min Group Size</label>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Group Delay (ms)</label>
+              <input type="number" min="0" step="100" value={settings.groupDelay ?? 1000} onChange={(e) => setSettings({ ...settings, groupDelay: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Min Group Size</label>
               <input type="number" value={settings.minGroupSize} onChange={(e) => setSettings({ ...settings, minGroupSize: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Group Size</label>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Max Group Size</label>
               <input type="number" value={settings.maxGroupSize} onChange={(e) => setSettings({ ...settings, maxGroupSize: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
             </div>
           </div>

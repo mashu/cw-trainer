@@ -24,6 +24,7 @@ interface TrainingSettings {
   numGroups: number;
   wpm: number;
   groupTimeout: number; // absolute max time per group (seconds)
+  groupDelay: number; // ms to wait before playing next group
   minGroupSize: number;
   maxGroupSize: number;
   interactiveMode: boolean;
@@ -66,6 +67,7 @@ const CWTrainer: React.FC = () => {
     numGroups: 5,
     wpm: 20,
     groupTimeout: 8,
+    groupDelay: 1000,
     minGroupSize: 2,
     maxGroupSize: 3,
     interactiveMode: false,
@@ -348,6 +350,11 @@ const CWTrainer: React.FC = () => {
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
       setCurrentGroup(i);
       dispatchMachine({ type: 'GROUP_START', index: i });
+      // Delay before playing the group's audio (does not affect focus/advance)
+      const delayMs = Math.max(0, settings.groupDelay ?? 1000);
+      if (delayMs > 0) {
+        await sleepCancelable(delayMs, mySession);
+      }
       const duration = await playMorseCode(groups[i], mySession);
       // Wait either for input or until timeout
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
