@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useReducer } from 'react';
 import ICRTrainer from './ICRTrainer';
+import ActivityHeatmap from './ActivityHeatmap';
 import ProgressHeader from './ProgressHeader';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import GroupsList from './GroupsList';
@@ -751,6 +752,13 @@ const CWTrainer: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Activity Heatmap (last 3 months, navigable) */}
+            <ActivityHeatmap
+              sessions={sessionResults.map(s => ({ date: s.date, timestamp: s.timestamp }))}
+              monthsPerPage={3}
+              startOfWeek={1}
+            />
 
             {/* Mini Trend */}
             {sessionResults.length > 1 && (
