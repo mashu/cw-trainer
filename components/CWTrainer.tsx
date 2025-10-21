@@ -108,6 +108,29 @@ const CWTrainer: React.FC = () => {
   const [firebaseReady, setFirebaseReady] = useState(false);
   const prevUserRef = useRef<User | null>(null);
   const toastTimerRef = useRef<number | undefined>(undefined);
+  const settingsDebounceTimerRef = useRef<number | undefined>(undefined);
+  const lastSavedSettingsRef = useRef<string | null>(null);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  const serializeSettings = (s: TrainingSettings): string => {
+    // Stable serialization to compare changes deterministically
+    const stable = {
+      kochLevel: s.kochLevel,
+      sideTone: s.sideTone,
+      steepness: s.steepness,
+      sessionDuration: s.sessionDuration,
+      charsPerGroup: s.charsPerGroup,
+      numGroups: s.numGroups,
+      wpm: s.wpm,
+      groupTimeout: s.groupTimeout,
+      groupDelay: s.groupDelay,
+      minGroupSize: s.minGroupSize,
+      maxGroupSize: s.maxGroupSize,
+      interactiveMode: s.interactiveMode,
+      envelopeSmoothing: s.envelopeSmoothing ?? 0
+    };
+    return JSON.stringify(stable);
+  };
 
   useEffect(() => {
     firebaseRef.current = initFirebase();
@@ -162,22 +185,41 @@ const CWTrainer: React.FC = () => {
     };
   }, [toast]);
 
-  // Persist settings on change (both local and Firestore if available)
-  useEffect(() => {
-    // Avoid persisting on first render if defaults equal
-    const persist = async () => {
+  // Load settings from Firestore if available; fallback to localStorage
+  const loadSettings = async () => {
+    if (firebaseRef.current && user && (user as any).uid) {
       try {
-        if (firebaseRef.current && user && (user as any).uid) {
-          const db = firebaseRef.current.db;
-          await setDoc(doc(db, 'users', (user as any).uid, 'settings', 'default'), settings);
+        const db = firebaseRef.current.db;
+        const settingsSnap = await getDocs(collection(db, 'users', (user as any).uid, 'settings'));
+        const defaultDoc = settingsSnap.docs.find((d: any) => d.id === 'default');
+        if (defaultDoc && defaultDoc.exists()) {
+          const data = defaultDoc.data() as Partial<TrainingSettings>;
+          setSettings(prev => {
+            const next = { ...prev, ...data } as TrainingSettings;
+            lastSavedSettingsRef.current = serializeSettings(next);
+            try { localStorage.setItem('morse_settings_local', JSON.stringify(next)); } catch {}
+            return next;
+          });
+          return;
         }
-      } catch {}
-      try {
-        localStorage.setItem('morse_settings_local', JSON.stringify(settings));
-      } catch {}
-    };
-    void persist();
-  }, [settings, user]);
+      } catch (e) {
+        console.warn('Failed to load settings from Firestore, will try local storage', e);
+      }
+    }
+    try {
+      const savedSettings = localStorage.getItem('morse_settings_local');
+      if (savedSettings) {
+        const s = JSON.parse(savedSettings);
+        setSettings(prev => {
+          const next = { ...prev, ...s } as TrainingSettings;
+          lastSavedSettingsRef.current = serializeSettings(next);
+          return next;
+        });
+      }
+    } catch {}
+  };
+
+  // Removed auto-persist on every change to avoid overwriting and reduce writes
 
   // preview function removed for now to avoid unused code
 
@@ -205,33 +247,27 @@ const CWTrainer: React.FC = () => {
   }, [isTraining]);
 
   const loadData = async () => {
-    // Firestore if available and user has Google auth
+    let sessionsLoadedFromCloud = false;
     if (firebaseRef.current && user && (user as any).uid) {
       try {
         const db = firebaseRef.current.db;
-        // Try to load settings snapshot via sessions collection (store latest settings alongside session if needed)
-        // Fallback relies on local storage below
         const sessionsSnap = await getDocs(query(collection(db, 'users', (user as any).uid, 'sessions'), orderBy('timestamp', 'asc')));
         const loaded: SessionResult[] = [];
         sessionsSnap.forEach((d: any) => loaded.push(d.data() as SessionResult));
         setSessionResults(loaded);
-        return;
+        sessionsLoadedFromCloud = true;
       } catch (e) {
         console.warn('Firestore unavailable or unauthorized, falling back to local storage.', e);
       }
     }
-
-    // Fallback to local storage
-    const key = user ? `morse_results_${user.email}` : 'morse_results_local';
-    const saved = localStorage.getItem(key);
-    if (saved) setSessionResults(JSON.parse(saved));
-    if (!user) {
-      const savedSettings = localStorage.getItem('morse_settings_local');
-      if (savedSettings) {
-        const s = JSON.parse(savedSettings);
-        setSettings(prev => ({ ...prev, ...s }));
-      }
+    if (!sessionsLoadedFromCloud) {
+      try {
+        const key = user ? `morse_results_${user.email}` : 'morse_results_local';
+        const saved = localStorage.getItem(key);
+        if (saved) setSessionResults(JSON.parse(saved));
+      } catch {}
     }
+    await loadSettings();
   };
 
   const saveData = async (results: SessionResult[]) => {
@@ -240,8 +276,6 @@ const CWTrainer: React.FC = () => {
       try {
         const db = firebaseRef.current.db;
         await Promise.all(results.map(r => setDoc(doc(db, 'users', (user as any).uid, 'sessions', String(r.timestamp)), r)));
-        // settings
-        await setDoc(doc(db, 'users', (user as any).uid, 'settings', 'default'), settings);
         // aggregated statistics (daily trend + per-letter)
         const daily = computeDailyStats(results as any);
         const letters = computeLetterStats(results as any);
@@ -258,6 +292,43 @@ const CWTrainer: React.FC = () => {
     localStorage.setItem(key, JSON.stringify(results));
     localStorage.setItem('morse_settings_local', JSON.stringify(settings));
   };
+
+  const saveSettings = async (opts?: { source?: 'auto' | 'manual' }) => {
+    // Cancel pending debounce if any (manual save should flush now)
+    try { if (settingsDebounceTimerRef.current) { window.clearTimeout(settingsDebounceTimerRef.current); settingsDebounceTimerRef.current = undefined; } } catch {}
+    setIsSavingSettings(true);
+    try {
+      try { localStorage.setItem('morse_settings_local', JSON.stringify(settings)); } catch {}
+      if (firebaseRef.current && user && (user as any).uid) {
+        try {
+          const db = firebaseRef.current.db;
+          await setDoc(doc(db, 'users', (user as any).uid, 'settings', 'default'), settings, { merge: true });
+          setToast({ message: opts?.source === 'auto' ? 'Settings synced' : 'Settings saved', type: 'success' });
+        } catch (e) {
+          console.warn('Failed to save settings to Firestore', e);
+          setToast({ message: 'Saved locally. Cloud sync failed.', type: 'error' });
+        }
+      } else {
+        setToast({ message: opts?.source === 'auto' ? 'Settings synced locally' : 'Settings saved locally', type: 'info' });
+      }
+      lastSavedSettingsRef.current = serializeSettings(settings);
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  // Debounced auto-save of settings changes
+  useEffect(() => {
+    const serialized = serializeSettings(settings);
+    if (serialized === lastSavedSettingsRef.current) return;
+    try { if (settingsDebounceTimerRef.current) window.clearTimeout(settingsDebounceTimerRef.current); } catch {}
+    settingsDebounceTimerRef.current = window.setTimeout(() => {
+      void saveSettings({ source: 'auto' });
+    }, 2500) as unknown as number;
+    return () => {
+      try { if (settingsDebounceTimerRef.current) window.clearTimeout(settingsDebounceTimerRef.current); } catch {}
+    };
+  }, [settings, user]);
 
   const handleLogin = async () => {
     if (!firebaseRef.current) return;
@@ -542,6 +613,8 @@ const CWTrainer: React.FC = () => {
         }}
         settings={settings}
         setSettings={setSettings}
+        onSaveSettings={() => { void saveSettings({ source: 'manual' }); }}
+        isSavingSettings={isSavingSettings}
         sessionResultsCount={sessionResults.length}
         latestAccuracyPercent={Math.round((sessionResults[sessionResults.length - 1]?.accuracy || 0) * 100)}
         onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setShowStats(true); }}

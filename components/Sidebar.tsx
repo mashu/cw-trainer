@@ -12,12 +12,14 @@ interface SidebarProps {
   authInProgress?: boolean;
   settings: TrainingSettings;
   setSettings: (s: TrainingSettings) => void;
+  onSaveSettings: () => void;
+  isSavingSettings?: boolean;
   sessionResultsCount: number;
   latestAccuracyPercent?: number;
   onViewStats: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, sessionResultsCount, latestAccuracyPercent, onViewStats }) => {
+const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, sessionResultsCount, latestAccuracyPercent, onViewStats }) => {
   const [settingsOpen, setSettingsOpen] = useState(true);
   return (
     <>
@@ -47,6 +49,11 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
             {settingsOpen && (
               <div className="px-4 pb-4">
                 <TrainingSettingsForm settings={settings} setSettings={setSettings} />
+                <div className="flex justify-end mt-4">
+                  <button onClick={onSaveSettings} disabled={!!isSavingSettings} className={`px-4 py-2 rounded-lg transition-colors text-sm ${isSavingSettings ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                    {isSavingSettings ? 'Saving…' : 'Save Settings'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
