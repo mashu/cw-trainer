@@ -19,9 +19,10 @@ interface StatsViewProps {
   sessionResults: SessionResult[];
   onBack: () => void;
   onDelete: (timestamp: number) => void;
+  thresholdPercent?: number; // reference line threshold (0..100)
 }
 
-const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete }) => {
+const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete, thresholdPercent }) => {
   const [selectedSessionTs, setSelectedSessionTs] = useState<number | null>(null);
   const [range, setRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
 
@@ -92,7 +93,7 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="x" />
                   <YAxis domain={[0, 100]} />
-                  <ReferenceLine y={90} stroke="#ef4444" strokeDasharray="4 4" />
+                  <ReferenceLine y={Math.max(0, Math.min(100, thresholdPercent ?? 90))} stroke="#ef4444" strokeDasharray="4 4" />
                   <Tooltip />
                   <Legend />
                   <Line type="monotone" dataKey="accuracy" stroke="#2563eb" strokeWidth={1.5} dot={{ r: 3 }} name="Session" />

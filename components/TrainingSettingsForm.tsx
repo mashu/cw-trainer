@@ -16,6 +16,8 @@ export interface TrainingSettings {
   maxGroupSize: number;
   interactiveMode: boolean;
   envelopeSmoothing?: number; // 0..1
+  autoAdjustKoch?: boolean;
+  autoAdjustThreshold?: number; // 0..100 (%), used for charts reference line
 }
 
 interface TrainingSettingsFormProps {
@@ -85,6 +87,34 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
           <div className="flex items-center gap-2 mt-4">
             <input type="checkbox" checked={settings.interactiveMode} onChange={(e) => setSettings({ ...settings, interactiveMode: e.target.checked })} className="w-4 h-4" />
             <label className="text-sm font-medium text-gray-700">Interactive Mode (submit after each group)</label>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <h5 className="text-sm font-semibold text-slate-700 mb-2">Auto Koch Level Adjustment</h5>
+            <div className="flex items-center gap-2">
+              <input
+                id="autoAdjustKoch"
+                type="checkbox"
+                checked={!!settings.autoAdjustKoch}
+                onChange={(e) => setSettings({ ...settings, autoAdjustKoch: e.target.checked })}
+                className="w-4 h-4"
+              />
+              <label htmlFor="autoAdjustKoch" className="text-sm font-medium text-gray-700">Automatically adjust Koch level based on session accuracy</label>
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Accuracy Threshold (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))}
+                  onChange={(e) => setSettings({ ...settings, autoAdjustThreshold: Math.max(0, Math.min(100, parseInt(e.target.value || '0'))) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+                <p className="text-xs text-gray-500 mt-1">If accuracy ≥ threshold: increase level; otherwise decrease by 1.</p>
+              </div>
+            </div>
           </div>
         </div>
 

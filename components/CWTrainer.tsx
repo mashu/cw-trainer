@@ -29,6 +29,9 @@ interface TrainingSettings {
   maxGroupSize: number;
   interactiveMode: boolean;
   envelopeSmoothing?: number; // 0 (linear) .. 1 (smooth)
+  // Auto adjustment of Koch level based on session accuracy
+  autoAdjustKoch?: boolean;
+  autoAdjustThreshold?: number; // percentage 0..100 (e.g. 90)
 }
 
 interface SessionResult {
@@ -71,7 +74,9 @@ const CWTrainer: React.FC = () => {
     minGroupSize: 2,
     maxGroupSize: 3,
     interactiveMode: false,
-    envelopeSmoothing: 0
+    envelopeSmoothing: 0,
+    autoAdjustKoch: false,
+    autoAdjustThreshold: 90
   });
 
   const [isTraining, setIsTraining] = useState(false);
@@ -127,7 +132,9 @@ const CWTrainer: React.FC = () => {
       minGroupSize: s.minGroupSize,
       maxGroupSize: s.maxGroupSize,
       interactiveMode: s.interactiveMode,
-      envelopeSmoothing: s.envelopeSmoothing ?? 0
+      envelopeSmoothing: s.envelopeSmoothing ?? 0,
+      autoAdjustKoch: !!s.autoAdjustKoch,
+      autoAdjustThreshold: typeof s.autoAdjustThreshold === 'number' ? s.autoAdjustThreshold : 90
     };
     return JSON.stringify(stable);
   };
@@ -545,6 +552,29 @@ const CWTrainer: React.FC = () => {
     const newResults = [...sessionResults, result];
     setSessionResults(newResults);
     void saveData(newResults);
+
+    // Auto adjust Koch level if enabled
+    try {
+      if (settings.autoAdjustKoch) {
+        const threshold = Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90));
+        const accuracyPct = (result.accuracy || 0) * 100;
+        let delta = 0;
+        if (accuracyPct >= threshold) {
+          delta = 1;
+        } else if (accuracyPct < threshold) {
+          delta = -1;
+        }
+        if (delta !== 0) {
+          // KOCH_SEQUENCE length only known in generator; safeguard with 60 as reasonable default
+          const maxLevelGuess = 60;
+          const nextLevel = Math.max(1, Math.min((settings.kochLevel || 1) + delta, maxLevelGuess));
+          if (nextLevel !== settings.kochLevel) {
+            setSettings(prev => ({ ...prev, kochLevel: nextLevel }));
+            setToast({ message: `Koch level ${delta > 0 ? 'increased' : 'decreased'} to ${nextLevel} (accuracy ${Math.round(accuracyPct)}%, threshold ${threshold}%)`, type: delta > 0 ? 'success' : 'info' });
+          }
+        }
+      }
+    } catch {}
     
     // Always go to stats after session completion
     setShowStats(true);
@@ -577,6 +607,7 @@ const CWTrainer: React.FC = () => {
         sessionResults={sessionResults as unknown as StatsSessionResult[]}
         onBack={() => setShowStats(false)}
         onDelete={deleteSession}
+        thresholdPercent={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))}
       />
     );
   }
@@ -685,7 +716,7 @@ const CWTrainer: React.FC = () => {
                         tick={{ fontSize: 10, fill: '#475569' }}
                         label={{ value: 'Accuracy (%)', angle: -90, position: 'insideLeft', offset: 10, fill: '#475569', fontSize: 10 }}
                       />
-                      <ReferenceLine y={90} stroke="#ef4444" strokeDasharray="4 4" />
+                      <ReferenceLine y={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))} stroke="#ef4444" strokeDasharray="4 4" />
                       <Tooltip formatter={(v: any) => [`${v}%`, 'Accuracy']} />
                       <Line type="monotone" dataKey="y" stroke="#6366f1" strokeWidth={2} dot={false} />
                     </LineChart>
