@@ -159,6 +159,7 @@ const CWTrainer: React.FC = () => {
   const userInputRef = useRef<string[]>([]);
   const confirmedGroupsRef = useRef<Record<number, boolean>>({});
   const resultsProcessedRef = useRef<boolean>(false);
+  const activeSentGroupsRef = useRef<string[]>([]);
 
   const firebaseRef = useRef<ReturnType<typeof initFirebase> | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
@@ -493,6 +494,7 @@ const CWTrainer: React.FC = () => {
     // Abort any previous session and start a new session id
     trainingAbortRef.current = false;
     resultsProcessedRef.current = false;
+    activeSentGroupsRef.current = [];
     dispatchMachine({ type: 'START' });
     const mySession = sessionIdRef.current + 1;
     sessionIdRef.current = mySession;
@@ -512,6 +514,7 @@ const CWTrainer: React.FC = () => {
       groups.push(generateGroup());
     }
     setSentGroups(groups);
+    activeSentGroupsRef.current = groups;
     dispatchMachine({ type: 'PREPARED' });
     
     for (let i = 0; i < groups.length; i++) {
@@ -548,7 +551,7 @@ const CWTrainer: React.FC = () => {
       if (!resultsProcessedRef.current) {
         const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
         const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
-        processResults(answers);
+        processResults(answers, groups);
       }
     }
   };
@@ -559,7 +562,7 @@ const CWTrainer: React.FC = () => {
     setIsTraining(false);
     const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
     const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
-    processResults(answers);
+    processResults(answers, activeSentGroupsRef.current);
   };
 
   const confirmGroupAnswer = (index: number, overrideValue?: string) => {
@@ -607,10 +610,14 @@ const CWTrainer: React.FC = () => {
     }
   };
 
-  const processResults = (answers: string[]) => {
+  const processResults = (answers: string[], sentOverride?: string[]) => {
     if (resultsProcessedRef.current) return;
-    resultsProcessedRef.current = true;
-    const groups = sentGroups.map((sent, idx) => {
+    const sentSource = Array.isArray(sentOverride) && sentOverride.length ? sentOverride : (activeSentGroupsRef.current?.length ? activeSentGroupsRef.current : sentGroups);
+    if (!Array.isArray(sentSource) || sentSource.length === 0) {
+      // Nothing to process yet; avoid marking as processed
+      return;
+    }
+    const groups = sentSource.map((sent, idx) => {
       const receivedRaw = answers[idx] || '';
       const received = receivedRaw.trim().toUpperCase();
       return {
@@ -635,7 +642,7 @@ const CWTrainer: React.FC = () => {
       }
     });
 
-    const accuracy = groups.filter(g => g.correct).length / groups.length;
+    const accuracy = groups.length > 0 ? groups.filter(g => g.correct).length / groups.length : 0;
     
     const result: SessionResult = {
       date: new Date().toISOString().split('T')[0],
@@ -647,9 +654,12 @@ const CWTrainer: React.FC = () => {
       letterAccuracy
     };
 
-    const newResults = [...sessionResults, result];
-    setSessionResults(newResults);
-    void saveData(newResults);
+    setSessionResults((prev) => {
+      const appended = [...prev, result];
+      void saveData(appended);
+      return appended;
+    });
+    resultsProcessedRef.current = true;
 
     // Auto adjust Koch level if enabled
     try {
