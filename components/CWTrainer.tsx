@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer } from 'react';
+import ICRTrainer from './ICRTrainer';
 import ProgressHeader from './ProgressHeader';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import GroupsList from './GroupsList';
@@ -90,6 +91,54 @@ const CWTrainer: React.FC = () => {
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [currentFocusedGroup, setCurrentFocusedGroup] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeMode, setActiveMode] = useState<'group' | 'icr'>('group');
+  const [icrSettings, setIcrSettings] = useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60 });
+
+  // Load & save ICR settings with localStorage for persistence
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('morse_icr_settings');
+      if (raw) {
+        setIcrSettings(prev => ({ ...prev, ...JSON.parse(raw) }));
+      }
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem('morse_icr_settings', JSON.stringify(icrSettings)); } catch {}
+  }, [icrSettings]);
+
+  // Simple swipe container to switch modes left/right
+  const SwipeContainer: React.FC<{ activeMode: 'group' | 'icr'; onSwipe: (m: 'group' | 'icr') => void; children: React.ReactNode }> = ({ activeMode, onSwipe, children }) => {
+    const startXRef = useRef<number | null>(null);
+    return (
+      <div
+        onTouchStart={(e) => { startXRef.current = e.touches[0]?.clientX ?? null; }}
+        onTouchEnd={(e) => {
+          const endX = e.changedTouches[0]?.clientX ?? null;
+          if (startXRef.current != null && endX != null) {
+            const dx = endX - startXRef.current;
+            if (Math.abs(dx) > 60) {
+              if (dx > 0) onSwipe('group'); else onSwipe('icr');
+            }
+          }
+          startXRef.current = null;
+        }}
+      >{children}</div>
+    );
+  };
+
+  const ModeTabs: React.FC<{ activeMode: 'group' | 'icr'; onChange: (m: 'group' | 'icr') => void }> = ({ activeMode, onChange }) => (
+    <div className="mb-4 flex gap-2">
+      <button
+        className={`px-3 py-1 rounded-lg text-sm border ${activeMode === 'group' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
+        onClick={() => onChange('group')}
+      >Group</button>
+      <button
+        className={`px-3 py-1 rounded-lg text-sm border ${activeMode === 'icr' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
+        onClick={() => onChange('icr')}
+      >ICR</button>
+    </div>
+  );
   const [machine, dispatchMachine] = useReducer(externalTrainingReducer, { status: 'idle', currentGroupIndex: 0, sessionId: 0 });
   
   // Stop training when navigating away from training panel
@@ -649,6 +698,8 @@ const CWTrainer: React.FC = () => {
         sessionResultsCount={sessionResults.length}
         latestAccuracyPercent={Math.round((sessionResults[sessionResults.length - 1]?.accuracy || 0) * 100)}
         onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setShowStats(true); }}
+        icrSettings={icrSettings}
+        setIcrSettings={setIcrSettings}
       />
       
       <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl ring-1 ring-black/5 p-3 sm:p-6 lg:p-8 border border-white/20">
@@ -675,7 +726,10 @@ const CWTrainer: React.FC = () => {
         </div>
 
 
-        {!isTraining ? (
+        {/* Mode switcher UI: Group vs ICR within same page (tab + swipe) */}
+        <ModeTabs activeMode={activeMode} onChange={setActiveMode} />
+
+        {!isTraining && activeMode === 'group' ? (
           <div className="space-y-8">
             {/* Quick Stats */}
             {sessionResults.length > 0 && (
@@ -735,7 +789,7 @@ const CWTrainer: React.FC = () => {
               </button>
             </div>
           </div>
-        ) : (
+        ) : isTraining && activeMode === 'group' ? (
           <div className="space-y-6">
             <ProgressHeader currentGroup={currentGroup} totalGroups={settings.numGroups} />
 
@@ -783,7 +837,17 @@ const CWTrainer: React.FC = () => {
 
             <TrainingControls onSubmit={submitAnswer} onStop={() => { trainingAbortRef.current = true; setIsTraining(false); }} />
           </div>
-        )}
+        ) : activeMode === 'icr' ? (
+          <SwipeContainer activeMode={activeMode} onSwipe={setActiveMode}>
+            <ICRTrainer sharedAudio={{
+              kochLevel: settings.kochLevel,
+              wpm: settings.wpm,
+              sideTone: settings.sideTone,
+              steepness: settings.steepness,
+              envelopeSmoothing: settings.envelopeSmoothing,
+            }} icrSettings={icrSettings} setIcrSettings={setIcrSettings} />
+          </SwipeContainer>
+        ) : null}
       </div>
     </div>
   );

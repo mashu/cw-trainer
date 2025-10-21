@@ -17,9 +17,13 @@ interface SidebarProps {
   sessionResultsCount: number;
   latestAccuracyPercent?: number;
   onViewStats: () => void;
+  activeMode?: 'group' | 'icr';
+  onChangeMode?: (mode: 'group' | 'icr') => void;
+  icrSettings?: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string };
+  setIcrSettings?: (s: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string }) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, sessionResultsCount, latestAccuracyPercent, onViewStats }) => {
+const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, sessionResultsCount, latestAccuracyPercent, onViewStats, activeMode, onChangeMode, icrSettings, setIcrSettings }) => {
   const [settingsOpen, setSettingsOpen] = useState(true);
   return (
     <>
@@ -37,6 +41,23 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
             </button>
           </div>
 
+          {/* Modes */}
+          {onChangeMode && (
+            <div className="mb-6 p-4 bg-slate-50 rounded-xl">
+              <h4 className="font-semibold text-slate-800 mb-3">Modes</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className={`px-3 py-2 rounded-lg text-sm border ${activeMode === 'group' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
+                  onClick={() => { onChangeMode?.('group'); onClose(); }}
+                >Group</button>
+                <button
+                  className={`px-3 py-2 rounded-lg text-sm border ${activeMode === 'icr' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
+                  onClick={() => { onChangeMode?.('icr'); onClose(); }}
+                >ICR</button>
+              </div>
+            </div>
+          )}
+
           {/* Collapsible Settings */}
           <div className="mb-6 border border-slate-200 rounded-xl">
             <button
@@ -49,6 +70,26 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
             {settingsOpen && (
               <div className="px-4 pb-4">
                 <TrainingSettingsForm settings={settings} setSettings={setSettings} />
+                {/* ICR Mic & VAD controls */}
+                {icrSettings && setIcrSettings && (
+                  <div className="mt-4 p-3 border rounded-lg bg-slate-50">
+                    <h4 className="font-semibold text-slate-800 mb-2">Mic & VAD (ICR)</h4>
+                    <div className="flex items-center gap-2 mb-2 text-sm">
+                      <label>VAD Enabled</label>
+                      <input type="checkbox" checked={icrSettings.vadEnabled} onChange={(e) => setIcrSettings({ ...icrSettings, vadEnabled: e.target.checked })} />
+                      <span className="text-slate-600">When on, voice onset stops the timer. Use keyboard as fallback.</span>
+                    </div>
+                    <div className="mb-2 text-sm">
+                      <label>Threshold: {icrSettings.vadThreshold.toFixed(2)}</label>
+                      <input type="range" min={0} max={0.5} step={0.01} value={icrSettings.vadThreshold} onChange={(e) => setIcrSettings({ ...icrSettings, vadThreshold: Number(e.target.value) })} />
+                    </div>
+                    <div className="mb-2 text-sm">
+                      <label>Hold (ms): {icrSettings.vadHoldMs}</label>
+                      <input type="range" min={20} max={200} step={5} value={icrSettings.vadHoldMs} onChange={(e) => setIcrSettings({ ...icrSettings, vadHoldMs: Number(e.target.value) })} />
+                    </div>
+                    <div className="text-xs text-slate-600">Calibrate: while quiet the bar should be low; when saying "TEST" it should spike above 100%.</div>
+                  </div>
+                )}
                 <div className="flex justify-end mt-4">
                   <button onClick={onSaveSettings} disabled={!!isSavingSettings} className={`px-4 py-2 rounded-lg transition-colors text-sm ${isSavingSettings ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
                     {isSavingSettings ? 'Saving…' : 'Save Settings'}
@@ -57,6 +98,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
               </div>
             )}
           </div>
+
 
           {/* Statistics first */}
           {sessionResultsCount > 0 && (
