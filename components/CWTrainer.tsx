@@ -168,6 +168,40 @@ const CWTrainer: React.FC = () => {
   const lastSavedSettingsRef = useRef<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
+  // Normalize legacy/partial sessions to ensure numeric accuracy and letter stats
+  const normalizeSession = (raw: any): SessionResult => {
+    const groupsArr = Array.isArray(raw?.groups) ? raw.groups : [];
+    const groups = groupsArr.map((g: any) => {
+      const sent = String(g?.sent || '').toUpperCase();
+      const received = String(g?.received || '').toUpperCase();
+      const correct = typeof g?.correct === 'boolean' ? g.correct : (sent.length > 0 && sent === received);
+      return { sent, received, correct };
+    });
+    const safeAccuracy = (() => {
+      if (typeof raw?.accuracy === 'number' && isFinite(raw.accuracy)) return raw.accuracy;
+      const total = groups.length;
+      return total > 0 ? groups.filter((g: any) => g.correct).length / total : 0;
+    })();
+    const letterAccuracy = (() => {
+      if (raw?.letterAccuracy && typeof raw.letterAccuracy === 'object') return raw.letterAccuracy as Record<string, { correct: number; total: number }>;
+      const acc: Record<string, { correct: number; total: number }> = {};
+      groups.forEach((grp: any) => {
+        for (let i = 0; i < grp.sent.length; i++) {
+          const ch = grp.sent[i];
+          if (!acc[ch]) acc[ch] = { correct: 0, total: 0 };
+          acc[ch].total += 1;
+          if (grp.received[i] === ch) acc[ch].correct += 1;
+        }
+      });
+      return acc;
+    })();
+    const ts = typeof raw?.timestamp === 'number' ? raw.timestamp : Date.now();
+    const date = raw?.date || new Date(ts).toISOString().split('T')[0];
+    const startedAt = typeof raw?.startedAt === 'number' ? raw.startedAt : ts;
+    const finishedAt = typeof raw?.finishedAt === 'number' ? raw.finishedAt : ts;
+    return { date, timestamp: ts, startedAt, finishedAt, groups, accuracy: safeAccuracy, letterAccuracy };
+  };
+
   const serializeSettings = (s: TrainingSettings): string => {
     // Stable serialization to compare changes deterministically
     const stable = {
@@ -311,7 +345,7 @@ const CWTrainer: React.FC = () => {
         const db = firebaseRef.current.db;
         const sessionsSnap = await getDocs(query(collection(db, 'users', (user as any).uid, 'sessions'), orderBy('timestamp', 'asc')));
         const loaded: SessionResult[] = [];
-        sessionsSnap.forEach((d: any) => loaded.push(d.data() as SessionResult));
+        sessionsSnap.forEach((d: any) => loaded.push(normalizeSession(d.data())));
         setSessionResults(loaded);
         sessionsLoadedFromCloud = true;
       } catch (e) {
@@ -322,7 +356,11 @@ const CWTrainer: React.FC = () => {
       try {
         const key = user ? `morse_results_${user.email}` : 'morse_results_local';
         const saved = localStorage.getItem(key);
-        if (saved) setSessionResults(JSON.parse(saved));
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const normalized = Array.isArray(parsed) ? parsed.map((s: any) => normalizeSession(s)) : [];
+          setSessionResults(normalized);
+        }
       } catch {}
     }
     await loadSettings();
@@ -747,7 +785,7 @@ const CWTrainer: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
                   <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Last Accuracy</p>
-                  <p className="text-3xl font-extrabold text-emerald-800 mt-1">{Math.round(sessionResults[sessionResults.length-1].accuracy * 100)}%</p>
+                  <p className="text-3xl font-extrabold text-emerald-800 mt-1">{Number.isFinite(sessionResults[sessionResults.length-1].accuracy) ? Math.round(sessionResults[sessionResults.length-1].accuracy * 100) : 0}%</p>
                   <p className="text-xs text-emerald-700/70 mt-1">from your last session</p>
                 </div>
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
@@ -776,7 +814,7 @@ const CWTrainer: React.FC = () => {
                 <h3 className="text-sm font-semibold text-slate-700 mb-3">Accuracy Trend</h3>
                 <div className="w-full h-[140px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={sessionResults.map((s) => ({ x: new Date(s.timestamp).toLocaleDateString(), y: Math.round(s.accuracy*100) }))}>
+                    <LineChart data={sessionResults.map((s) => ({ x: new Date(s.timestamp).toLocaleDateString(), y: Math.round(((s.accuracy || 0) * 100)) }))}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
                         dataKey="x"
