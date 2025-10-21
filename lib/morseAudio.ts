@@ -4,6 +4,7 @@ export interface AudioSettings {
   wpm: number;
   sideTone: number;
   steepness: number;
+  envelopeSmoothing?: number; // 0..1
 }
 
 export const ensureContext = async (ctx: AudioContext) => {
@@ -49,10 +50,51 @@ export async function playMorseCode(
       oscillator.connect(gainNode);
       gainNode.connect(ctx.destination);
 
-      gainNode.gain.setValueAtTime(0, currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.3, currentTime + riseTime);
-      gainNode.gain.setValueAtTime(0.3, currentTime + duration - riseTime);
-      gainNode.gain.linearRampToValueAtTime(0, currentTime + duration);
+      const targetGain = 0.3;
+      const smoothing = Math.max(0, Math.min(1, settings.envelopeSmoothing ?? 0));
+      if (smoothing === 0) {
+        // Linear envelope (current behavior)
+        gainNode.gain.setValueAtTime(0, currentTime);
+        gainNode.gain.linearRampToValueAtTime(targetGain, currentTime + riseTime);
+        gainNode.gain.setValueAtTime(targetGain, currentTime + duration - riseTime);
+        gainNode.gain.linearRampToValueAtTime(0, currentTime + duration);
+      } else {
+        // Smooth envelope using setValueCurveAtTime with cosine-eased attack/decay
+        const sampleRate = 256; // higher control point density for smoother curve
+        const attackSteps = Math.max(2, Math.floor(sampleRate * Math.min(riseTime, duration / 2)));
+        const sustainSteps = Math.max(0, Math.floor(sampleRate * Math.max(0, duration - 2 * riseTime)));
+        const decaySteps = attackSteps;
+        const totalSteps = attackSteps + sustainSteps + decaySteps;
+        const curve = new Float32Array(Math.max(2, totalSteps));
+        let idx = 0;
+        for (let i = 0; i < attackSteps; i++) {
+          const t = i / (attackSteps - 1);
+          const linear = t;
+          const cosine = (1 - Math.cos(Math.PI * t)) / 2;
+          const blend = linear * (1 - smoothing) + cosine * smoothing;
+          curve[idx++] = targetGain * blend;
+        }
+        for (let i = 0; i < sustainSteps; i++) {
+          curve[idx++] = targetGain;
+        }
+        for (let i = 0; i < decaySteps; i++) {
+          const t = i / (decaySteps - 1);
+          const linear = 1 - t;
+          const cosine = (1 + Math.cos(Math.PI * t)) / 2;
+          const blend = linear * (1 - smoothing) + cosine * smoothing;
+          curve[idx++] = targetGain * blend;
+        }
+        gainNode.gain.cancelScheduledValues(currentTime);
+        gainNode.gain.setValueAtTime(0, currentTime);
+        try {
+          gainNode.gain.setValueCurveAtTime(curve, currentTime, duration);
+        } catch {
+          // Fallback to linear ramps if setValueCurveAtTime is not supported
+          gainNode.gain.linearRampToValueAtTime(targetGain, currentTime + riseTime);
+          gainNode.gain.setValueAtTime(targetGain, currentTime + duration - riseTime);
+          gainNode.gain.linearRampToValueAtTime(0, currentTime + duration);
+        }
+      }
 
       oscillator.start(currentTime);
       oscillator.stop(currentTime + duration);

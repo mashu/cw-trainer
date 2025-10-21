@@ -27,6 +27,7 @@ interface TrainingSettings {
   minGroupSize: number;
   maxGroupSize: number;
   interactiveMode: boolean;
+  envelopeSmoothing?: number; // 0 (linear) .. 1 (smooth)
 }
 
 interface SessionResult {
@@ -67,7 +68,8 @@ const CWTrainer: React.FC = () => {
     groupTimeout: 8,
     minGroupSize: 2,
     maxGroupSize: 3,
-    interactiveMode: false
+    interactiveMode: false,
+    envelopeSmoothing: 0
   });
 
   const [isTraining, setIsTraining] = useState(false);
@@ -303,7 +305,7 @@ const CWTrainer: React.FC = () => {
     return await externalPlayMorseCode(
       ctx,
       text,
-      { wpm: settings.wpm, sideTone: settings.sideTone, steepness: settings.steepness },
+      { wpm: settings.wpm, sideTone: settings.sideTone, steepness: settings.steepness, envelopeSmoothing: settings.envelopeSmoothing ?? 0 },
       () => (trainingAbortRef.current || sessionIdRef.current !== sessionId)
     );
   };
