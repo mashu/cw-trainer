@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { KOCH_SEQUENCE } from '@/lib/morseConstants';
-import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar, Brush, ReferenceLine } from 'recharts';
+import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar, Brush, ReferenceLine, ComposedChart, Scatter } from 'recharts';
 
 interface SessionGroup {
   sent: string;
@@ -38,8 +38,8 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
     }))
   ), [sessionsSorted]);
 
-  // Response time over time (daily average in ms)
-  const timingDailyData = useMemo(() => {
+  // Response time over time (daily aggregates with index for numeric axis)
+  const timingDailyAgg = useMemo(() => {
     const daily: Record<string, number[]> = {};
     sessionsSorted.forEach(s => {
       const times = (s.groupTimings || [])
@@ -49,12 +49,53 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
       if (!daily[s.date]) daily[s.date] = [];
       daily[s.date].push(...times);
     });
-    return Object.keys(daily).sort().map(date => {
+    const dates = Object.keys(daily).sort();
+    return dates.map((date, idx) => {
       const arr = daily[date];
       const avg = arr.reduce((a, b) => a + b, 0) / Math.max(1, arr.length);
-      return { date, averageMs: Math.round(avg) };
+      return { date, dayIndex: idx, averageMs: Math.round(avg), count: arr.length };
     });
   }, [sessionsSorted]);
+
+  const dayIndexByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    timingDailyAgg.forEach(d => { map[d.date] = d.dayIndex; });
+    return map;
+  }, [timingDailyAgg]);
+
+  const dayIndexToLabel = useMemo(() => {
+    const map: Record<number, string> = {};
+    timingDailyAgg.forEach(d => { map[d.dayIndex] = d.date; });
+    return map;
+  }, [timingDailyAgg]);
+
+  // All per-group response time samples (ms), numeric x with deterministic jitter
+  const timingSamplesPoints = useMemo(() => {
+    const points: Array<{ dayIndex: number; ms: number; date: string }> = [];
+    const jitterAmplitude = 0.28; // fraction of a day slot to spread points
+    let globalIdx = 0;
+    const hash = (s: string): number => {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+      return Math.abs(h);
+    };
+    sessionsSorted.forEach(s => {
+      const date = s.date;
+      const baseIndex = dayIndexByDate[date];
+      if (typeof baseIndex !== 'number') return;
+      (s.groupTimings || []).forEach((t, i) => {
+        const v = typeof t?.timeToCompleteMs === 'number' ? t.timeToCompleteMs : 0;
+        if (v > 0 && isFinite(v)) {
+          const seed = hash(`${date}:${s.timestamp}:${i}:${globalIdx}:${v}`);
+          const r = (seed % 1000) / 1000; // [0,1)
+          const jitter = (r - 0.5) * 2 * jitterAmplitude;
+          points.push({ dayIndex: baseIndex + jitter, ms: Math.round(v), date });
+          globalIdx += 1;
+        }
+      });
+    });
+    return points;
+  }, [sessionsSorted, dayIndexByDate]);
 
   const aggregateLetterStats = (sessions: SessionResult[]) => {
     const letterStats: Record<string, { correct: number; total: number }> = {};
@@ -177,14 +218,24 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
               </div>
               <div className="w-full h-[260px] sm:h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={timingDailyData.map(d => ({ x: d.date, ms: d.averageMs }))}>
+                  <ComposedChart data={timingDailyAgg}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="x" />
-                    <YAxis />
-                    <Tooltip formatter={(v: any) => [`${v} ms`, 'Avg time']} />
+                    <XAxis
+                      type="number"
+                      dataKey="dayIndex"
+                      ticks={timingDailyAgg.map(d => d.dayIndex)}
+                      domain={[Math.min(0, (timingDailyAgg[0]?.dayIndex ?? 0) - 0.5), (timingDailyAgg[timingDailyAgg.length - 1]?.dayIndex ?? 0) + 0.5]}
+                      tickFormatter={(v: number) => dayIndexToLabel[v] || ''}
+                    />
+                    <YAxis yAxisId="ms" />
+                    <Tooltip
+                      labelFormatter={(label: any) => dayIndexToLabel[Math.round(Number(label))] || ''}
+                      formatter={(value: any, name: string) => [`${value} ms`, name]}
+                    />
                     <Legend />
-                    <Line type="monotone" dataKey="ms" stroke="#f59e0b" strokeWidth={1.5} dot={{ r: 3 }} name="Avg ms" />
-                  </LineChart>
+                    <Line yAxisId="ms" type="monotone" dataKey="averageMs" stroke="#f59e0b" strokeWidth={1.5} dot={{ r: 3 }} name="Avg ms" />
+                    <Scatter yAxisId="ms" data={timingSamplesPoints} dataKey="ms" name="Sample ms" fill="#fb923c" fillOpacity={0.55} />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
