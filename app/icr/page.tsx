@@ -5,7 +5,7 @@ import React from 'react'
 
 export default function ICRPage() {
   const [icrSettings, setIcrSettings] = React.useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60, bucketGreenMaxMs: 900, bucketYellowMaxMs: 1200 });
-  const [sharedAudio, setSharedAudio] = React.useState<{ kochLevel: number; wpm: number; sideTone: number; steepness: number; envelopeSmoothing?: number }>({ kochLevel: 2, wpm: 20, sideTone: 600, steepness: 5, envelopeSmoothing: 0 });
+  const [sharedAudio, setSharedAudio] = React.useState<{ kochLevel: number; charWpm: number; effectiveWpm?: number; sideToneMin: number; sideToneMax: number; steepness: number; envelopeSmoothing?: number }>({ kochLevel: 2, charWpm: 20, effectiveWpm: 20, sideToneMin: 600, sideToneMax: 600, steepness: 5, envelopeSmoothing: 0 });
 
   React.useEffect(() => {
     try {
@@ -14,7 +14,18 @@ export default function ICRPage() {
     } catch {}
     try {
       const rawShared = localStorage.getItem('morse_settings_local');
-      if (rawShared) setSharedAudio(prev => ({ ...prev, ...JSON.parse(rawShared) }));
+      if (rawShared) {
+        const s = JSON.parse(rawShared);
+        setSharedAudio(prev => ({
+          kochLevel: typeof s?.kochLevel === 'number' ? s.kochLevel : prev.kochLevel,
+          charWpm: typeof s?.charWpm === 'number' ? s.charWpm : (typeof s?.wpm === 'number' ? s.wpm : prev.charWpm),
+          effectiveWpm: typeof s?.effectiveWpm === 'number' ? s.effectiveWpm : (typeof s?.charWpm === 'number' ? s.charWpm : (typeof s?.wpm === 'number' ? s.wpm : prev.effectiveWpm)),
+          sideToneMin: typeof s?.sideToneMin === 'number' ? s.sideToneMin : (typeof s?.sideTone === 'number' ? s.sideTone : prev.sideToneMin),
+          sideToneMax: typeof s?.sideToneMax === 'number' ? s.sideToneMax : (typeof s?.sideTone === 'number' ? s.sideTone : prev.sideToneMax),
+          steepness: typeof s?.steepness === 'number' ? s.steepness : prev.steepness,
+          envelopeSmoothing: typeof s?.envelopeSmoothing === 'number' ? s.envelopeSmoothing : prev.envelopeSmoothing,
+        }));
+      }
     } catch {}
   }, []);
 

@@ -28,6 +28,7 @@ interface SessionResult {
     received: string;
     correct: boolean;
   }>;
+  groupTimings?: Array<{ timeToCompleteMs: number }>;
   accuracy: number;
   letterAccuracy: Record<string, { correct: number; total: number }>;
 }
@@ -150,6 +151,9 @@ const CWTrainer: React.FC = () => {
   const confirmedGroupsRef = useRef<Record<number, boolean>>({});
   const resultsProcessedRef = useRef<boolean>(false);
   const activeSentGroupsRef = useRef<string[]>([]);
+  const groupStartAtRef = useRef<number[]>([]);
+  const groupEndAtRef = useRef<number[]>([]);
+  const groupAnswerAtRef = useRef<number[]>([]);
 
   const firebaseRef = useRef<ReturnType<typeof initFirebase> | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
@@ -168,6 +172,12 @@ const CWTrainer: React.FC = () => {
       const correct = typeof g?.correct === 'boolean' ? g.correct : (sent.length > 0 && sent === received);
       return { sent, received, correct };
     });
+    const groupTimings = (() => {
+      if (Array.isArray(raw?.groupTimings)) {
+        return raw.groupTimings.map((t: any) => ({ timeToCompleteMs: Math.max(0, Math.round(Number(t?.timeToCompleteMs) || 0)) }));
+      }
+      return groups.map(() => ({ timeToCompleteMs: 0 }));
+    })();
     const safeAccuracy = (() => {
       if (typeof raw?.accuracy === 'number' && isFinite(raw.accuracy)) return raw.accuracy;
       const total = groups.length;
@@ -190,7 +200,7 @@ const CWTrainer: React.FC = () => {
     const date = raw?.date || new Date(ts).toISOString().split('T')[0];
     const startedAt = typeof raw?.startedAt === 'number' ? raw.startedAt : ts;
     const finishedAt = typeof raw?.finishedAt === 'number' ? raw.finishedAt : ts;
-    return { date, timestamp: ts, startedAt, finishedAt, groups, accuracy: safeAccuracy, letterAccuracy };
+    return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy };
   };
 
   const serializeSettings = (s: TrainingSettings): string => {
@@ -560,6 +570,9 @@ const CWTrainer: React.FC = () => {
     startedAtRef.current = Date.now();
     userInputRef.current = [];
     confirmedGroupsRef.current = {};
+    groupStartAtRef.current = [];
+    groupEndAtRef.current = [];
+    groupAnswerAtRef.current = [];
     
     const groups: string[] = [];
     for (let i = 0; i < settings.numGroups; i++) {
@@ -578,7 +591,11 @@ const CWTrainer: React.FC = () => {
       if (delayMs > 0) {
         await sleepCancelable(delayMs, mySession);
       }
+      const startTs = Date.now();
+      groupStartAtRef.current[i] = startTs;
       const duration = await playMorseCode(groups[i], mySession);
+      const endTs = startTs + Math.max(0, Math.round((duration || 0) * 1000));
+      groupEndAtRef.current[i] = endTs;
       // Wait either for input or until timeout
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
       dispatchMachine({ type: 'WAIT_INPUT' });
@@ -617,6 +634,15 @@ const CWTrainer: React.FC = () => {
     setIsTraining(false);
     const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
     const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
+    // Record answer time for completed-but-unconfirmed groups
+    const now = Date.now();
+    for (let i = 0; i < activeSentGroupsRef.current.length; i++) {
+      const expectedLen = activeSentGroupsRef.current[i]?.length || 0;
+      const val = answers[i] || '';
+      if (expectedLen > 0 && val.length === expectedLen && !groupAnswerAtRef.current[i]) {
+        groupAnswerAtRef.current[i] = now;
+      }
+    }
     processResults(answers, activeSentGroupsRef.current);
   };
 
@@ -630,6 +656,9 @@ const CWTrainer: React.FC = () => {
     const nextConfirmed = { ...confirmedGroupsRef.current, [index]: true };
     setConfirmedGroups(nextConfirmed);
     confirmedGroupsRef.current = nextConfirmed;
+    if (!groupAnswerAtRef.current[index]) {
+      groupAnswerAtRef.current[index] = Date.now();
+    }
 
     // Focus next input
     const nextIndex = index + 1;
@@ -698,6 +727,12 @@ const CWTrainer: React.FC = () => {
     });
 
     const accuracy = groups.length > 0 ? groups.filter(g => g.correct).length / groups.length : 0;
+    const groupTimings = groups.map((_, idx) => {
+      const endAt = groupEndAtRef.current[idx] || 0;
+      const ansAt = groupAnswerAtRef.current[idx] || 0;
+      const delta = Math.max(0, ansAt - endAt);
+      return { timeToCompleteMs: Number.isFinite(delta) ? delta : 0 };
+    });
     
     const result: SessionResult = {
       date: new Date().toISOString().split('T')[0],
@@ -705,6 +740,7 @@ const CWTrainer: React.FC = () => {
       startedAt: startedAtRef.current || Date.now(),
       finishedAt: Date.now(),
       groups,
+      groupTimings,
       accuracy,
       letterAccuracy
     };
