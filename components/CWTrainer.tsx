@@ -121,18 +121,7 @@ const CWTrainer: React.FC = () => {
     );
   };
 
-  const ModeTabs: React.FC<{ activeMode: 'group' | 'icr'; onChange: (m: 'group' | 'icr') => void }> = ({ activeMode, onChange }) => (
-    <div className="mb-4 flex gap-2">
-      <button
-        className={`px-3 py-1 rounded-lg text-sm border ${activeMode === 'group' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
-        onClick={() => onChange('group')}
-      >Group</button>
-      <button
-        className={`px-3 py-1 rounded-lg text-sm border ${activeMode === 'icr' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
-        onClick={() => onChange('icr')}
-      >ICR</button>
-    </div>
-  );
+  
   const [machine, dispatchMachine] = useReducer(externalTrainingReducer, { status: 'idle', currentGroupIndex: 0, sessionId: 0 });
   
   // Stop training when navigating away from training panel
@@ -876,8 +865,7 @@ const CWTrainer: React.FC = () => {
         </div>
 
 
-        {/* Mode switcher UI: Group vs ICR within same page (tab + swipe) */}
-        <ModeTabs activeMode={activeMode} onChange={(m) => { setActiveMode(m); if (m === 'group') { /* keep current groupTab */ } }} />
+        {/* Mode switcher moved to Sidebar; removed from main panel */}
 
         {!isTraining && activeMode === 'group' && groupTab === 'train' ? (
           <div className="space-y-8">
