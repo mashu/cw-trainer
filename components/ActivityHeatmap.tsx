@@ -5,6 +5,8 @@ import React, { useMemo, useRef, useState } from 'react';
 export type ActivitySessionLite = {
   date: string; // YYYY-MM-DD in local time (already stored by app)
   timestamp: number;
+  // Optional count payload allowing callers to represent arbitrary activity (e.g., characters trained)
+  count?: number;
 };
 
 type ActivityHeatmapProps = {
@@ -70,7 +72,8 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ sessions, mont
     const map = new Map<string, number>();
     for (const s of sessions) {
       const key = s.date; // already in YYYY-MM-DD
-      map.set(key, (map.get(key) || 0) + 1);
+      const inc = typeof s.count === 'number' && isFinite(s.count) ? s.count : 1;
+      map.set(key, (map.get(key) || 0) + inc);
     }
     return map;
   }, [sessions]);
@@ -239,7 +242,7 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ sessions, mont
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/70 p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700">Activity (sessions per day)</h3>
+        <h3 className="text-sm font-semibold text-slate-700">Activity (characters per day)</h3>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2 text-[11px]">
             <label className="inline-flex items-center gap-1">
@@ -318,7 +321,7 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ sessions, mont
                           <div key={`${cell.key}-placeholder`} className="w-3 h-3 rounded-sm invisible" />
                         );
                       }
-                      const title = `${cell.date.toLocaleDateString()} — ${cell.count} ${cell.count === 1 ? 'session' : 'sessions'}`;
+                      const title = `${cell.date.toLocaleDateString()} — ${cell.count} ${cell.count === 1 ? 'character' : 'characters'}`;
                       const isSelected = selectedLocalYmd === cell.key;
                       return (
                         <div
@@ -344,7 +347,7 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ sessions, mont
         <span>Less</span>
         <div className="flex items-center gap-1">
           {legendStops.map((v, i) => (
-            <div key={i} className="w-3 h-3 rounded-sm border border-white/40" style={{ backgroundColor: computeColorForCount(v, maxCountInWindow) }} title={`${v} sessions`} />
+            <div key={i} className="w-3 h-3 rounded-sm border border-white/40" style={{ backgroundColor: computeColorForCount(v, maxCountInWindow) }} title={`${v} characters`} />
           ))}
         </div>
         <span>More</span>

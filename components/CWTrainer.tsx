@@ -868,7 +868,11 @@ const CWTrainer: React.FC = () => {
 
             {/* Activity Heatmap (last 3 months, navigable) */}
             <ActivityHeatmap
-              sessions={sessionResults.map(s => ({ date: s.date, timestamp: s.timestamp }))}
+              sessions={sessionResults.map(s => ({
+                date: s.date,
+                timestamp: s.timestamp,
+                count: Array.isArray(s.groups) ? s.groups.reduce((acc, g) => acc + (typeof g?.sent === 'string' ? g.sent.length : 0), 0) : 0
+              }))}
               monthsPerPage={3}
               startOfWeek={1}
             />
