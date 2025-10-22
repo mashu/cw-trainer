@@ -21,7 +21,7 @@ const pickRandomChar = (kochLevel: number) => {
 };
 
 interface ICRTrainerProps {
-  sharedAudio: { kochLevel: number; wpm: number; sideTone: number; steepness: number; envelopeSmoothing?: number };
+  sharedAudio: { kochLevel: number; charWpm: number; effectiveWpm?: number; sideToneMin: number; sideToneMax: number; steepness: number; envelopeSmoothing?: number };
   icrSettings: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number };
   setIcrSettings: React.Dispatch<React.SetStateAction<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>>;
 }
@@ -145,16 +145,29 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
     requestAnimationFrame(tick);
   }, [icrSettings.vadEnabled, icrSettings.vadThreshold, icrSettings.vadHoldMs, measureInputLevel]);
 
+  const pickToneHz = useCallback((): number => {
+    const min = Math.max(100, sharedAudio.sideToneMin);
+    const max = Math.max(min, sharedAudio.sideToneMax);
+    if (min === max) return min;
+    return Math.floor(min + Math.random() * (max - min + 1));
+  }, [sharedAudio.sideToneMin, sharedAudio.sideToneMax]);
+
   const playChar = useCallback(async (ch: string) => {
     const ctx = await setupAudioContext();
     stopRef.current = false;
     return await externalPlayMorseCode(
       ctx,
       ch,
-      { wpm: sharedAudio.wpm, sideTone: sharedAudio.sideTone, steepness: sharedAudio.steepness, envelopeSmoothing: sharedAudio.envelopeSmoothing ?? 0 },
+      {
+        charWpm: Math.max(1, sharedAudio.charWpm),
+        effectiveWpm: Math.max(1, sharedAudio.effectiveWpm ?? sharedAudio.charWpm),
+        sideTone: pickToneHz(),
+        steepness: sharedAudio.steepness,
+        envelopeSmoothing: sharedAudio.envelopeSmoothing ?? 0,
+      },
       () => stopRef.current
     );
-  }, [sharedAudio.wpm, sharedAudio.sideTone, sharedAudio.steepness, sharedAudio.envelopeSmoothing, setupAudioContext]);
+  }, [sharedAudio.charWpm, sharedAudio.effectiveWpm, sharedAudio.steepness, sharedAudio.envelopeSmoothing, pickToneHz, setupAudioContext]);
 
   const runSession = useCallback(async () => {
     if (isRunning) return;

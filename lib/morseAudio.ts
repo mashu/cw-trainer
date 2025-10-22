@@ -1,7 +1,14 @@
 import { MORSE_CODE } from './morseConstants';
 
 export interface AudioSettings {
-  wpm: number;
+  // Legacy single-speed (still supported)
+  wpm?: number;
+  // Farnsworth support
+  charWpm?: number; // character element speed
+  effectiveWpm?: number; // overall perceived speed via extended spacing
+  useFarnsworth?: boolean; // deprecated; timing now always uses char/effective if provided
+  extraWordSpaceMultiplier?: number; // >=1.0, scales word gap; default 1.0
+  // Tone & envelope
   sideTone: number;
   steepness: number;
   envelopeSmoothing?: number; // 0..1
@@ -23,17 +30,41 @@ export async function playMorseCode(
 
   await ensureContext(ctx);
 
-  const dotDuration = 1.2 / settings.wpm;
-  const dashDuration = dotDuration * 3;
-  const symbolSpace = dotDuration;
-  const charSpace = dotDuration * 3;
+  // Determine timing based on Farnsworth or legacy single WPM
+  const resolvedCharWpm = (() => {
+    const charWpm = settings.charWpm ?? settings.wpm ?? 20;
+    return Math.max(1, charWpm);
+  })();
+  const resolvedEffWpm = (() => {
+    const effWpm = settings.effectiveWpm ?? settings.charWpm ?? settings.wpm ?? 20;
+    return Math.max(1, effWpm);
+  })();
+  const useFarnsworth = true; // always use Farnsworth-style spacing if char/eff are provided
+  const extraWordSpaceMultiplier = Math.max(1, settings.extraWordSpaceMultiplier ?? 1);
+
+  const dotChar = 1.2 / resolvedCharWpm; // seconds
+  const dotEff = 1.2 / resolvedEffWpm; // seconds
+
+  const dotDuration = dotChar;
+  const dashDuration = dotChar * 3;
+  const symbolSpace = dotChar; // element gap stays at character WPM
+  const charSpace = (useFarnsworth ? dotEff : dotChar) * 3; // inter-character gap
+  const wordSpace = (useFarnsworth ? dotEff : dotChar) * 7 * extraWordSpaceMultiplier; // inter-word gap
   const riseTime = settings.steepness / 1000;
 
   let currentTime = ctx.currentTime;
 
   for (let i = 0; i < text.length; i++) {
     if (shouldStop()) return 0;
-    const char = text[i].toUpperCase();
+    const rawChar = text[i];
+    // Handle explicit spaces as word gaps; adjust on top of prior charSpace
+    if (rawChar === ' ') {
+      // Add the extra needed to reach a full word gap (beyond the char gap already added previously)
+      const additional = Math.max(0, wordSpace - charSpace);
+      currentTime += additional;
+      continue;
+    }
+    const char = rawChar.toUpperCase();
     const morse = MORSE_CODE[char];
     if (!morse) continue;
     for (let j = 0; j < morse.length; j++) {

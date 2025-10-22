@@ -4,14 +4,20 @@ import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 
 export interface TrainingSettings {
   kochLevel: number;
-  sideTone: number;
+  // Tone & envelope
+  sideToneMin: number;
+  sideToneMax: number;
   steepness: number;
+  // Session & groups
   sessionDuration: number;
   charsPerGroup: number;
   numGroups: number;
-  wpm: number;
+  // Timing
+  charWpm: number; // character speed
+  effectiveWpm: number; // perceived speed via spacing
+  linkSpeeds: boolean; // binder to keep char==effective
+  extraWordSpaceMultiplier?: number; // >=1.0 additional word spacing factor
   groupTimeout: number; // seconds to wait for input before auto-advance
-  groupDelay: number; // ms to wait before playing next group
   minGroupSize: number;
   maxGroupSize: number;
   interactiveMode: boolean;
@@ -26,8 +32,9 @@ interface TrainingSettingsFormProps {
 }
 
 const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, setSettings }) => {
-  // Preview values for steepness envelope (dot symbol)
-  const dotDurationMs: number = (1.2 / settings.wpm) * 1000;
+  // Preview values for steepness envelope (dot symbol) based on character WPM
+  const previewCharWpm = Math.max(1, settings.charWpm || settings.effectiveWpm || 20);
+  const dotDurationMs: number = (1.2 / previewCharWpm) * 1000;
   const riseMs: number = Math.min(settings.steepness, dotDurationMs / 2);
   const attackPct: number = dotDurationMs > 0 ? (riseMs / dotDurationMs) * 100 : 0;
   const smoothing = Math.max(0, Math.min(1, settings.envelopeSmoothing ?? 0));
@@ -67,13 +74,32 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
               <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Number of Groups</label>
               <input type="number" value={settings.numGroups} onChange={(e) => setSettings({ ...settings, numGroups: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
             </div>
+            {/* Farnsworth controls (always on) */}
+            <div>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Character Speed (WPM)</label>
+              <input type="number" min={1} value={settings.charWpm} onChange={(e) => {
+                const v = parseInt(e.target.value || '1');
+                setSettings({ ...settings, charWpm: v, effectiveWpm: settings.linkSpeeds ? v : settings.effectiveWpm });
+              }} className="w-full px-3 py-2 border border-gray-300 rounded" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Effective Speed (WPM)</label>
+              <input type="number" min={1} value={settings.effectiveWpm} disabled={!!settings.linkSpeeds} onChange={(e) => setSettings({ ...settings, effectiveWpm: parseInt(e.target.value || '1') })} className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100" />
+              <div className="mt-1 text-xs text-slate-600 flex items-center gap-2">
+                <input type="checkbox" checked={!!settings.linkSpeeds} onChange={(e) => {
+                  const link = e.target.checked;
+                  setSettings({ ...settings, linkSpeeds: link, effectiveWpm: link ? settings.charWpm : settings.effectiveWpm });
+                }} />
+                <span>Link speeds (effective = character)</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Extra Word Spacing (×)</label>
+              <input type="number" min={1} step={0.1} value={Math.max(1, settings.extraWordSpaceMultiplier ?? 1)} onChange={(e) => setSettings({ ...settings, extraWordSpaceMultiplier: Math.max(1, parseFloat(e.target.value || '1')) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+            </div>
             <div>
               <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Group Timeout (seconds)</label>
               <input type="number" step="0.5" value={settings.groupTimeout} onChange={(e) => setSettings({ ...settings, groupTimeout: parseFloat(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Group Delay (ms)</label>
-              <input type="number" min="0" step="100" value={settings.groupDelay ?? 1000} onChange={(e) => setSettings({ ...settings, groupDelay: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
             </div>
             <div>
               <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Min Group Size</label>
@@ -124,12 +150,13 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
             {/* Speed and Side Tone in a single row as number inputs (spinbuttons) */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Speed (WPM)</label>
-                <input type="number" value={settings.wpm} onChange={(e) => setSettings({ ...settings, wpm: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tone Min (Hz)</label>
+                <input type="number" min={100} max={2000} value={settings.sideToneMin} onChange={(e) => setSettings({ ...settings, sideToneMin: parseInt(e.target.value || '600') })} className="w-full px-3 py-2 border border-gray-300 rounded" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Side Tone (Hz)</label>
-                <input type="number" value={settings.sideTone} onChange={(e) => setSettings({ ...settings, sideTone: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tone Max (Hz)</label>
+                <input type="number" min={100} max={2000} value={settings.sideToneMax} onChange={(e) => setSettings({ ...settings, sideToneMax: parseInt(e.target.value || '600') })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+                <p className="text-xs text-gray-500 mt-1">Equal min/max = fixed tone.</p>
               </div>
             </div>
             {/* Steepness slider (ms) - one per row */}
@@ -175,7 +202,7 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
               </ResponsiveContainer>
             </div>
           </div>
-          <p className="text-[11px] text-gray-500 mt-2">Rise/decay: {Math.round(riseMs)} ms • Dot ≈ {Math.round(dotDurationMs)} ms @ {settings.wpm} WPM • Smoothness: {Math.round(smoothing * 100)}%</p>
+          <p className="text-[11px] text-gray-500 mt-2">Rise/decay: {Math.round(riseMs)} ms • Dot ≈ {Math.round(dotDurationMs)} ms @ {previewCharWpm} WPM • Smoothness: {Math.round(smoothing * 100)}%</p>
         </div>
       </div>
 

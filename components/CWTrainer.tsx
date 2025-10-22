@@ -16,25 +16,7 @@ import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'fir
 import { onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
 
 // Constants and MORSE code moved to lib/morseConstants
-
-interface TrainingSettings {
-  kochLevel: number;
-  sideTone: number;
-  steepness: number;
-  sessionDuration: number;
-  charsPerGroup: number;
-  numGroups: number;
-  wpm: number;
-  groupTimeout: number; // absolute max time per group (seconds)
-  groupDelay: number; // ms to wait before playing next group
-  minGroupSize: number;
-  maxGroupSize: number;
-  interactiveMode: boolean;
-  envelopeSmoothing?: number; // 0 (linear) .. 1 (smooth)
-  // Auto adjustment of Koch level based on session accuracy
-  autoAdjustKoch?: boolean;
-  autoAdjustThreshold?: number; // percentage 0..100 (e.g. 90)
-}
+import type { TrainingSettings } from './TrainingSettingsForm';
 
 interface SessionResult {
   date: string;
@@ -65,14 +47,22 @@ const CWTrainer: React.FC = () => {
   
   const [settings, setSettings] = useState<TrainingSettings>({
     kochLevel: 2,
-    sideTone: 600,
+    // Tone range (fixed by default)
+    sideToneMin: 600,
+    sideToneMax: 600,
     steepness: 5,
+    // Session & groups
     sessionDuration: 5,
     charsPerGroup: 5,
     numGroups: 5,
-    wpm: 20,
+    // Timing (Farnsworth only)
+    charWpm: 20,
+    effectiveWpm: 20,
+    linkSpeeds: true,
+    extraWordSpaceMultiplier: 1,
     groupTimeout: 10,
-    groupDelay: 1000,
+    
+    // Group sizes
     minGroupSize: 2,
     maxGroupSize: 3,
     interactiveMode: false,
@@ -207,14 +197,18 @@ const CWTrainer: React.FC = () => {
     // Stable serialization to compare changes deterministically
     const stable = {
       kochLevel: s.kochLevel,
-      sideTone: s.sideTone,
+      sideToneMin: s.sideToneMin,
+      sideToneMax: s.sideToneMax,
       steepness: s.steepness,
       sessionDuration: s.sessionDuration,
       charsPerGroup: s.charsPerGroup,
       numGroups: s.numGroups,
-      wpm: s.wpm,
+      charWpm: s.charWpm,
+      effectiveWpm: s.effectiveWpm,
+      linkSpeeds: !!s.linkSpeeds,
+      extraWordSpaceMultiplier: s.extraWordSpaceMultiplier ?? 1,
       groupTimeout: s.groupTimeout,
-      groupDelay: s.groupDelay,
+      
       minGroupSize: s.minGroupSize,
       maxGroupSize: s.maxGroupSize,
       interactiveMode: s.interactiveMode,
@@ -279,6 +273,38 @@ const CWTrainer: React.FC = () => {
   }, [toast]);
 
   // Load settings from Firestore if available; fallback to localStorage
+  const normalizeSettings = (raw: any): TrainingSettings => {
+    // Back-compat conversion from legacy fields (wpm, sideTone)
+    const legacyWpm = typeof raw?.wpm === 'number' && isFinite(raw.wpm) ? raw.wpm : undefined;
+    const legacySide = typeof raw?.sideTone === 'number' && isFinite(raw.sideTone) ? raw.sideTone : undefined;
+    // Always use Farnsworth; treat any legacy settings as inputs
+    const charWpm = typeof raw?.charWpm === 'number' ? raw.charWpm : (legacyWpm ?? settings.charWpm);
+    const effectiveWpm = typeof raw?.effectiveWpm === 'number' ? raw.effectiveWpm : (legacyWpm ?? charWpm);
+    const linkSpeeds = typeof raw?.linkSpeeds === 'boolean' ? raw.linkSpeeds : (charWpm === effectiveWpm);
+    const sideMin = typeof raw?.sideToneMin === 'number' ? raw.sideToneMin : (legacySide ?? settings.sideToneMin);
+    const sideMax = typeof raw?.sideToneMax === 'number' ? raw.sideToneMax : (legacySide ?? settings.sideToneMax);
+    return {
+      kochLevel: typeof raw?.kochLevel === 'number' ? raw.kochLevel : settings.kochLevel,
+      sideToneMin: sideMin,
+      sideToneMax: sideMax,
+      steepness: typeof raw?.steepness === 'number' ? raw.steepness : settings.steepness,
+      sessionDuration: typeof raw?.sessionDuration === 'number' ? raw.sessionDuration : settings.sessionDuration,
+      charsPerGroup: typeof raw?.charsPerGroup === 'number' ? raw.charsPerGroup : settings.charsPerGroup,
+      numGroups: typeof raw?.numGroups === 'number' ? raw.numGroups : settings.numGroups,
+      charWpm,
+      effectiveWpm,
+      linkSpeeds,
+      extraWordSpaceMultiplier: Math.max(1, typeof raw?.extraWordSpaceMultiplier === 'number' ? raw.extraWordSpaceMultiplier : (settings.extraWordSpaceMultiplier ?? 1)),
+      groupTimeout: typeof raw?.groupTimeout === 'number' ? raw.groupTimeout : settings.groupTimeout,
+      minGroupSize: typeof raw?.minGroupSize === 'number' ? raw.minGroupSize : settings.minGroupSize,
+      maxGroupSize: typeof raw?.maxGroupSize === 'number' ? raw.maxGroupSize : settings.maxGroupSize,
+      interactiveMode: !!(typeof raw?.interactiveMode === 'boolean' ? raw.interactiveMode : settings.interactiveMode),
+      envelopeSmoothing: typeof raw?.envelopeSmoothing === 'number' ? raw.envelopeSmoothing : (settings.envelopeSmoothing ?? 0),
+      autoAdjustKoch: !!(typeof raw?.autoAdjustKoch === 'boolean' ? raw.autoAdjustKoch : settings.autoAdjustKoch),
+      autoAdjustThreshold: typeof raw?.autoAdjustThreshold === 'number' ? raw.autoAdjustThreshold : (settings.autoAdjustThreshold ?? 90),
+    };
+  };
+
   const loadSettings = async () => {
     if (firebaseRef.current && user && (user as any).uid) {
       try {
@@ -286,9 +312,9 @@ const CWTrainer: React.FC = () => {
         const settingsSnap = await getDocs(collection(db, 'users', (user as any).uid, 'settings'));
         const defaultDoc = settingsSnap.docs.find((d: any) => d.id === 'default');
         if (defaultDoc && defaultDoc.exists()) {
-          const data = defaultDoc.data() as Partial<TrainingSettings>;
+          const data = defaultDoc.data() as any;
           setSettings(prev => {
-            const next = { ...prev, ...data } as TrainingSettings;
+            const next = normalizeSettings({ ...prev, ...data });
             lastSavedSettingsRef.current = serializeSettings(next);
             try { localStorage.setItem('morse_settings_local', JSON.stringify(next)); } catch {}
             return next;
@@ -304,7 +330,7 @@ const CWTrainer: React.FC = () => {
       if (savedSettings) {
         const s = JSON.parse(savedSettings);
         setSettings(prev => {
-          const next = { ...prev, ...s } as TrainingSettings;
+          const next = normalizeSettings({ ...prev, ...s });
           lastSavedSettingsRef.current = serializeSettings(next);
           return next;
         });
@@ -466,6 +492,21 @@ const CWTrainer: React.FC = () => {
 
   const generateGroup = (): string => externalGenerateGroup({ kochLevel: settings.kochLevel, minGroupSize: settings.minGroupSize, maxGroupSize: settings.maxGroupSize });
 
+  const pickToneHz = (): number => {
+    const min = Math.max(100, settings.sideToneMin);
+    const max = Math.max(min, settings.sideToneMax);
+    if (min === max) return min;
+    return Math.floor(min + Math.random() * (max - min + 1));
+  };
+
+  const computeAutoGroupGapMs = (): number => {
+    // Word space in Farnsworth: 7 dot units at effective WPM times extra multiplier
+    const effWpm = Math.max(1, settings.effectiveWpm || settings.charWpm || 20);
+    const dotEffSec = 1.2 / effWpm;
+    const wordSpaceSec = 7 * dotEffSec * Math.max(1, settings.extraWordSpaceMultiplier || 1);
+    return Math.round(wordSpaceSec * 1000);
+  };
+
   const playMorseCode = async (text: string, sessionId: number) => {
     if (trainingAbortRef.current || sessionIdRef.current !== sessionId) return 0;
     if (!audioContextRef.current) {
@@ -475,7 +516,15 @@ const CWTrainer: React.FC = () => {
     return await externalPlayMorseCode(
       ctx,
       text,
-      { wpm: settings.wpm, sideTone: settings.sideTone, steepness: settings.steepness, envelopeSmoothing: settings.envelopeSmoothing ?? 0 },
+      {
+        charWpm: Math.max(1, settings.charWpm),
+        effectiveWpm: Math.max(1, settings.effectiveWpm),
+        extraWordSpaceMultiplier: Math.max(1, settings.extraWordSpaceMultiplier ?? 1),
+        // Tone & envelope
+        sideTone: pickToneHz(),
+        steepness: settings.steepness,
+        envelopeSmoothing: settings.envelopeSmoothing ?? 0
+      },
       () => (trainingAbortRef.current || sessionIdRef.current !== sessionId)
     );
   };
@@ -522,7 +571,7 @@ const CWTrainer: React.FC = () => {
       setCurrentGroup(i);
       dispatchMachine({ type: 'GROUP_START', index: i });
       // Delay before playing the group's audio (does not affect focus/advance)
-      const delayMs = Math.max(0, settings.groupDelay ?? 1000);
+      const delayMs = Math.max(0, computeAutoGroupGapMs());
       if (delayMs > 0) {
         await sleepCancelable(delayMs, mySession);
       }
@@ -907,8 +956,10 @@ const CWTrainer: React.FC = () => {
           <SwipeContainer activeMode={activeMode} onSwipe={setActiveMode}>
             <ICRTrainer sharedAudio={{
               kochLevel: settings.kochLevel,
-              wpm: settings.wpm,
-              sideTone: settings.sideTone,
+              charWpm: Math.max(1, settings.charWpm),
+              effectiveWpm: Math.max(1, settings.effectiveWpm),
+              sideToneMin: settings.sideToneMin,
+              sideToneMax: settings.sideToneMax,
               steepness: settings.steepness,
               envelopeSmoothing: settings.envelopeSmoothing,
             }} icrSettings={icrSettings} setIcrSettings={setIcrSettings} />
