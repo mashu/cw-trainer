@@ -31,6 +31,8 @@ interface SessionResult {
   groupTimings?: Array<{ timeToCompleteMs: number }>;
   accuracy: number;
   letterAccuracy: Record<string, { correct: number; total: number }>;
+  // Firestore document id for reliable deletes; optional for legacy/local entries
+  firestoreId?: string;
 }
 
 // Training state machine moved to lib/trainingMachine
@@ -164,7 +166,7 @@ const CWTrainer: React.FC = () => {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Normalize legacy/partial sessions to ensure numeric accuracy and letter stats
-  const normalizeSession = (raw: any): SessionResult => {
+  const normalizeSession = (raw: any, opts?: { docId?: string }): SessionResult => {
     const groupsArr = Array.isArray(raw?.groups) ? raw.groups : [];
     const groups = groupsArr.map((g: any) => {
       const sent = String(g?.sent || '').toUpperCase();
@@ -196,11 +198,13 @@ const CWTrainer: React.FC = () => {
       });
       return acc;
     })();
-    const ts = typeof raw?.timestamp === 'number' ? raw.timestamp : Date.now();
+    const ts = typeof raw?.timestamp === 'number'
+      ? raw.timestamp
+      : (opts?.docId && /^\d+$/.test(opts.docId) ? Number(opts.docId) : Date.now());
     const date = raw?.date || new Date(ts).toISOString().split('T')[0];
     const startedAt = typeof raw?.startedAt === 'number' ? raw.startedAt : ts;
     const finishedAt = typeof raw?.finishedAt === 'number' ? raw.finishedAt : ts;
-    return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy };
+    return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy, firestoreId: opts?.docId };
   };
 
   const serializeSettings = (s: TrainingSettings): string => {
@@ -382,7 +386,7 @@ const CWTrainer: React.FC = () => {
         const db = firebaseRef.current.db;
         const sessionsSnap = await getDocs(query(collection(db, 'users', (user as any).uid, 'sessions'), orderBy('timestamp', 'asc')));
         const loaded: SessionResult[] = [];
-        sessionsSnap.forEach((d: any) => loaded.push(normalizeSession(d.data())));
+        sessionsSnap.forEach((d: any) => loaded.push(normalizeSession(d.data(), { docId: d.id })));
         setSessionResults(loaded);
         sessionsLoadedFromCloud = true;
       } catch (e) {
@@ -408,7 +412,11 @@ const CWTrainer: React.FC = () => {
     if (firebaseRef.current && user && (user as any).uid) {
       try {
         const db = firebaseRef.current.db;
-        await Promise.all(results.map(r => setDoc(doc(db, 'users', (user as any).uid, 'sessions', String(r.timestamp)), r)));
+        await Promise.all(results.map(r => {
+          const payload = { ...r } as any;
+          try { delete payload.firestoreId; } catch {}
+          return setDoc(doc(db, 'users', (user as any).uid, 'sessions', String(r.timestamp)), payload);
+        }));
         // aggregated statistics (daily trend + per-letter)
         const daily = computeDailyStats(results as any);
         const letters = computeLetterStats(results as any);
@@ -787,7 +795,9 @@ const CWTrainer: React.FC = () => {
     setSessionResults(filtered);
     if (firebaseRef.current && user && (user as any).uid) {
       try {
-        await deleteDoc(doc(firebaseRef.current.db, 'users', (user as any).uid, 'sessions', String(timestamp)));
+        const toDelete = sessionResults.find(r => r.timestamp === timestamp);
+        const docId = (toDelete as any)?.firestoreId || String(timestamp);
+        await deleteDoc(doc(firebaseRef.current.db, 'users', (user as any).uid, 'sessions', docId));
       } catch (e) {
         console.warn('Failed to delete from Firestore, will update local cache only.', e);
       }
