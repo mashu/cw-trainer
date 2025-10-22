@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar, Brush, ReferenceLine, ComposedChart, Scatter } from 'recharts';
+import ActivityHeatmap from './ActivityHeatmap';
 
 interface SessionGroup {
   sent: string;
@@ -27,6 +28,8 @@ interface StatsViewProps {
 const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete, thresholdPercent }) => {
   const [selectedSessionTs, setSelectedSessionTs] = useState<number | null>(null);
   const [range, setRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
+  const [tab, setTab] = useState<'overview' | 'sessions' | 'letters' | 'heatmap' | 'details'>('overview');
+  const [threshold, setThreshold] = useState<number>(Math.max(0, Math.min(100, thresholdPercent ?? 90)));
 
   const sessionsSorted = useMemo(() => sessionResults.slice().sort((a, b) => a.timestamp - b.timestamp), [sessionResults]);
 
@@ -35,6 +38,14 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
       x: new Date(s.timestamp).toLocaleString(),
       accuracy: s.accuracy * 100,
       timestamp: s.timestamp
+    }))
+  ), [sessionsSorted]);
+
+  const activitySessions = useMemo(() => (
+    sessionsSorted.map((s) => ({
+      date: s.date,
+      timestamp: s.timestamp,
+      count: (s.groups || []).reduce((sum, g) => sum + ((g?.sent?.length) || 0), 0)
     }))
   ), [sessionsSorted]);
 
@@ -169,81 +180,180 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
     return { letters, matrix };
   }, [rangeFilteredSessions]);
 
+  // KPIs derived from range
+  const { kpiAvgAccuracy, kpiSessions, kpiAvgMs, kpiUniqueDays, bestLetter, worstLetter } = useMemo(() => {
+    const totalSessions = rangeFilteredSessions.length;
+    const avgAcc = totalSessions ? (rangeFilteredSessions.reduce((a, s) => a + (s.accuracy * 100), 0) / totalSessions) : 0;
+    let sumMs = 0; let nMs = 0;
+    rangeFilteredSessions.forEach(s => {
+      (s.groupTimings || []).forEach(t => {
+        const v = typeof t?.timeToCompleteMs === 'number' ? t.timeToCompleteMs : 0;
+        if (v > 0 && isFinite(v)) { sumMs += v; nMs += 1; }
+      });
+    });
+    const avgMs = nMs ? (sumMs / nMs) : 0;
+    const days = new Set(rangeFilteredSessions.map(s => s.date)).size;
+    const best = overallLetterStats.slice().sort((a, b) => b.accuracy - a.accuracy)[0] || null;
+    const worst = overallLetterStats[0] || null;
+    return { kpiAvgAccuracy: avgAcc, kpiSessions: totalSessions, kpiAvgMs: avgMs, kpiUniqueDays: days, bestLetter: best, worstLetter: worst };
+  }, [rangeFilteredSessions, overallLetterStats]);
+
+  // Date range presets
+  const applyRangePreset = (days: number | 'all') => {
+    if (days === 'all') { setRange(null); return; }
+    const now = Date.now();
+    const earliest = now - days * 24 * 60 * 60 * 1000;
+    const firstIdx = sessionsSorted.findIndex(s => s.timestamp >= earliest);
+    if (firstIdx < 0) { setRange(null); return; }
+    setRange({ startIndex: firstIdx, endIndex: chartData.length - 1 });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 sm:p-6">
       <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl ring-1 ring-black/5 p-4 sm:p-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-800">Training Statistics</h2>
-          <button
-            onClick={onBack}
-            className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm sm:text-base hover:bg-blue-700"
-          >
-            Back to Training
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-700">Accuracy Over Time</h3>
-            </div>
-            <div className="w-full h-[260px] sm:h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} onClick={(e: any) => {
-                  const payload = e && e.activePayload && e.activePayload[0] && e.activePayload[0].payload;
-                  if (payload && payload.timestamp) {
-                    setSelectedSessionTs(payload.timestamp);
-                  }
-                }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="x" />
-                  <YAxis domain={[0, 100]} />
-                  <ReferenceLine y={Math.max(0, Math.min(100, thresholdPercent ?? 90))} stroke="#ef4444" strokeDasharray="4 4" />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="accuracy" stroke="#2563eb" strokeWidth={1.5} dot={{ r: 3 }} name="Session" />
-                  <Brush dataKey="x" travellerWidth={8} height={24} onChange={(r: any) => {
-                    if (!r) return;
-                    if (typeof r.startIndex === 'number' && typeof r.endIndex === 'number') {
-                      setRange({ startIndex: r.startIndex, endIndex: r.endIndex });
-                    }
-                  }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="mt-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-700">Response Time (ms) by Day</h3>
-              </div>
-              <div className="w-full h-[260px] sm:h-[320px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={timingDailyAgg}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      type="number"
-                      dataKey="dayIndex"
-                      ticks={timingDailyAgg.map(d => d.dayIndex)}
-                      domain={[Math.min(0, (timingDailyAgg[0]?.dayIndex ?? 0) - 0.5), (timingDailyAgg[timingDailyAgg.length - 1]?.dayIndex ?? 0) + 0.5]}
-                      tickFormatter={(v: number) => dayIndexToLabel[v] || ''}
-                    />
-                    <YAxis yAxisId="ms" />
-                    <Tooltip
-                      labelFormatter={(label: any) => dayIndexToLabel[Math.round(Number(label))] || ''}
-                      formatter={(value: any, name: string) => [`${value} ms`, name]}
-                    />
-                    <Legend />
-                    <Line yAxisId="ms" type="monotone" dataKey="averageMs" stroke="#f59e0b" strokeWidth={1.5} dot={{ r: 3 }} name="Avg ms" />
-                    <Scatter yAxisId="ms" data={timingSamplesPoints} dataKey="ms" name="Sample ms" fill="#fb923c" fillOpacity={0.55} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
+        {/* Header */}
+        <div className="flex flex-col gap-3 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-800">Training Statistics</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onBack}
+                className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm sm:text-base hover:bg-blue-700"
+              >
+                Back to Training
+              </button>
             </div>
           </div>
 
+          {/* Tabs + Controls */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm">
+              {(['overview','sessions','letters','heatmap','details'] as const).map((t) => (
+                <button
+                  key={t}
+                  className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${tab === t ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600 hover:text-slate-800'}`}
+                  onClick={() => setTab(t)}
+                >{t}</button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden">
+                {([
+                  {label: 'All', v: 'all'},
+                  {label: '7d', v: 7},
+                  {label: '30d', v: 30},
+                  {label: '90d', v: 90}
+                ] as const).map((opt) => (
+                  <button key={String(opt.v)} onClick={() => applyRangePreset(opt.v)} className="px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <span>Threshold</span>
+                <input type="range" min={50} max={100} step={1} value={threshold} onChange={(e) => setThreshold(parseInt(e.target.value || '90', 10))} />
+                <span className="w-10 text-right font-medium text-slate-700">{threshold}%</span>
+              </div>
+              {range && (
+                <button onClick={() => setRange(null)} className="px-2.5 py-1.5 text-xs rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200">Clear Range</button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* KPIs */}
+        {tab === 'overview' && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <div className="p-4 rounded-xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-white">
+              <div className="text-xs text-slate-500">Avg Accuracy</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-800">{kpiAvgAccuracy.toFixed(1)}%</div>
+            </div>
+            <div className="p-4 rounded-xl border border-slate-200 bg-gradient-to-br from-blue-50 to-white">
+              <div className="text-xs text-slate-500">Sessions</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-800">{kpiSessions}</div>
+            </div>
+            <div className="p-4 rounded-xl border border-slate-200 bg-gradient-to-br from-amber-50 to-white">
+              <div className="text-xs text-slate-500">Avg Response</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-800">{kpiAvgMs ? Math.round(kpiAvgMs) : '—'}<span className="text-base text-slate-500 ml-1">ms</span></div>
+            </div>
+            <div className="p-4 rounded-xl border border-slate-200 bg-gradient-to-br from-violet-50 to-white">
+              <div className="text-xs text-slate-500">Active Days</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-800">{kpiUniqueDays}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Content Panels */}
+        {tab === 'overview' && (
+          <div className="space-y-6">
+            <ActivityHeatmap sessions={activitySessions} />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-700">Accuracy Over Time</h3>
+                </div>
+                <div className="w-full h-[260px] sm:h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} onClick={(e: any) => {
+                      const payload = e && e.activePayload && e.activePayload[0] && e.activePayload[0].payload;
+                      if (payload && payload.timestamp) {
+                        setSelectedSessionTs(payload.timestamp);
+                      }
+                    }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="x" />
+                      <YAxis domain={[0, 100]} />
+                      <ReferenceLine y={Math.max(0, Math.min(100, threshold))} stroke="#ef4444" strokeDasharray="4 4" />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="accuracy" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name="Session" />
+                      <Brush dataKey="x" travellerWidth={8} height={24} onChange={(r: any) => {
+                        if (!r) return;
+                        if (typeof r.startIndex === 'number' && typeof r.endIndex === 'number') {
+                          setRange({ startIndex: r.startIndex, endIndex: r.endIndex });
+                        }
+                      }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-700">Response Time (ms) by Day</h3>
+                </div>
+                <div className="w-full h-[260px] sm:h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={timingDailyAgg}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        type="number"
+                        dataKey="dayIndex"
+                        ticks={timingDailyAgg.map(d => d.dayIndex)}
+                        domain={[Math.min(0, (timingDailyAgg[0]?.dayIndex ?? 0) - 0.5), (timingDailyAgg[timingDailyAgg.length - 1]?.dayIndex ?? 0) + 0.5]}
+                        tickFormatter={(v: number) => dayIndexToLabel[v] || ''}
+                      />
+                      <YAxis yAxisId="ms" />
+                      <Tooltip
+                        labelFormatter={(label: any) => dayIndexToLabel[Math.round(Number(label))] || ''}
+                        formatter={(value: any, name: string) => [`${value} ms`, name]}
+                      />
+                      <Legend />
+                      <Line yAxisId="ms" type="monotone" dataKey="averageMs" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Avg ms" />
+                      <Scatter yAxisId="ms" data={timingSamplesPoints} dataKey="ms" name="Sample ms" fill="#fb923c" fillOpacity={0.55} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'sessions' && (
           <div className="space-y-3">
             <h3 className="text-lg font-semibold text-slate-700">Sessions</h3>
-            <div className="max-h-[420px] overflow-auto pr-1">
+            <div className="max-h-[560px] overflow-auto pr-1 grid grid-cols-1 gap-2">
               {sessionResults.length === 0 && (
                 <p className="text-sm text-slate-500">No sessions yet.</p>
               )}
@@ -251,8 +361,8 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
                 .slice()
                 .sort((a, b) => b.timestamp - a.timestamp)
                 .map(s => (
-                  <div key={s.timestamp} className={`flex items-center justify-between p-3 rounded-lg border ${selectedSessionTs === s.timestamp ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}>
-                    <div onClick={() => setSelectedSessionTs(s.timestamp)} className="cursor-pointer">
+                  <div key={s.timestamp} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${selectedSessionTs === s.timestamp ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                    <div onClick={() => { setSelectedSessionTs(s.timestamp); setTab('details'); }} className="cursor-pointer">
                       <p className="text-sm font-medium text-slate-800">{new Date(s.timestamp).toLocaleString()}</p>
                       <p className="text-xs text-slate-500">Accuracy: {(s.accuracy * 100).toFixed(1)}%{Array.isArray(s.groupTimings) && s.groupTimings.length ? ` • Avg time: ${Math.round(s.groupTimings.filter(t => (t?.timeToCompleteMs || 0) > 0).reduce((a, b) => a + (b.timeToCompleteMs || 0), 0) / Math.max(1, s.groupTimings.filter(t => (t?.timeToCompleteMs || 0) > 0).length))} ms` : ''}</p>
                     </div>
@@ -266,110 +376,125 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
                 ))}
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-slate-700">Letter Accuracy {range ? '(Selected Range)' : '(All Sessions)'}</h3>
-              {range && (
-                <button onClick={() => setRange(null)} className="text-xs px-2 py-1 rounded bg-slate-200 text-slate-700">Clear Range</button>
-              )}
-            </div>
-            <div className="w-full h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={overallLetterStats}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="letter" />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip />
-                  <Bar dataKey="accuracy" fill="#8b5cf6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-slate-700">Per-Session Letter Accuracy</h3>
-              {selectedSessionTs && (
-                <button onClick={() => setSelectedSessionTs(null)} className="text-xs px-2 py-1 rounded bg-slate-200 text-slate-700">Clear Selection</button>
-              )}
-            </div>
-            {selectedSession ? (
+        {tab === 'letters' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-slate-700">Letter Accuracy {range ? '(Selected Range)' : '(All Sessions)'}</h3>
+              </div>
               <div className="w-full h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={selectedSessionLetterStats}>
+                  <BarChart data={overallLetterStats}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="letter" />
                     <YAxis domain={[0, 100]} />
                     <Tooltip />
-                    <Bar dataKey="accuracy" fill="#10b981" />
+                    <Bar dataKey="accuracy" fill="#8b5cf6" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            ) : (
-              <p className="text-sm text-slate-500">Click a point on the chart or a session to view per-character stats.</p>
-            )}
-          </div>
-        </div>
-
-        {selectedSession && (
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold text-slate-700 mb-3">Session Details</h3>
-            <div className="space-y-2">
-              {selectedSessionDetails.map(row => (
-                <div key={row.idx} className={`p-3 rounded-lg border ${row.correct ? 'border-emerald-200 bg-emerald-50/40' : 'border-rose-200 bg-rose-50/40'}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-mono"><span className="text-slate-500">Group {row.idx + 1}:</span> {row.sent}</div>
-                    <div className="text-xs text-slate-600">{row.timeMs ? `${row.timeMs} ms` : '—'}</div>
-                  </div>
-                  <div className="mt-1 font-mono text-sm">
-                    {row.alignment.map((a, i) => (
-                      <span key={i} className={a.ok ? 'text-emerald-700' : 'text-rose-700'}>{a.ch || '·'}</span>
-                    ))}
-                  </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                <div className="p-2 rounded-lg bg-violet-50">
+                  <div>Best letter</div>
+                  <div className="font-semibold text-slate-800">{bestLetter ? `${bestLetter.letter} — ${bestLetter.accuracy.toFixed(1)}%` : '—'}</div>
                 </div>
-              ))}
+                <div className="p-2 rounded-lg bg-rose-50">
+                  <div>Needs work</div>
+                  <div className="font-semibold text-slate-800">{worstLetter ? `${worstLetter.letter} — ${worstLetter.accuracy.toFixed(1)}%` : '—'}</div>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-slate-700">Per-Session Letter Accuracy</h3>
+                {selectedSessionTs && (
+                  <button onClick={() => setSelectedSessionTs(null)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">Clear Selection</button>
+                )}
+              </div>
+              {selectedSession ? (
+                <div className="w-full h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={selectedSessionLetterStats}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="letter" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip />
+                      <Bar dataKey="accuracy" fill="#10b981" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Click a point on the chart or a session to view per-character stats.</p>
+              )}
             </div>
           </div>
         )}
 
-        {/* Bigram error heatmap */}
-        <div className="mt-8">
-          <h3 className="text-lg font-semibold text-slate-700 mb-3">Error Heatmap by Previous and Current Letter {range ? '(Selected Range)' : '(All Sessions)'}</h3>
-          {bigramHeatmap.letters.length === 0 ? (
-            <p className="text-sm text-slate-500">No data yet.</p>
-          ) : (
-            <div className="overflow-auto border rounded-xl">
-              <table className="min-w-max text-xs">
-                <thead>
-                  <tr>
-                    <th className="p-2 text-left sticky left-0 bg-white">Prev \ Curr</th>
-                    {bigramHeatmap.letters.map(l => (
-                      <th key={l} className="p-2 text-center">{l}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {bigramHeatmap.letters.map((rowL, rIdx) => (
-                    <tr key={rowL}>
-                      <td className="p-2 font-semibold sticky left-0 bg-white">{rowL}</td>
-                      {bigramHeatmap.matrix[rIdx].map(cell => {
-                        const color = cell.total === 0 ? '#f1f5f9' : `rgba(239,68,68,${Math.min(1, cell.rate)})`;
-                        const title = `${rowL}→${cell.col}: ${(cell.rate * 100).toFixed(1)}% errors (${cell.total} samples)`;
-                        return (
-                          <td key={rowL + '_' + cell.col} className="p-0">
-                            <div title={title} style={{ backgroundColor: color, width: 24, height: 24 }} />
-                          </td>
-                        );
-                      })}
+        {tab === 'details' && (
+          <div className="space-y-2">
+            {!selectedSession && (
+              <p className="text-sm text-slate-500">Select a session from the Sessions tab or the chart to view details.</p>
+            )}
+            {selectedSession && (
+              <>
+                <h3 className="text-lg font-semibold text-slate-700 mb-1">Session Details — {new Date(selectedSession.timestamp).toLocaleString()}</h3>
+                {selectedSessionDetails.map(row => (
+                  <div key={row.idx} className={`p-3 rounded-lg border ${row.correct ? 'border-emerald-200 bg-emerald-50/40' : 'border-rose-200 bg-rose-50/40'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-mono"><span className="text-slate-500">Group {row.idx + 1}:</span> {row.sent}</div>
+                      <div className="text-xs text-slate-600">{row.timeMs ? `${row.timeMs} ms` : '—'}</div>
+                    </div>
+                    <div className="mt-1 font-mono text-sm">
+                      {row.alignment.map((a, i) => (
+                        <span key={i} className={a.ok ? 'text-emerald-700' : 'text-rose-700'}>{a.ch || '·'}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {tab === 'heatmap' && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">Error Heatmap by Previous and Current Letter {range ? '(Selected Range)' : '(All Sessions)'}</h3>
+            {bigramHeatmap.letters.length === 0 ? (
+              <p className="text-sm text-slate-500">No data yet.</p>
+            ) : (
+              <div className="overflow-auto border rounded-xl">
+                <table className="min-w-max text-xs">
+                  <thead>
+                    <tr>
+                      <th className="p-2 text-left sticky left-0 bg-white">Prev \\ Curr</th>
+                      {bigramHeatmap.letters.map(l => (
+                        <th key={l} className="p-2 text-center">{l}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  </thead>
+                  <tbody>
+                    {bigramHeatmap.letters.map((rowL, rIdx) => (
+                      <tr key={rowL}>
+                        <td className="p-2 font-semibold sticky left-0 bg-white">{rowL}</td>
+                        {bigramHeatmap.matrix[rIdx].map(cell => {
+                          const color = cell.total === 0 ? '#f1f5f9' : `rgba(239,68,68,${Math.min(1, cell.rate)})`;
+                          const title = `${rowL}→${cell.col}: ${(cell.rate * 100).toFixed(1)}% errors (${cell.total} samples)`;
+                          return (
+                            <td key={rowL + '_' + cell.col} className="p-0">
+                              <div title={title} style={{ backgroundColor: color, width: 24, height: 24 }} />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
