@@ -4,7 +4,7 @@ import ICRTrainer from '@/components/ICRTrainer'
 import React from 'react'
 
 export default function ICRPage() {
-  const [icrSettings, setIcrSettings] = React.useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60, bucketGreenMaxMs: 900, bucketYellowMaxMs: 1200 });
+  const [icrSettings, setIcrSettings] = React.useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60, bucketGreenMaxMs: 300, bucketYellowMaxMs: 800 });
   const [sharedAudio, setSharedAudio] = React.useState<{ kochLevel: number; charWpm: number; effectiveWpm?: number; sideToneMin: number; sideToneMax: number; steepness: number; envelopeSmoothing?: number }>({ kochLevel: 2, charWpm: 20, effectiveWpm: 20, sideToneMin: 600, sideToneMax: 600, steepness: 5, envelopeSmoothing: 0 });
 
   React.useEffect(() => {

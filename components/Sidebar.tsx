@@ -250,10 +250,10 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                       <h5 className="font-semibold text-slate-800 mb-2 text-sm">Performance Buckets (ICR)</h5>
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <label>Green &lt;= (ms)
-                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketGreenMaxMs} onChange={(e) => setIcrSettings((prev: any) => ({ ...prev, bucketGreenMaxMs: parseInt(e.target.value || '900') }))} />
+                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketGreenMaxMs} onChange={(e) => setIcrSettings((prev: any) => ({ ...prev, bucketGreenMaxMs: parseInt(e.target.value || '300') }))} />
                         </label>
                         <label>Yellow &lt;= (ms)
-                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketYellowMaxMs} onChange={(e) => setIcrSettings((prev: any) => ({ ...prev, bucketYellowMaxMs: parseInt(e.target.value || '1200') }))} />
+                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketYellowMaxMs} onChange={(e) => setIcrSettings((prev: any) => ({ ...prev, bucketYellowMaxMs: parseInt(e.target.value || '800') }))} />
                         </label>
                       </div>
                       <p className="text-xs text-slate-600 mt-1">Bars: green &lt;= Green; yellow between Green..Yellow; red &gt; Yellow.</p>

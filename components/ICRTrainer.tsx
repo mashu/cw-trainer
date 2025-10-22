@@ -50,8 +50,8 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
 
   const getBarFill = (ms: number): string => {
     if (ms === undefined || ms === null) return '#60a5fa';
-    const greenMax = (icrSettings as any).bucketGreenMaxMs ?? 900;
-    const yellowMax = (icrSettings as any).bucketYellowMaxMs ?? 1200;
+    const greenMax = (icrSettings as any).bucketGreenMaxMs ?? 300;
+    const yellowMax = (icrSettings as any).bucketYellowMaxMs ?? 800;
     if (ms <= greenMax) return '#10b981';
     if (ms <= yellowMax) return '#f59e0b';
     return '#ef4444';
