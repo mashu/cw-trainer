@@ -23,7 +23,7 @@ interface SidebarProps {
   setIcrSettings?: (s: any) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, sessionResultsCount, latestAccuracyPercent, onViewStats, activeMode, onChangeMode, icrSettings, setIcrSettings }) => {
+const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, activeMode, onChangeMode, icrSettings, setIcrSettings }) => {
   const [settingsOpen, setSettingsOpen] = useState(true);
   // Mic preview state (for ICR calibration UI)
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
@@ -120,14 +120,14 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
 
   // Auto-start preview when settings panel is open and VAD enabled; stop on close
   useEffect(() => {
-    if (settingsOpen && open && icrSettings?.vadEnabled) {
+    if (settingsOpen && open && icrSettings?.vadEnabled && activeMode === 'icr') {
       void startMicPreview();
     } else {
       stopMicPreview();
     }
     // Cleanup on unmount
     return () => { stopMicPreview(); };
-  }, [settingsOpen, open, icrSettings?.vadEnabled]);
+  }, [settingsOpen, open, icrSettings?.vadEnabled, activeMode]);
 
   // Restart preview on device change
   useEffect(() => {
@@ -178,8 +178,8 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
             {settingsOpen && (
               <div className="px-4 pb-4">
                 <TrainingSettingsForm settings={settings} setSettings={setSettings} />
-                {/* ICR Mic & VAD controls */}
-                {icrSettings && setIcrSettings && (
+                {/* ICR Mic & VAD controls (only in ICR mode) */}
+                {activeMode === 'icr' && icrSettings && setIcrSettings && (
                   <div className="mt-4 p-3 border rounded-lg bg-slate-50">
                     <h4 className="font-semibold text-slate-800 mb-2">Mic & VAD (ICR)</h4>
                     <div className="flex items-center gap-2 mb-2 text-sm">
@@ -270,25 +270,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
           </div>
 
 
-          {/* Statistics first */}
-          {sessionResultsCount > 0 && (
-            <div className="p-4 bg-slate-50 rounded-xl mb-6">
-              <h4 className="font-semibold text-slate-800 mb-2">Quick Stats</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Total Sessions:</span>
-                  <span className="font-medium">{sessionResultsCount}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Latest Accuracy:</span>
-                  <span className="font-medium">{latestAccuracyPercent ?? 0}%</span>
-                </div>
-                <button onClick={onViewStats} className="w-full mt-3 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm">
-                  View Full Statistics
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Quick Stats removed: stats available on main page */}
 
           {/* Account/Login last */}
           {user ? (

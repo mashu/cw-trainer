@@ -23,9 +23,10 @@ interface StatsViewProps {
   onBack: () => void;
   onDelete: (timestamp: number) => void;
   thresholdPercent?: number; // reference line threshold (0..100)
+  embedded?: boolean; // when true, render compact UI without page chrome
 }
 
-const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete, thresholdPercent }) => {
+const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete, thresholdPercent, embedded }) => {
   const [selectedSessionTs, setSelectedSessionTs] = useState<number | null>(null);
   const [range, setRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
   const [tab, setTab] = useState<'overview' | 'sessions' | 'letters' | 'heatmap' | 'details'>('overview');
@@ -209,20 +210,22 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 sm:p-6">
-      <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl ring-1 ring-black/5 p-4 sm:p-8">
+    <div className={embedded ? '' : "min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 sm:p-6"}>
+      <div className={embedded ? '' : "max-w-6xl mx-auto bg-white rounded-2xl shadow-xl ring-1 ring-black/5 p-4 sm:p-8"}>
         {/* Header */}
         <div className="flex flex-col gap-3 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h2 className="text-2xl sm:text-3xl font-bold text-slate-800">Training Statistics</h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onBack}
-                className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm sm:text-base hover:bg-blue-700"
-              >
-                Back to Training
-              </button>
-            </div>
+            {!embedded && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onBack}
+                  className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm sm:text-base hover:bg-blue-700"
+                >
+                  Back to Training
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Tabs + Controls */}
@@ -288,63 +291,63 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
           <div className="space-y-6">
             <ActivityHeatmap sessions={activitySessions} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-700">Accuracy Over Time</h3>
-                </div>
-                <div className="w-full h-[260px] sm:h-[320px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} onClick={(e: any) => {
-                      const payload = e && e.activePayload && e.activePayload[0] && e.activePayload[0].payload;
-                      if (payload && payload.timestamp) {
-                        setSelectedSessionTs(payload.timestamp);
-                      }
-                    }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="x" />
-                      <YAxis domain={[0, 100]} />
-                      <ReferenceLine y={Math.max(0, Math.min(100, threshold))} stroke="#ef4444" strokeDasharray="4 4" />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="accuracy" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name="Session" />
-                      <Brush dataKey="x" travellerWidth={8} height={24} onChange={(r: any) => {
-                        if (!r) return;
-                        if (typeof r.startIndex === 'number' && typeof r.endIndex === 'number') {
-                          setRange({ startIndex: r.startIndex, endIndex: r.endIndex });
-                        }
-                      }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+            {/* Response Time at full width, above Accuracy */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700">Response Time (ms) by Day</h3>
               </div>
+              <div className="w-full h-[320px] sm:h-[380px] md:h-[420px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={timingDailyAgg}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      type="number"
+                      dataKey="dayIndex"
+                      ticks={timingDailyAgg.map(d => d.dayIndex)}
+                      domain={[Math.min(0, (timingDailyAgg[0]?.dayIndex ?? 0) - 0.5), (timingDailyAgg[timingDailyAgg.length - 1]?.dayIndex ?? 0) + 0.5]}
+                      tickFormatter={(v: number) => dayIndexToLabel[v] || ''}
+                    />
+                    <YAxis yAxisId="ms" />
+                    <Tooltip
+                      labelFormatter={(label: any) => dayIndexToLabel[Math.round(Number(label))] || ''}
+                      formatter={(value: any, name: string) => [`${value} ms`, name]}
+                    />
+                    <Legend />
+                    <Line yAxisId="ms" type="monotone" dataKey="averageMs" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Avg ms" />
+                    <Scatter yAxisId="ms" data={timingSamplesPoints} dataKey="ms" name="Sample ms" fill="#fb923c" fillOpacity={0.55} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-700">Response Time (ms) by Day</h3>
-                </div>
-                <div className="w-full h-[260px] sm:h-[320px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={timingDailyAgg}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        type="number"
-                        dataKey="dayIndex"
-                        ticks={timingDailyAgg.map(d => d.dayIndex)}
-                        domain={[Math.min(0, (timingDailyAgg[0]?.dayIndex ?? 0) - 0.5), (timingDailyAgg[timingDailyAgg.length - 1]?.dayIndex ?? 0) + 0.5]}
-                        tickFormatter={(v: number) => dayIndexToLabel[v] || ''}
-                      />
-                      <YAxis yAxisId="ms" />
-                      <Tooltip
-                        labelFormatter={(label: any) => dayIndexToLabel[Math.round(Number(label))] || ''}
-                        formatter={(value: any, name: string) => [`${value} ms`, name]}
-                      />
-                      <Legend />
-                      <Line yAxisId="ms" type="monotone" dataKey="averageMs" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Avg ms" />
-                      <Scatter yAxisId="ms" data={timingSamplesPoints} dataKey="ms" name="Sample ms" fill="#fb923c" fillOpacity={0.55} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
+            {/* Accuracy Over Time full width, below Response Time */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700">Accuracy Over Time</h3>
+              </div>
+              <div className="w-full h-[260px] sm:h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} onClick={(e: any) => {
+                    const payload = e && e.activePayload && e.activePayload[0] && e.activePayload[0].payload;
+                    if (payload && payload.timestamp) {
+                      setSelectedSessionTs(payload.timestamp);
+                    }
+                  }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="x" />
+                    <YAxis domain={[0, 100]} />
+                    <ReferenceLine y={Math.max(0, Math.min(100, threshold))} stroke="#ef4444" strokeDasharray="4 4" />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="accuracy" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name="Session" />
+                    <Brush dataKey="x" travellerWidth={8} height={24} onChange={(r: any) => {
+                      if (!r) return;
+                      if (typeof r.startIndex === 'number' && typeof r.endIndex === 'number') {
+                        setRange({ startIndex: r.startIndex, endIndex: r.endIndex });
+                      }
+                    }} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>

@@ -78,12 +78,12 @@ const CWTrainer: React.FC = () => {
   const [userInput, setUserInput] = useState<string[]>([]);
   const [currentInput, setCurrentInput] = useState('');
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
-  const [showStats, setShowStats] = useState(false);
   const [confirmedGroups, setConfirmedGroups] = useState<Record<number, boolean>>({});
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [currentFocusedGroup, setCurrentFocusedGroup] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMode, setActiveMode] = useState<'group' | 'icr'>('group');
+  const [groupTab, setGroupTab] = useState<'train' | 'stats'>('train');
   const [icrSettings, setIcrSettings] = useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60, bucketGreenMaxMs: 300, bucketYellowMaxMs: 800 });
 
   // Load & save ICR settings with localStorage for persistence
@@ -775,8 +775,9 @@ const CWTrainer: React.FC = () => {
       }
     } catch {}
     
-    // Always go to stats after session completion
-    setShowStats(true);
+    // Always go to Stats tab after session completion
+    setActiveMode('group');
+    setGroupTab('stats');
   };
 
   const getDailyStats = () => computeDailyStats(sessionResults);
@@ -796,20 +797,7 @@ const CWTrainer: React.FC = () => {
 
   const getLetterStats = () => computeLetterStats(sessionResults);
 
-  if (showStats) {
-    // Stop training when viewing stats
-    if (isTraining) {
-      stopTrainingIfActive();
-    }
-    return (
-      <StatsView
-        sessionResults={sessionResults as unknown as StatsSessionResult[]}
-        onBack={() => setShowStats(false)}
-        onDelete={deleteSession}
-        thresholdPercent={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))}
-      />
-    );
-  }
+  // Inline Stats are now rendered inside the group panel via groupTab
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-2 sm:p-4 lg:p-6 relative">
@@ -847,7 +835,7 @@ const CWTrainer: React.FC = () => {
         isSavingSettings={isSavingSettings}
         sessionResultsCount={sessionResults.length}
         latestAccuracyPercent={Math.round((sessionResults[sessionResults.length - 1]?.accuracy || 0) * 100)}
-        onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setShowStats(true); }}
+        onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setActiveMode('group'); setGroupTab('stats'); }}
         icrSettings={icrSettings}
         setIcrSettings={setIcrSettings as any}
       />
@@ -877,9 +865,9 @@ const CWTrainer: React.FC = () => {
 
 
         {/* Mode switcher UI: Group vs ICR within same page (tab + swipe) */}
-        <ModeTabs activeMode={activeMode} onChange={setActiveMode} />
+        <ModeTabs activeMode={activeMode} onChange={(m) => { setActiveMode(m); if (m === 'group') { /* keep current groupTab */ } }} />
 
-        {!isTraining && activeMode === 'group' ? (
+        {!isTraining && activeMode === 'group' && groupTab === 'train' ? (
           <div className="space-y-8">
             {/* Quick Stats */}
             {sessionResults.length > 0 && (
@@ -941,14 +929,38 @@ const CWTrainer: React.FC = () => {
             )}
             {/* Settings moved into Sidebar collapsible section */}
 
-            <div className="flex justify-center">
+            <div className="flex justify-center gap-3 flex-wrap">
               <button
                 onClick={startTraining}
                 className="px-12 py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-xl font-bold rounded-xl hover:from-emerald-600 hover:to-green-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
               >
                 🚀 Start Training
               </button>
+              <button
+                onClick={() => { stopTrainingIfActive(); setGroupTab('stats'); }}
+                className="px-12 py-4 bg-white text-slate-700 text-xl font-semibold rounded-xl border border-slate-200 hover:bg-slate-50 transition-all duration-200 shadow-sm hover:shadow"
+              >
+                📊 View Stats
+              </button>
             </div>
+          </div>
+        ) : (!isTraining && activeMode === 'group' && groupTab === 'stats') ? (
+          <div className="space-y-6">
+            <div className="flex justify-end">
+              <button
+                onClick={() => setGroupTab('train')}
+                className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+              >
+                Back to Training
+              </button>
+            </div>
+            <StatsView
+              embedded
+              sessionResults={sessionResults as unknown as StatsSessionResult[]}
+              onBack={() => setGroupTab('train')}
+              onDelete={deleteSession}
+              thresholdPercent={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))}
+            />
           </div>
         ) : isTraining && activeMode === 'group' ? (
           <div className="space-y-6">
