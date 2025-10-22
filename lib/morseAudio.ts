@@ -23,11 +23,21 @@ export async function playMorseCode(
   settings: AudioSettings,
   shouldStop: () => boolean
 ): Promise<number> {
-  if (shouldStop()) return 0;
+  const { durationSec } = await playMorseCodeControlled(ctx, text, settings, shouldStop);
+  return durationSec;
+}
+
+export async function playMorseCodeControlled(
+  ctx: AudioContext,
+  text: string,
+  settings: AudioSettings,
+  shouldStop: () => boolean
+): Promise<{ durationSec: number; stop: () => void }> {
+  if (shouldStop()) return { durationSec: 0, stop: () => {} };
 
   await ensureContext(ctx);
 
-  // Determine timing based on Farnsworth or legacy single WPM
+  // Determine timing based on Farnsworth
   const resolvedCharWpm = Math.max(1, settings.charWpm ?? 20);
   const resolvedEffWpm = Math.max(1, settings.effectiveWpm ?? resolvedCharWpm);
   const extraWordSpaceMultiplier = Math.max(1, settings.extraWordSpaceMultiplier ?? 1);
@@ -42,14 +52,28 @@ export async function playMorseCode(
   const wordSpace = dotEff * 7 * extraWordSpaceMultiplier; // inter-word gap at effective pace (scaled)
   const riseTime = settings.steepness / 1000;
 
+  // Master group gain to enable fast fade-out stop
+  const groupGain = ctx.createGain();
+  groupGain.gain.setValueAtTime(1, ctx.currentTime);
+  groupGain.connect(ctx.destination);
+  let stopped = false;
+  const stop = () => {
+    try {
+      const now = ctx.currentTime;
+      groupGain.gain.cancelScheduledValues(now);
+      groupGain.gain.setTargetAtTime(0, now, 0.01);
+      stopped = true;
+      // Best-effort disconnect later
+      setTimeout(() => { try { groupGain.disconnect(); } catch {} }, 100);
+    } catch {}
+  };
+
   let currentTime = ctx.currentTime;
 
   for (let i = 0; i < text.length; i++) {
-    if (shouldStop()) return 0;
+    if (stopped || shouldStop()) break;
     const rawChar = text[i];
-    // Handle explicit spaces as word gaps; adjust on top of prior charSpace
     if (rawChar === ' ') {
-      // Add the extra needed to reach a full word gap (beyond the char gap already added previously)
       const additional = Math.max(0, wordSpace - charSpace);
       currentTime += additional;
       continue;
@@ -58,7 +82,7 @@ export async function playMorseCode(
     const morse = MORSE_CODE[char];
     if (!morse) continue;
     for (let j = 0; j < morse.length; j++) {
-      if (shouldStop()) return 0;
+      if (stopped || shouldStop()) { break; }
       const symbol = morse[j];
       const duration = symbol === '.' ? dotDuration : dashDuration;
 
@@ -69,19 +93,17 @@ export async function playMorseCode(
       oscillator.frequency.value = settings.sideTone;
 
       oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      gainNode.connect(groupGain);
 
       const targetGain = 0.3;
       const smoothing = Math.max(0, Math.min(1, settings.envelopeSmoothing ?? 0));
       if (smoothing === 0) {
-        // Linear envelope (current behavior)
         gainNode.gain.setValueAtTime(0, currentTime);
         gainNode.gain.linearRampToValueAtTime(targetGain, currentTime + riseTime);
         gainNode.gain.setValueAtTime(targetGain, currentTime + duration - riseTime);
         gainNode.gain.linearRampToValueAtTime(0, currentTime + duration);
       } else {
-        // Smooth envelope using setValueCurveAtTime with cosine-eased attack/decay
-        const sampleRate = 256; // higher control point density for smoother curve
+        const sampleRate = 256;
         const attackSteps = Math.max(2, Math.floor(sampleRate * Math.min(riseTime, duration / 2)));
         const sustainSteps = Math.max(0, Math.floor(sampleRate * Math.max(0, duration - 2 * riseTime)));
         const decaySteps = attackSteps;
@@ -110,7 +132,6 @@ export async function playMorseCode(
         try {
           gainNode.gain.setValueCurveAtTime(curve, currentTime, duration);
         } catch {
-          // Fallback to linear ramps if setValueCurveAtTime is not supported
           gainNode.gain.linearRampToValueAtTime(targetGain, currentTime + riseTime);
           gainNode.gain.setValueAtTime(targetGain, currentTime + duration - riseTime);
           gainNode.gain.linearRampToValueAtTime(0, currentTime + duration);
@@ -125,7 +146,7 @@ export async function playMorseCode(
     currentTime += charSpace - symbolSpace;
   }
 
-  return currentTime - ctx.currentTime;
+  return { durationSec: currentTime - ctx.currentTime, stop };
 }
 
 

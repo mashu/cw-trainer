@@ -7,7 +7,7 @@ import GroupsList from './GroupsList';
 import TrainingControls from './TrainingControls';
 import StatsView, { SessionResult as StatsSessionResult } from './StatsView';
 import { initFirebase, googleSignIn, googleSignOut, getRedirectedUser } from '@/lib/firebaseClient';
-import { playMorseCode as externalPlayMorseCode } from '@/lib/morseAudio';
+import { playMorseCode as externalPlayMorseCode, playMorseCodeControlled } from '@/lib/morseAudio';
 import { trainingReducer as externalTrainingReducer } from '@/lib/trainingMachine';
 import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
 import { getDailyStats as computeDailyStats, getLetterStats as computeLetterStats } from '@/lib/stats';
@@ -507,26 +507,29 @@ const CWTrainer: React.FC = () => {
     return Math.round(wordSpaceSec * 1000);
   };
 
+  const currentStopRef = useRef<(() => void) | null>(null);
+
   const playMorseCode = async (text: string, sessionId: number) => {
     if (trainingAbortRef.current || sessionIdRef.current !== sessionId) return 0;
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
     const ctx = audioContextRef.current;
-    return await externalPlayMorseCode(
+    const { durationSec, stop } = await playMorseCodeControlled(
       ctx,
       text,
       {
         charWpm: Math.max(1, settings.charWpm),
         effectiveWpm: Math.max(1, settings.effectiveWpm),
         extraWordSpaceMultiplier: Math.max(1, settings.extraWordSpaceMultiplier ?? 1),
-        // Tone & envelope
         sideTone: pickToneHz(),
         steepness: settings.steepness,
         envelopeSmoothing: settings.envelopeSmoothing ?? 0
       },
       () => (trainingAbortRef.current || sessionIdRef.current !== sessionId)
     );
+    currentStopRef.current = stop;
+    return durationSec;
   };
 
   const sleepCancelable = async (ms: number, sessionId: number) => {
@@ -589,6 +592,9 @@ const CWTrainer: React.FC = () => {
         if (settings.groupTimeout && Date.now() >= deadline) break;
         await sleepCancelable(100, mySession);
       }
+      // Fade-out and stop current group's audio before advancing
+      try { currentStopRef.current?.(); } catch {}
+      currentStopRef.current = null;
       if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
         dispatchMachine({ type: 'INPUT_RECEIVED' });
       }
