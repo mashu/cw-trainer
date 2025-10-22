@@ -134,6 +134,8 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
             // Keep VAD loop running; disarm until next trial re-arms it
             vadArmedRef.current = false;
             vadStartTimeRef.current = null;
+            // Continue the loop even after detection so that arming for next trials works
+            requestAnimationFrame(tick);
             return;
           }
         } else {
@@ -286,7 +288,8 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
   // Calibration controls removed from this component
 
   const averageReaction = useMemo(() => {
-    const vals = trials.map(t => t.reactionMs || 0).filter(v => v > 0);
+    // Only include completed trials (typed) to avoid shifting average before user confirms
+    const vals = trials.filter(t => !!t.typed && (t.reactionMs || 0) > 0).map(t => t.reactionMs || 0);
     if (!vals.length) return 0;
     return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
   }, [trials]);
@@ -303,6 +306,8 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
     // aggregate per letter
     const agg: Record<string, { samples: Array<{ reaction: number; correct: boolean }>; total: number; correct: number; avg: number; adjAvg: number; acc: number }> = {};
     trials.forEach(t => {
+      // Only count after the user has typed their answer
+      if (!t.typed) return;
       const l = t.target?.toUpperCase();
       if (!l) return;
       if (!agg[l]) agg[l] = { samples: [], total: 0, correct: 0, avg: 0, adjAvg: 0, acc: 0 };
@@ -389,6 +394,9 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
         <div className="p-6 border rounded flex flex-col items-center justify-center min-h-[220px]">
           <p className="text-sm text-slate-600 mb-2">Say the letter as soon as you recognize it, then type it.</p>
           <div className="text-sm text-slate-600">Trial {Math.min(currentIndex + 1, icrSettings.trialsPerSession)} / {icrSettings.trialsPerSession}</div>
+          <div className="mt-2 text-xs text-slate-500">
+            Voice above your threshold stops the timer; typing records your answer.
+          </div>
           <div className="mt-3 flex items-center gap-2">
             <input
               className="border rounded px-3 py-2 w-28 text-center text-xl tracking-widest"
