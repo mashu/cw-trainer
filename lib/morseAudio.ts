@@ -1,12 +1,9 @@
 import { MORSE_CODE } from './morseConstants';
 
 export interface AudioSettings {
-  // Legacy single-speed (still supported)
-  wpm?: number;
   // Farnsworth support
   charWpm?: number; // character element speed
   effectiveWpm?: number; // overall perceived speed via extended spacing
-  useFarnsworth?: boolean; // deprecated; timing now always uses char/effective if provided
   extraWordSpaceMultiplier?: number; // >=1.0, scales word gap; default 1.0
   // Tone & envelope
   sideTone: number;
@@ -31,15 +28,8 @@ export async function playMorseCode(
   await ensureContext(ctx);
 
   // Determine timing based on Farnsworth or legacy single WPM
-  const resolvedCharWpm = (() => {
-    const charWpm = settings.charWpm ?? settings.wpm ?? 20;
-    return Math.max(1, charWpm);
-  })();
-  const resolvedEffWpm = (() => {
-    const effWpm = settings.effectiveWpm ?? settings.charWpm ?? settings.wpm ?? 20;
-    return Math.max(1, effWpm);
-  })();
-  const useFarnsworth = true; // always use Farnsworth-style spacing if char/eff are provided
+  const resolvedCharWpm = Math.max(1, settings.charWpm ?? 20);
+  const resolvedEffWpm = Math.max(1, settings.effectiveWpm ?? resolvedCharWpm);
   const extraWordSpaceMultiplier = Math.max(1, settings.extraWordSpaceMultiplier ?? 1);
 
   const dotChar = 1.2 / resolvedCharWpm; // seconds
@@ -48,8 +38,8 @@ export async function playMorseCode(
   const dotDuration = dotChar;
   const dashDuration = dotChar * 3;
   const symbolSpace = dotChar; // element gap stays at character WPM
-  const charSpace = (useFarnsworth ? dotEff : dotChar) * 3; // inter-character gap
-  const wordSpace = (useFarnsworth ? dotEff : dotChar) * 7 * extraWordSpaceMultiplier; // inter-word gap
+  const charSpace = dotEff * 3; // inter-character gap at effective pace
+  const wordSpace = dotEff * 7 * extraWordSpaceMultiplier; // inter-word gap at effective pace (scaled)
   const riseTime = settings.steepness / 1000;
 
   let currentTime = ctx.currentTime;
