@@ -836,6 +836,8 @@ const CWTrainer: React.FC = () => {
         sessionResultsCount={sessionResults.length}
         latestAccuracyPercent={Math.round((sessionResults[sessionResults.length - 1]?.accuracy || 0) * 100)}
         onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setActiveMode('group'); setGroupTab('stats'); }}
+        activeMode={activeMode}
+        onChangeMode={(m) => { setActiveMode(m); setSidebarOpen(false); if (m === 'group') { /* keep tab */ } }}
         icrSettings={icrSettings}
         setIcrSettings={setIcrSettings as any}
       />

@@ -91,6 +91,17 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
     analyserRef.current = analyser;
   }, [setupAudioContext]);
 
+  const stopMic = useCallback(() => {
+    try {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(t => t.stop());
+        mediaStreamRef.current = null;
+      }
+    } catch {}
+    try { analyserRef.current?.disconnect(); } catch {}
+    analyserRef.current = null;
+  }, []);
+
   // Device enumeration handled elsewhere (Sidebar)
 
   useEffect(() => {
@@ -231,8 +242,9 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
       vadActiveRef.current = false;
       vadArmedRef.current = false;
       sessionActiveRef.current = false;
+      stopMic();
     }
-  }, [isRunning, icrSettings, setupAudioContext, setupMic, playChar]);
+  }, [isRunning, icrSettings, setupAudioContext, setupMic, playChar, stopMic]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -386,7 +398,7 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
             onClick={() => { if (!isRunning) { setTrials([]); setCurrentIndex(0); void runSession(); } }}
             disabled={isRunning}
           >Start</button>
-          <button className="px-3 py-2 rounded bg-gray-100" onClick={() => { setIsRunning(false); vadActiveRef.current = false; vadArmedRef.current = false; stopRef.current = true; sessionActiveRef.current = false; }}>Stop</button>
+          <button className="px-3 py-2 rounded bg-gray-100" onClick={() => { setIsRunning(false); vadActiveRef.current = false; vadArmedRef.current = false; stopRef.current = true; sessionActiveRef.current = false; stopMic(); }}>Stop</button>
         </div>
       </div>
 
