@@ -151,11 +151,11 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tone Min (Hz)</label>
-                <input type="number" min={100} max={2000} value={settings.sideToneMin} onChange={(e) => setSettings({ ...settings, sideToneMin: parseInt(e.target.value || '600') })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+                <input type="number" min={100} max={2000} step={50} value={settings.sideToneMin} onChange={(e) => setSettings({ ...settings, sideToneMin: parseInt(e.target.value || '600') })} className="w-full px-3 py-2 border border-gray-300 rounded" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tone Max (Hz)</label>
-                <input type="number" min={100} max={2000} value={settings.sideToneMax} onChange={(e) => setSettings({ ...settings, sideToneMax: parseInt(e.target.value || '600') })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+                <input type="number" min={100} max={2000} step={50} value={settings.sideToneMax} onChange={(e) => setSettings({ ...settings, sideToneMax: parseInt(e.target.value || '600') })} className="w-full px-3 py-2 border border-gray-300 rounded" />
                 <p className="text-xs text-gray-500 mt-1">Equal min/max = fixed tone.</p>
               </div>
             </div>

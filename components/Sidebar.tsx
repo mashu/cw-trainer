@@ -80,12 +80,12 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                       <span className="text-slate-600">When on, voice onset stops the timer. Use keyboard as fallback.</span>
                     </div>
                     <div className="mb-2 text-sm">
-                      <label>Threshold: {icrSettings.vadThreshold.toFixed(2)}</label>
-                      <input type="range" min={0} max={0.5} step={0.01} value={icrSettings.vadThreshold} onChange={(e) => setIcrSettings({ ...icrSettings, vadThreshold: Number(e.target.value) })} />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Threshold: {icrSettings.vadThreshold.toFixed(2)}</label>
+                      <input className="w-full" type="range" min={0} max={0.5} step={0.01} value={icrSettings.vadThreshold} onChange={(e) => setIcrSettings({ ...icrSettings, vadThreshold: Number(e.target.value) })} />
                     </div>
                     <div className="mb-2 text-sm">
-                      <label>Hold (ms): {icrSettings.vadHoldMs}</label>
-                      <input type="range" min={20} max={200} step={5} value={icrSettings.vadHoldMs} onChange={(e) => setIcrSettings({ ...icrSettings, vadHoldMs: Number(e.target.value) })} />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Hold (ms): {icrSettings.vadHoldMs}</label>
+                      <input className="w-full" type="range" min={20} max={200} step={5} value={icrSettings.vadHoldMs} onChange={(e) => setIcrSettings({ ...icrSettings, vadHoldMs: Number(e.target.value) })} />
                     </div>
                     <div className="text-xs text-slate-600">Calibrate: while quiet the bar should be low; when saying "TEST" it should spike above 100%.</div>
                     <div className="mt-3 p-3 border rounded bg-white">
