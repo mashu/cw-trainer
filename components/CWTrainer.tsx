@@ -18,22 +18,9 @@ import { onAuthStateChanged, setPersistence, browserLocalPersistence } from 'fir
 // Constants and MORSE code moved to lib/morseConstants
 import type { TrainingSettings } from './TrainingSettingsForm';
 
-interface SessionResult {
-  date: string;
-  timestamp: number;
-  startedAt: number;
-  finishedAt: number;
-  groups: Array<{
-    sent: string;
-    received: string;
-    correct: boolean;
-  }>;
-  groupTimings?: Array<{ timeToCompleteMs: number }>;
-  accuracy: number;
-  letterAccuracy: Record<string, { correct: number; total: number }>;
-  // Firestore document id for reliable deletes; optional for legacy/local entries
-  firestoreId?: string;
-}
+import type { SessionResult } from '@/types/session';
+import { loadSessions as spLoadSessions, saveSessions as spSaveSessions, deleteSessionPersisted as spDeleteSession, flushPendingOps as spFlushPendingOps } from '@/lib/sessionPersistence';
+import { serializeSettings as tsSerialize, normalizeSettings as tsNormalize } from '@/lib/trainingSettings';
 
 // Training state machine moved to lib/trainingMachine
 
@@ -120,7 +107,6 @@ const CWTrainer: React.FC = () => {
       >{children}</div>
     );
   };
-
   
   const [machine, dispatchMachine] = useReducer(externalTrainingReducer, { status: 'idle', currentGroupIndex: 0, sessionId: 0 });
   
@@ -154,73 +140,8 @@ const CWTrainer: React.FC = () => {
   const lastSavedSettingsRef = useRef<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  // Normalize legacy/partial sessions to ensure numeric accuracy and letter stats
-  const normalizeSession = (raw: any, opts?: { docId?: string }): SessionResult => {
-    const groupsArr = Array.isArray(raw?.groups) ? raw.groups : [];
-    const groups = groupsArr.map((g: any) => {
-      const sent = String(g?.sent || '').toUpperCase();
-      const received = String(g?.received || '').toUpperCase();
-      const correct = typeof g?.correct === 'boolean' ? g.correct : (sent.length > 0 && sent === received);
-      return { sent, received, correct };
-    });
-    const groupTimings = (() => {
-      if (Array.isArray(raw?.groupTimings)) {
-        return raw.groupTimings.map((t: any) => ({ timeToCompleteMs: Math.max(0, Math.round(Number(t?.timeToCompleteMs) || 0)) }));
-      }
-      return groups.map(() => ({ timeToCompleteMs: 0 }));
-    })();
-    const safeAccuracy = (() => {
-      if (typeof raw?.accuracy === 'number' && isFinite(raw.accuracy)) return raw.accuracy;
-      const total = groups.length;
-      return total > 0 ? groups.filter((g: any) => g.correct).length / total : 0;
-    })();
-    const letterAccuracy = (() => {
-      if (raw?.letterAccuracy && typeof raw.letterAccuracy === 'object') return raw.letterAccuracy as Record<string, { correct: number; total: number }>;
-      const acc: Record<string, { correct: number; total: number }> = {};
-      groups.forEach((grp: any) => {
-        for (let i = 0; i < grp.sent.length; i++) {
-          const ch = grp.sent[i];
-          if (!acc[ch]) acc[ch] = { correct: 0, total: 0 };
-          acc[ch].total += 1;
-          if (grp.received[i] === ch) acc[ch].correct += 1;
-        }
-      });
-      return acc;
-    })();
-    const ts = typeof raw?.timestamp === 'number'
-      ? raw.timestamp
-      : (opts?.docId && /^\d+$/.test(opts.docId) ? Number(opts.docId) : Date.now());
-    const date = raw?.date || new Date(ts).toISOString().split('T')[0];
-    const startedAt = typeof raw?.startedAt === 'number' ? raw.startedAt : ts;
-    const finishedAt = typeof raw?.finishedAt === 'number' ? raw.finishedAt : ts;
-    return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy, firestoreId: opts?.docId };
-  };
-
-  const serializeSettings = (s: TrainingSettings): string => {
-    // Stable serialization to compare changes deterministically
-    const stable = {
-      kochLevel: s.kochLevel,
-      sideToneMin: s.sideToneMin,
-      sideToneMax: s.sideToneMax,
-      steepness: s.steepness,
-      sessionDuration: s.sessionDuration,
-      charsPerGroup: s.charsPerGroup,
-      numGroups: s.numGroups,
-      charWpm: s.charWpm,
-      effectiveWpm: s.effectiveWpm,
-      linkSpeeds: !!s.linkSpeeds,
-      extraWordSpaceMultiplier: s.extraWordSpaceMultiplier ?? 1,
-      groupTimeout: s.groupTimeout,
-      
-      minGroupSize: s.minGroupSize,
-      maxGroupSize: s.maxGroupSize,
-      interactiveMode: s.interactiveMode,
-      envelopeSmoothing: s.envelopeSmoothing ?? 0,
-      autoAdjustKoch: !!s.autoAdjustKoch,
-      autoAdjustThreshold: typeof s.autoAdjustThreshold === 'number' ? s.autoAdjustThreshold : 90
-    };
-    return JSON.stringify(stable);
-  };
+  const serializeSettings = tsSerialize;
+  const normalizeSettings = (raw: any): TrainingSettings => tsNormalize(raw, settings);
 
   useEffect(() => {
     firebaseRef.current = initFirebase();
@@ -276,38 +197,6 @@ const CWTrainer: React.FC = () => {
   }, [toast]);
 
   // Load settings from Firestore if available; fallback to localStorage
-  const normalizeSettings = (raw: any): TrainingSettings => {
-    // Back-compat conversion from legacy fields (wpm, sideTone)
-    const legacyWpm = typeof raw?.wpm === 'number' && isFinite(raw.wpm) ? raw.wpm : undefined;
-    const legacySide = typeof raw?.sideTone === 'number' && isFinite(raw.sideTone) ? raw.sideTone : undefined;
-    // Always use Farnsworth; treat any legacy settings as inputs
-    const charWpm = typeof raw?.charWpm === 'number' ? raw.charWpm : (legacyWpm ?? settings.charWpm);
-    const effectiveWpm = typeof raw?.effectiveWpm === 'number' ? raw.effectiveWpm : (legacyWpm ?? charWpm);
-    const linkSpeeds = typeof raw?.linkSpeeds === 'boolean' ? raw.linkSpeeds : (charWpm === effectiveWpm);
-    const sideMin = typeof raw?.sideToneMin === 'number' ? raw.sideToneMin : (legacySide ?? settings.sideToneMin);
-    const sideMax = typeof raw?.sideToneMax === 'number' ? raw.sideToneMax : (legacySide ?? settings.sideToneMax);
-    return {
-      kochLevel: typeof raw?.kochLevel === 'number' ? raw.kochLevel : settings.kochLevel,
-      sideToneMin: sideMin,
-      sideToneMax: sideMax,
-      steepness: typeof raw?.steepness === 'number' ? raw.steepness : settings.steepness,
-      sessionDuration: typeof raw?.sessionDuration === 'number' ? raw.sessionDuration : settings.sessionDuration,
-      charsPerGroup: typeof raw?.charsPerGroup === 'number' ? raw.charsPerGroup : settings.charsPerGroup,
-      numGroups: typeof raw?.numGroups === 'number' ? raw.numGroups : settings.numGroups,
-      charWpm,
-      effectiveWpm,
-      linkSpeeds,
-      extraWordSpaceMultiplier: Math.max(1, typeof raw?.extraWordSpaceMultiplier === 'number' ? raw.extraWordSpaceMultiplier : (settings.extraWordSpaceMultiplier ?? 1)),
-      groupTimeout: typeof raw?.groupTimeout === 'number' ? raw.groupTimeout : settings.groupTimeout,
-      minGroupSize: typeof raw?.minGroupSize === 'number' ? raw.minGroupSize : settings.minGroupSize,
-      maxGroupSize: typeof raw?.maxGroupSize === 'number' ? raw.maxGroupSize : settings.maxGroupSize,
-      interactiveMode: !!(typeof raw?.interactiveMode === 'boolean' ? raw.interactiveMode : settings.interactiveMode),
-      envelopeSmoothing: typeof raw?.envelopeSmoothing === 'number' ? raw.envelopeSmoothing : (settings.envelopeSmoothing ?? 0),
-      autoAdjustKoch: !!(typeof raw?.autoAdjustKoch === 'boolean' ? raw.autoAdjustKoch : settings.autoAdjustKoch),
-      autoAdjustThreshold: typeof raw?.autoAdjustThreshold === 'number' ? raw.autoAdjustThreshold : (settings.autoAdjustThreshold ?? 90),
-    };
-  };
-
   const loadSettings = async () => {
     if (firebaseRef.current && user && (user as any).uid) {
       try {
@@ -341,10 +230,6 @@ const CWTrainer: React.FC = () => {
     } catch {}
   };
 
-  // Removed auto-persist on every change to avoid overwriting and reduce writes
-
-  // preview function removed for now to avoid unused code
-
   // Keep the currently focused group's input fully visible at the top of the scroll area
   useEffect(() => {
     const target = inputRefs.current[currentFocusedGroup];
@@ -369,62 +254,20 @@ const CWTrainer: React.FC = () => {
   }, [isTraining]);
 
   const loadData = async () => {
-    let sessionsLoadedFromCloud = false;
-    if (firebaseRef.current && user && (user as any).uid) {
-      try {
-        const db = firebaseRef.current.db;
-        const sessionsSnap = await getDocs(query(collection(db, 'users', (user as any).uid, 'sessions'), orderBy('timestamp', 'asc')));
-        const loaded: SessionResult[] = [];
-        sessionsSnap.forEach((d: any) => loaded.push(normalizeSession(d.data(), { docId: d.id })));
-        setSessionResults(loaded);
-        sessionsLoadedFromCloud = true;
-      } catch (e) {
-        console.warn('Firestore unavailable or unauthorized, falling back to local storage.', e);
-      }
-    }
-    if (!sessionsLoadedFromCloud) {
-      try {
-        const key = user ? `morse_results_${user.email}` : 'morse_results_local';
-        const saved = localStorage.getItem(key);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          const normalized = Array.isArray(parsed) ? parsed.map((s: any) => normalizeSession(s)) : [];
-          setSessionResults(normalized);
-        }
-      } catch {}
-    }
+    const services = firebaseRef.current;
+    const firebaseUser = (user && (user as any).uid) ? { uid: (user as any).uid, email: user.email } : null;
+    const loaded = await spLoadSessions(services as any, firebaseUser);
+    setSessionResults(loaded);
     await loadSettings();
   };
 
   const saveData = async (results: SessionResult[]) => {
-    // Firestore if available and Google user
-    if (firebaseRef.current && user && (user as any).uid) {
-      try {
-        const db = firebaseRef.current.db;
-        await Promise.all(results.map(r => {
-          const payload = { ...r } as any;
-          try { delete payload.firestoreId; } catch {}
-          return setDoc(doc(db, 'users', (user as any).uid, 'sessions', String(r.timestamp)), payload);
-        }));
-        // aggregated statistics (daily trend + per-letter)
-        const daily = computeDailyStats(results as any);
-        const letters = computeLetterStats(results as any);
-        await Promise.all([
-          setDoc(doc(db, 'users', (user as any).uid, 'stats', 'daily'), { items: daily, updatedAt: Date.now() }),
-          setDoc(doc(db, 'users', (user as any).uid, 'stats', 'letters'), { items: letters, updatedAt: Date.now() }),
-        ]);
-        return;
-      } catch (e) {
-        console.warn('Failed to write to Firestore, saving locally instead.', e);
-      }
-    }
-    const key = user ? `morse_results_${user.email}` : 'morse_results_local';
-    localStorage.setItem(key, JSON.stringify(results));
-    localStorage.setItem('morse_settings_local', JSON.stringify(settings));
+    const services = firebaseRef.current;
+    const firebaseUser = (user && (user as any).uid) ? { uid: (user as any).uid, email: user.email } : null;
+    await spSaveSessions(services as any, firebaseUser, results);
   };
 
   const saveSettings = async (opts?: { source?: 'auto' | 'manual' }) => {
-    // Cancel pending debounce if any (manual save should flush now)
     try { if (settingsDebounceTimerRef.current) { window.clearTimeout(settingsDebounceTimerRef.current); settingsDebounceTimerRef.current = undefined; } } catch {}
     setIsSavingSettings(true);
     try {
@@ -467,7 +310,6 @@ const CWTrainer: React.FC = () => {
       setAuthInProgress(true);
       setToast({ message: 'Redirecting to Google…', type: 'info' });
       await googleSignIn(firebaseRef.current); // redirect flow
-      // Redirect will navigate away; completion handled after return
     } catch (e) {
       console.error('[Auth] Google sign-in start failed', e);
       setAuthInProgress(false);
@@ -507,7 +349,6 @@ const CWTrainer: React.FC = () => {
   };
 
   const computeAutoGroupGapMs = (): number => {
-    // Word space in Farnsworth: 7 dot units at effective WPM times extra multiplier
     const effWpm = Math.max(1, settings.effectiveWpm || settings.charWpm || 20);
     const dotEffSec = 1.2 / effWpm;
     const wordSpaceSec = 7 * dotEffSec * Math.max(1, settings.extraWordSpaceMultiplier || 1);
@@ -550,7 +391,6 @@ const CWTrainer: React.FC = () => {
   };
 
   const startTraining = async () => {
-    // Abort any previous session and start a new session id
     trainingAbortRef.current = false;
     resultsProcessedRef.current = false;
     activeSentGroupsRef.current = [];
@@ -583,7 +423,6 @@ const CWTrainer: React.FC = () => {
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
       setCurrentGroup(i);
       dispatchMachine({ type: 'GROUP_START', index: i });
-      // Delay before playing the group's audio (does not affect focus/advance)
       const delayMs = Math.max(0, computeAutoGroupGapMs());
       if (delayMs > 0) {
         await sleepCancelable(delayMs, mySession);
@@ -593,7 +432,6 @@ const CWTrainer: React.FC = () => {
       const duration = await playMorseCode(groups[i], mySession);
       const endTs = startTs + Math.max(0, Math.round((duration || 0) * 1000));
       groupEndAtRef.current[i] = endTs;
-      // Wait either for input or until timeout
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
       dispatchMachine({ type: 'WAIT_INPUT' });
       const deadline = Date.now() + Math.max(0, (settings.groupTimeout || 0)) * 1000;
@@ -606,7 +444,6 @@ const CWTrainer: React.FC = () => {
         if (settings.groupTimeout && Date.now() >= deadline) break;
         await sleepCancelable(100, mySession);
       }
-      // Fade-out and stop current group's audio before advancing
       try { currentStopRef.current?.(); } catch {}
       currentStopRef.current = null;
       if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
@@ -616,7 +453,6 @@ const CWTrainer: React.FC = () => {
     setIsTraining(false);
     if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
       dispatchMachine({ type: 'COMPLETE' });
-      // As a safety net, process results on completion if not already processed
       if (!resultsProcessedRef.current) {
         const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
         const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
@@ -626,12 +462,10 @@ const CWTrainer: React.FC = () => {
   };
 
   const submitAnswer = () => {
-    // Stop session and process what we have
     trainingAbortRef.current = true;
     setIsTraining(false);
     const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
     const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
-    // Record answer time for completed-but-unconfirmed groups
     const now = Date.now();
     for (let i = 0; i < activeSentGroupsRef.current.length; i++) {
       const expectedLen = activeSentGroupsRef.current[i]?.length || 0;
@@ -657,17 +491,14 @@ const CWTrainer: React.FC = () => {
       groupAnswerAtRef.current[index] = Date.now();
     }
 
-    // Focus next input
     const nextIndex = index + 1;
     if (nextIndex < sentGroups.length) {
       setCurrentFocusedGroup(nextIndex);
-      // Small delay to ensure the input is rendered
       setTimeout(() => {
         inputRefs.current[nextIndex]?.focus();
       }, 100);
     }
 
-    // If all groups answered, auto-submit
     const allAnswered = nextAnswers.length === sentGroups.length && nextAnswers.every((a, i) => (a && a.length === sentGroups[i].length));
     if (allAnswered) {
       submitAnswer();
@@ -680,11 +511,8 @@ const CWTrainer: React.FC = () => {
     setUserInput(nextAnswers);
     userInputRef.current = nextAnswers;
     
-    // Auto-advance if current group is fully typed and matches expected length
-    // Only auto-advance if we're in interactive mode or if the group has been played
     if (value.length === sentGroups[index]?.length && value.length > 0 && 
         (settings.interactiveMode || index <= currentGroup)) {
-      // Small delay to allow user to see their input
       setTimeout(() => {
         confirmGroupAnswer(index, value);
       }, 300);
@@ -695,7 +523,6 @@ const CWTrainer: React.FC = () => {
     if (resultsProcessedRef.current) return;
     const sentSource = Array.isArray(sentOverride) && sentOverride.length ? sentOverride : (activeSentGroupsRef.current?.length ? activeSentGroupsRef.current : sentGroups);
     if (!Array.isArray(sentSource) || sentSource.length === 0) {
-      // Nothing to process yet; avoid marking as processed
       return;
     }
     const groups = sentSource.map((sent, idx) => {
@@ -749,7 +576,6 @@ const CWTrainer: React.FC = () => {
     });
     resultsProcessedRef.current = true;
 
-    // Auto adjust Koch level if enabled
     try {
       if (settings.autoAdjustKoch) {
         const threshold = Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90));
@@ -761,7 +587,6 @@ const CWTrainer: React.FC = () => {
           delta = -1;
         }
         if (delta !== 0) {
-          // KOCH_SEQUENCE length only known in generator; safeguard with 60 as reasonable default
           const maxLevelGuess = 60;
           const nextLevel = Math.max(1, Math.min((settings.kochLevel || 1) + delta, maxLevelGuess));
           if (nextLevel !== settings.kochLevel) {
@@ -772,7 +597,6 @@ const CWTrainer: React.FC = () => {
       }
     } catch {}
     
-    // Always go to Stats tab after session completion
     setActiveMode('group');
     setGroupTab('stats');
   };
@@ -780,23 +604,13 @@ const CWTrainer: React.FC = () => {
   const getDailyStats = () => computeDailyStats(sessionResults);
 
   const deleteSession = async (timestamp: number) => {
-    const filtered = sessionResults.filter(r => r.timestamp !== timestamp);
+    const services = firebaseRef.current;
+    const firebaseUser = (user && (user as any).uid) ? { uid: (user as any).uid, email: user.email } : null;
+    const filtered = await spDeleteSession(services as any, firebaseUser, timestamp, sessionResults);
     setSessionResults(filtered);
-    if (firebaseRef.current && user && (user as any).uid) {
-      try {
-        const toDelete = sessionResults.find(r => r.timestamp === timestamp);
-        const docId = (toDelete as any)?.firestoreId || String(timestamp);
-        await deleteDoc(doc(firebaseRef.current.db, 'users', (user as any).uid, 'sessions', docId));
-      } catch (e) {
-        console.warn('Failed to delete from Firestore, will update local cache only.', e);
-      }
-    }
-    void saveData(filtered);
   };
 
   const getLetterStats = () => computeLetterStats(sessionResults);
-
-  // Inline Stats are now rendered inside the group panel via groupTab
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-2 sm:p-4 lg:p-6 relative">
@@ -824,7 +638,6 @@ const CWTrainer: React.FC = () => {
         onGoogleLogin={handleLogin}
         onLogout={handleLogout}
         onSwitchAccount={async () => {
-          // Force account chooser by signing out then starting login again (redirect)
           await handleLogout();
           await handleLogin();
         }}
@@ -864,12 +677,8 @@ const CWTrainer: React.FC = () => {
           </button>
         </div>
 
-
-        {/* Mode switcher moved to Sidebar; removed from main panel */}
-
         {!isTraining && activeMode === 'group' && groupTab === 'train' ? (
           <div className="space-y-8">
-            {/* Quick Stats */}
             {sessionResults.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
@@ -890,7 +699,6 @@ const CWTrainer: React.FC = () => {
               </div>
             )}
 
-            {/* Activity Heatmap (last 3 months, navigable) */}
             <ActivityHeatmap
               sessions={sessionResults.map(s => ({
                 date: s.date,
@@ -901,7 +709,6 @@ const CWTrainer: React.FC = () => {
               startOfWeek={1}
             />
 
-            {/* Mini Trend */}
             {sessionResults.length > 1 && (
               <div className="rounded-2xl p-4 border border-slate-200 bg-white/70">
                 <h3 className="text-sm font-semibold text-slate-700 mb-3">Accuracy Trend</h3>
@@ -927,7 +734,6 @@ const CWTrainer: React.FC = () => {
                 </div>
               </div>
             )}
-            {/* Settings moved into Sidebar collapsible section */}
 
             <div className="flex justify-center gap-3 flex-wrap">
               <button
