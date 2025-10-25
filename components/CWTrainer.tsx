@@ -450,7 +450,13 @@ const CWTrainer: React.FC = () => {
         const currentValue = (userInputRef.current[i] || '').trim().toUpperCase();
         const isConfirmed = !!confirmedGroupsRef.current[i];
         const targetLen = groups[i].length;
-        if (isConfirmed || (targetLen > 0 && currentValue.length === targetLen)) break;
+        if (isConfirmed) break;
+        if (targetLen > 0 && currentValue.length >= targetLen) {
+          if (!groupAnswerAtRef.current[i]) {
+            groupAnswerAtRef.current[i] = Date.now();
+          }
+          break;
+        }
         if (settings.groupTimeout && Date.now() >= deadline) break;
         await sleepCancelable(100, mySession);
       }
@@ -480,7 +486,7 @@ const CWTrainer: React.FC = () => {
     for (let i = 0; i < activeSentGroupsRef.current.length; i++) {
       const expectedLen = activeSentGroupsRef.current[i]?.length || 0;
       const val = answers[i] || '';
-      if (expectedLen > 0 && val.length === expectedLen && !groupAnswerAtRef.current[i]) {
+      if (expectedLen > 0 && val.length >= expectedLen && !groupAnswerAtRef.current[i]) {
         groupAnswerAtRef.current[i] = now;
       }
     }
