@@ -37,6 +37,9 @@ const CWTrainer: React.FC = () => {
   
   const [settings, setSettings] = useState<TrainingSettings>({
     kochLevel: 2,
+    charSetMode: 'koch',
+    digitsLevel: 10,
+    customSet: [],
     // Tone range (fixed by default)
     sideToneMin: 600,
     sideToneMax: 600,
@@ -339,7 +342,14 @@ const CWTrainer: React.FC = () => {
     localStorage.removeItem('morse_user');
   };
 
-  const generateGroup = (): string => externalGenerateGroup({ kochLevel: settings.kochLevel, minGroupSize: settings.minGroupSize, maxGroupSize: settings.maxGroupSize });
+  const generateGroup = (): string => externalGenerateGroup({
+    kochLevel: settings.kochLevel,
+    minGroupSize: settings.minGroupSize,
+    maxGroupSize: settings.maxGroupSize,
+    charSetMode: settings.charSetMode,
+    digitsLevel: settings.digitsLevel,
+    customSet: settings.customSet,
+  });
 
   const pickToneHz = (): number => {
     const min = Math.max(100, settings.sideToneMin);
@@ -817,17 +827,20 @@ const CWTrainer: React.FC = () => {
             <TrainingControls onSubmit={submitAnswer} onStop={() => { trainingAbortRef.current = true; setIsTraining(false); }} />
           </div>
         ) : activeMode === 'icr' ? (
-          <SwipeContainer activeMode={activeMode} onSwipe={setActiveMode}>
-            <ICRTrainer sharedAudio={{
-              kochLevel: settings.kochLevel,
-              charWpm: Math.max(1, settings.charWpm),
-              effectiveWpm: Math.max(1, settings.effectiveWpm),
-              sideToneMin: settings.sideToneMin,
-              sideToneMax: settings.sideToneMax,
-              steepness: settings.steepness,
-              envelopeSmoothing: settings.envelopeSmoothing,
-            }} icrSettings={icrSettings} setIcrSettings={setIcrSettings} />
-          </SwipeContainer>
+        <SwipeContainer activeMode={activeMode} onSwipe={setActiveMode}>
+          <ICRTrainer sharedAudio={{
+            kochLevel: settings.kochLevel,
+            charSetMode: settings.charSetMode,
+            digitsLevel: settings.digitsLevel,
+            customSet: settings.customSet,
+            charWpm: Math.max(1, settings.charWpm),
+            effectiveWpm: Math.max(1, settings.effectiveWpm),
+            sideToneMin: settings.sideToneMin,
+            sideToneMax: settings.sideToneMax,
+            steepness: settings.steepness,
+            envelopeSmoothing: settings.envelopeSmoothing,
+          }} icrSettings={icrSettings} setIcrSettings={setIcrSettings} />
+        </SwipeContainer>
         ) : null}
       </div>
     </div>

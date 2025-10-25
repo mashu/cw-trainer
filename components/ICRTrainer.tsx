@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KOCH_SEQUENCE } from '@/lib/morseConstants';
+import { computeCharPool } from '@/lib/trainingUtils';
 import { playMorseCode as externalPlayMorseCode, ensureContext } from '@/lib/morseAudio';
 import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Scatter, Line, ScatterChart, Legend, Cell } from 'recharts';
 
@@ -14,14 +15,19 @@ type ICRTrial = {
 
 // ICR settings come from parent (CWTrainer)
 
-const pickRandomChar = (kochLevel: number) => {
-  const pool = KOCH_SEQUENCE.slice(0, Math.max(1, kochLevel));
+const pickRandomChar = (opts: { kochLevel: number; charSetMode?: 'koch' | 'digits' | 'custom'; digitsLevel?: number; customSet?: string[] }) => {
+  const pool = computeCharPool({
+    kochLevel: opts.kochLevel,
+    charSetMode: opts.charSetMode as any,
+    digitsLevel: opts.digitsLevel,
+    customSet: opts.customSet,
+  } as any);
   const idx = Math.floor(Math.random() * pool.length);
   return pool[idx];
 };
 
 interface ICRTrainerProps {
-  sharedAudio: { kochLevel: number; charWpm: number; effectiveWpm?: number; sideToneMin: number; sideToneMax: number; steepness: number; envelopeSmoothing?: number };
+  sharedAudio: { kochLevel: number; charSetMode?: 'koch' | 'digits' | 'custom'; digitsLevel?: number; customSet?: string[]; charWpm: number; effectiveWpm?: number; sideToneMin: number; sideToneMax: number; steepness: number; envelopeSmoothing?: number };
   icrSettings: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number };
   setIcrSettings: React.Dispatch<React.SetStateAction<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>>;
 }
@@ -195,7 +201,12 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
       }
       for (let i = 0; i < icrSettings.trialsPerSession; i++) {
         if (!sessionActiveRef.current) break;
-        const target = pickRandomChar(sharedAudio.kochLevel);
+        const target = pickRandomChar({
+          kochLevel: sharedAudio.kochLevel,
+          charSetMode: sharedAudio.charSetMode,
+          digitsLevel: sharedAudio.digitsLevel,
+          customSet: sharedAudio.customSet,
+        });
         const heardAt = Date.now();
         vadArmedRef.current = false;
         setTrials(prev => [...prev, { target, heardAt }]);

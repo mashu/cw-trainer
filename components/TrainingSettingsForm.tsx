@@ -1,9 +1,13 @@
 import React from 'react';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Line } from 'recharts';
-import { KOCH_SEQUENCE } from '@/lib/morseConstants';
+import { KOCH_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
 
 export interface TrainingSettings {
   kochLevel: number;
+  // Character set selection
+  charSetMode?: 'koch' | 'digits' | 'custom';
+  digitsLevel?: number; // 1..10
+  customSet?: string[];
   // Tone & envelope
   sideToneMin: number;
   sideToneMax: number;
@@ -59,16 +63,96 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
     }
     return { x, y };
   });
+  const charMode = settings.charSetMode || 'koch';
+  const digitsAsc = ['0','1','2','3','4','5','6','7','8','9'];
+  const allChars = Object.keys(MORSE_CODE);
+  const letters = allChars.filter(c => /[A-Z]/.test(c));
+  const digits = allChars.filter(c => /[0-9]/.test(c)).sort();
+  const punct = allChars.filter(c => !/[A-Z0-9]/.test(c));
+
+  const currentPreviewChars: string[] = (() => {
+    if (charMode === 'digits') {
+      const lvl = Math.max(1, Math.min(10, settings.digitsLevel || 10));
+      return digitsAsc.slice(0, lvl);
+    }
+    if (charMode === 'custom') {
+      const set = Array.isArray(settings.customSet) ? settings.customSet : [];
+      return Array.from(new Set(set.map(s => (s || '').toUpperCase()).filter(Boolean)));
+    }
+    return KOCH_SEQUENCE.slice(0, Math.max(1, Math.min(KOCH_SEQUENCE.length, settings.kochLevel || 1)));
+  })();
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2 p-4 border border-gray-200 rounded-lg bg-slate-50">
           <h4 className="text-sm font-semibold text-slate-700 mb-3">Session & Groups</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Koch Level (1-{KOCH_SEQUENCE.length})</label>
-              <input type="number" min="1" max={KOCH_SEQUENCE.length} value={settings.kochLevel} onChange={(e) => setSettings({ ...settings, kochLevel: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
-              <p className="text-xs text-gray-500 mt-1 whitespace-normal break-words">Characters: {KOCH_SEQUENCE.slice(0, settings.kochLevel).join(' ')}</p>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Character Set</label>
+              <div className="flex gap-2 mb-3">
+                {(['koch','digits','custom'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSettings({ ...settings, charSetMode: mode })}
+                    className={`px-3 py-1.5 rounded-lg text-sm border ${charMode === mode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
+                  >
+                    {mode === 'koch' ? 'Koch' : mode === 'digits' ? 'Digits' : 'Custom'}
+                  </button>
+                ))}
+              </div>
+              {charMode === 'koch' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Koch Level (1-{KOCH_SEQUENCE.length})</label>
+                    <input type="number" min="1" max={KOCH_SEQUENCE.length} value={settings.kochLevel} onChange={(e) => setSettings({ ...settings, kochLevel: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-gray-500 mt-1 whitespace-normal break-words">Characters: {currentPreviewChars.join(' ')}</p>
+                  </div>
+                </div>
+              )}
+              {charMode === 'digits' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Digits Level (count)</label>
+                    <input type="range" min={1} max={10} step={1} value={Math.max(1, Math.min(10, settings.digitsLevel || 10))} onChange={(e) => setSettings({ ...settings, digitsLevel: parseInt(e.target.value) })} className="w-full" />
+                    <div className="text-xs text-gray-500 mt-1">{Math.max(1, Math.min(10, settings.digitsLevel || 10))} digits</div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-gray-500 mt-1 whitespace-normal break-words">Digits: {currentPreviewChars.join(' ')}</p>
+                  </div>
+                </div>
+              )}
+              {charMode === 'custom' && (
+                <div className="space-y-2">
+                  <div className="flex gap-2 flex-wrap text-xs">
+                    <button type="button" className="px-2 py-1 rounded border border-gray-300" onClick={() => setSettings({ ...settings, customSet: letters })}>Letters</button>
+                    <button type="button" className="px-2 py-1 rounded border border-gray-300" onClick={() => setSettings({ ...settings, customSet: digitsAsc })}>Digits</button>
+                    <button type="button" className="px-2 py-1 rounded border border-gray-300" onClick={() => setSettings({ ...settings, customSet: allChars })}>All</button>
+                    <button type="button" className="px-2 py-1 rounded border border-gray-300" onClick={() => setSettings({ ...settings, customSet: [] })}>Clear</button>
+                  </div>
+                  <div className="grid grid-cols-8 sm:grid-cols-12 gap-1">
+                    {allChars.map(ch => {
+                      const enabled = (settings.customSet || []).includes(ch);
+                      return (
+                        <button
+                          key={ch}
+                          type="button"
+                          onClick={() => {
+                            const set = new Set((settings.customSet || []).map(s => s.toUpperCase()));
+                            if (set.has(ch)) set.delete(ch); else set.add(ch);
+                            setSettings({ ...settings, customSet: Array.from(set) });
+                          }}
+                          className={`flex w-full items-center justify-center h-8 text-sm leading-none rounded border select-none ${enabled ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-gray-300 hover:bg-gray-50'}`}
+                          title={ch}
+                        >{ch}</button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500">Selected: {currentPreviewChars.join(' ') || '—'}</p>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">Number of Groups</label>

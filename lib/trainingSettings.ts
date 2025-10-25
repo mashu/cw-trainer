@@ -3,6 +3,9 @@ import type { TrainingSettings } from '@/components/TrainingSettingsForm';
 export const serializeSettings = (s: TrainingSettings): string => {
   const stable = {
     kochLevel: s.kochLevel,
+    charSetMode: s.charSetMode || 'koch',
+    digitsLevel: typeof s.digitsLevel === 'number' ? Math.max(1, Math.min(10, s.digitsLevel)) : undefined,
+    customSet: Array.isArray(s.customSet) ? Array.from(new Set(s.customSet.map(c => (c || '').toString().trim().toUpperCase()).filter(Boolean))) : undefined,
     sideToneMin: s.sideToneMin,
     sideToneMax: s.sideToneMax,
     steepness: s.steepness,
@@ -34,6 +37,9 @@ export const normalizeSettings = (raw: any, fallback: TrainingSettings): Trainin
   const sideMax = typeof raw?.sideToneMax === 'number' ? raw.sideToneMax : (legacySide ?? fallback.sideToneMax);
   return {
     kochLevel: typeof raw?.kochLevel === 'number' ? raw.kochLevel : fallback.kochLevel,
+    charSetMode: (raw?.charSetMode === 'digits' || raw?.charSetMode === 'custom' || raw?.charSetMode === 'koch') ? raw.charSetMode : (fallback.charSetMode ?? 'koch'),
+    digitsLevel: typeof raw?.digitsLevel === 'number' ? Math.max(1, Math.min(10, raw.digitsLevel)) : (fallback.digitsLevel ?? 10),
+    customSet: Array.isArray(raw?.customSet) ? Array.from(new Set(raw.customSet.map((c: any) => (c || '').toString().trim().toUpperCase()).filter(Boolean))) : (Array.isArray(fallback.customSet) ? fallback.customSet : []),
     sideToneMin: sideMin,
     sideToneMax: sideMax,
     steepness: typeof raw?.steepness === 'number' ? raw.steepness : fallback.steepness,
