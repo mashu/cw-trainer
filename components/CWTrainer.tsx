@@ -11,7 +11,7 @@ import { playMorseCode as externalPlayMorseCode, playMorseCodeControlled } from 
 import { trainingReducer as externalTrainingReducer } from '@/lib/trainingMachine';
 import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
 import { getDailyStats as computeDailyStats, getLetterStats as computeLetterStats } from '@/lib/stats';
-import { calculateAlphabetSize, computeAverageResponseMs, computeSessionScore } from '@/lib/score';
+import { calculateAlphabetSize, calculateEffectiveAlphabetSize, calculateTotalChars, computeAverageResponseMs, computeSessionScore } from '@/lib/score';
 import Sidebar from './Sidebar';
 import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'firebase/firestore';
 import { onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
@@ -576,8 +576,10 @@ const CWTrainer: React.FC = () => {
     });
     
     const alphabetSize = calculateAlphabetSize(groups);
+    const effectiveAlphabetSize = calculateEffectiveAlphabetSize(groups, { applyMillerMadow: true });
     const avgResponseMs = computeAverageResponseMs(groupTimings);
-    const score = computeSessionScore({ alphabetSize, accuracy, avgResponseMs });
+    const totalChars = calculateTotalChars(groups);
+    const score = computeSessionScore({ effectiveAlphabetSize, alphabetSize, accuracy, avgResponseMs, totalChars });
 
     const result: SessionResult = {
       date: new Date().toISOString().split('T')[0],
@@ -589,6 +591,8 @@ const CWTrainer: React.FC = () => {
       accuracy,
       letterAccuracy,
       alphabetSize,
+      totalChars,
+      effectiveAlphabetSize,
       avgResponseMs,
       score
     };

@@ -3,6 +3,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { initFirebase } from '@/lib/firebaseClient';
 import { collection, collectionGroup, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+import { DEFAULT_SCORE_CONSTANTS } from '@/lib/score';
 
 type LeaderboardEntry = {
   publicId: number;
@@ -12,6 +15,8 @@ type LeaderboardEntry = {
   accuracy?: number;
   alphabetSize?: number;
   avgResponseMs?: number;
+  effectiveAlphabetSize?: number;
+  totalChars?: number;
 };
 
 const formatPublicId = (n: number) => String(n).padStart(6, '0');
@@ -21,6 +26,7 @@ const Leaderboard: React.FC<{ limitCount?: number }> = ({ limitCount = 20 }) => 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     const services = initFirebase();
@@ -51,6 +57,8 @@ const Leaderboard: React.FC<{ limitCount?: number }> = ({ limitCount = 20 }) => 
                 accuracy: typeof data.accuracy === 'number' ? data.accuracy : undefined,
                 alphabetSize: typeof data.alphabetSize === 'number' ? data.alphabetSize : undefined,
                 avgResponseMs: typeof data.avgResponseMs === 'number' ? data.avgResponseMs : undefined,
+                effectiveAlphabetSize: typeof data.effectiveAlphabetSize === 'number' ? data.effectiveAlphabetSize : undefined,
+                totalChars: typeof data.totalChars === 'number' ? data.totalChars : undefined,
               });
             });
             return true;
@@ -125,12 +133,57 @@ const Leaderboard: React.FC<{ limitCount?: number }> = ({ limitCount = 20 }) => 
 
   const top = useMemo(() => items.slice(0, limitCount), [items, limitCount]);
 
+  const { alpha, beta, gamma, delta, K } = DEFAULT_SCORE_CONSTANTS;
+  const htmlMain = useMemo(() => {
+    const f = `S = C^{${delta}}\\cdot N_{\\mathrm{eff}}^{${alpha}}\\cdot A^{${beta}}\\cdot\\left( \\frac{${K}}{t_{\\mathrm{avg}}} \\right)^{${gamma}}`;
+    return katex.renderToString(f, { throwOnError: false, displayMode: true });
+  }, [alpha, beta, gamma, delta, K]);
+  const htmlH = useMemo(() => katex.renderToString('H = -\\sum_{i=1}^{M} p_i \\ln p_i', { throwOnError: false, displayMode: true }), []);
+  const htmlMM = useMemo(() => katex.renderToString('H_{\\mathrm{MM}} = H + \\frac{M - 1}{2 \\cdot C}', { throwOnError: false, displayMode: true }), []);
+  const htmlNeff = useMemo(() => katex.renderToString('N_{\\mathrm{eff}} = e^{H_{\\mathrm{MM}}}', { throwOnError: false, displayMode: true }), []);
+
   return (
-    <div className="mt-8 rounded-2xl border border-slate-200 bg-white/80 p-4">
+    <div className="mt-8 rounded-2xl border border-slate-200 bg-white/80 p-4 relative">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold text-slate-800">Leaderboard</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-800">Leaderboard</h2>
+          <button
+            type="button"
+            onClick={() => setShowHelp(v => !v)}
+            className="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
+            title="Score formula help"
+            aria-label="Score formula help"
+          >
+            ?
+          </button>
+        </div>
         <div className="text-xs text-slate-500">Top {limitCount}</div>
       </div>
+      {showHelp && (
+        <div className="absolute right-3 top-10 z-50 w-[min(32rem,calc(100vw-2rem))] max-w-[32rem] p-3 rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="flex items-start justify-between mb-2">
+            <div className="text-sm font-semibold text-slate-800">Leaderboard score formula</div>
+            <button onClick={() => setShowHelp(false)} className="text-slate-500 hover:text-slate-700">×</button>
+          </div>
+          <div className="text-xs text-slate-700">
+            <div dangerouslySetInnerHTML={{ __html: htmlMain }} />
+            <div className="mt-2">Where:</div>
+            <ul className="list-disc pl-5 space-y-1 mt-1">
+              <li><span className="font-mono">C</span> — total characters in session</li>
+              <li><span className="font-mono">N_eff</span> — effective alphabet size from Shannon entropy</li>
+              <li><span className="font-mono">A</span> — per-group accuracy (0..1)</li>
+              <li><span className="font-mono">t_avg</span> — average response time (ms)</li>
+              <li><span className="font-mono">K</span> — timing constant ({K})</li>
+              <li><span className="font-mono">α, β, γ, δ</span> — weighting exponents ({alpha}, {beta}, {gamma}, {delta})</li>
+            </ul>
+            <div className="mt-3">Entropy-based diversity:</div>
+            <div dangerouslySetInnerHTML={{ __html: htmlH }} />
+            <div dangerouslySetInnerHTML={{ __html: htmlMM }} />
+            <div dangerouslySetInnerHTML={{ __html: htmlNeff }} />
+            <div className="mt-1 text-[11px] text-slate-600">M is the number of distinct observed characters; C is sample size (= total characters). The Miller–Madow term reduces small-sample bias.</div>
+          </div>
+        </div>
+      )}
       {loading && <div className="text-sm text-slate-600">Loading…</div>}
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {!error && hint && <div className="text-sm text-amber-700">{hint}</div>}

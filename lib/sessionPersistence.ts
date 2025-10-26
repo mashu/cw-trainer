@@ -2,7 +2,7 @@ import { collection, deleteDoc, doc, getDocs, orderBy, query, setDoc } from 'fir
 import * as Firestore from 'firebase/firestore';
 import type { SessionResult } from '@/types/session';
 import { getDailyStats, getLetterStats } from '@/lib/stats';
-import { calculateAlphabetSize, computeAverageResponseMs, computeSessionScore, derivePublicIdFromUid } from '@/lib/score';
+import { calculateAlphabetSize, calculateEffectiveAlphabetSize, calculateTotalChars, computeAverageResponseMs, computeSessionScore, derivePublicIdFromUid } from '@/lib/score';
 
 export type FirebaseServicesLite = { db: any; auth: any } | null;
 
@@ -91,13 +91,19 @@ export const normalizeSession = (raw: any, opts?: { docId?: string }): SessionRe
   const alphabetSize = (typeof raw?.alphabetSize === 'number' && raw.alphabetSize > 0)
     ? Math.floor(raw.alphabetSize)
     : calculateAlphabetSize(groups);
+  const effectiveAlphabetSize = (typeof raw?.effectiveAlphabetSize === 'number' && raw.effectiveAlphabetSize > 0)
+    ? Number(raw.effectiveAlphabetSize)
+    : calculateEffectiveAlphabetSize(groups, { applyMillerMadow: true });
+  const totalChars = (typeof raw?.totalChars === 'number' && raw.totalChars > 0)
+    ? Math.floor(raw.totalChars)
+    : calculateTotalChars(groups);
   const avgResponseMs = (typeof raw?.avgResponseMs === 'number' && isFinite(raw.avgResponseMs) && raw.avgResponseMs > 0)
     ? Math.round(raw.avgResponseMs)
     : computeAverageResponseMs(groupTimings);
   const score = (typeof raw?.score === 'number' && isFinite(raw.score) && raw.score > 0)
     ? Math.round(raw.score * 100) / 100
-    : computeSessionScore({ alphabetSize, accuracy: safeAccuracy, avgResponseMs });
-  return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy, alphabetSize, avgResponseMs, score, firestoreId: opts?.docId };
+    : computeSessionScore({ effectiveAlphabetSize, alphabetSize, accuracy: safeAccuracy, avgResponseMs, totalChars });
+  return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy, alphabetSize, avgResponseMs, totalChars, effectiveAlphabetSize, score, firestoreId: opts?.docId };
 };
 
 async function ensurePublicId(services: FirebaseServicesLite, user: { uid: string } | null): Promise<number | null> {
@@ -133,12 +139,16 @@ async function writeLeaderboardForSessions(
       if (ex.exists()) return; // immutable: do not overwrite
     } catch {}
     const alphabetSize = (typeof r.alphabetSize === 'number' && r.alphabetSize > 0) ? r.alphabetSize : calculateAlphabetSize(r.groups || []);
+    const effectiveAlphabetSize = (typeof r.effectiveAlphabetSize === 'number' && r.effectiveAlphabetSize > 0)
+      ? r.effectiveAlphabetSize
+      : calculateEffectiveAlphabetSize(r.groups || [], { applyMillerMadow: true });
+    const totalChars = (typeof r.totalChars === 'number' && r.totalChars > 0) ? r.totalChars : calculateTotalChars(r.groups || []);
     const avgResponseMs = (typeof r.avgResponseMs === 'number' && isFinite(r.avgResponseMs) && r.avgResponseMs > 0)
       ? r.avgResponseMs
       : computeAverageResponseMs(r.groupTimings || []);
     const score = (typeof r.score === 'number' && isFinite(r.score) && r.score > 0)
       ? r.score
-      : computeSessionScore({ alphabetSize, accuracy: r.accuracy || 0, avgResponseMs });
+      : computeSessionScore({ effectiveAlphabetSize, alphabetSize, accuracy: r.accuracy || 0, avgResponseMs, totalChars });
     const payload: any = {
       uid: user.uid,
       publicId: publicId,
@@ -147,6 +157,8 @@ async function writeLeaderboardForSessions(
       score,
       accuracy: r.accuracy,
       alphabetSize,
+      effectiveAlphabetSize,
+      totalChars,
       avgResponseMs,
       createdAt: now,
       version: 1

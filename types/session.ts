@@ -20,6 +20,8 @@ export interface SessionResult {
   // Derived fields for leaderboard and analytics
   alphabetSize?: number; // unique chars in session's alphabet
   avgResponseMs?: number; // average response time across groups (ms)
+  totalChars?: number; // total characters sent in this session
+  effectiveAlphabetSize?: number; // entropy-based breadth (exp(H))
   score?: number; // computed leaderboard score (immutable once published)
   firestoreId?: string; // optional document id used for reliable deletes
 }
