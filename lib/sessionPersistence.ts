@@ -60,7 +60,7 @@ export const normalizeSession = (raw: any, opts?: { docId?: string }): SessionRe
   });
   const groupTimings = (() => {
     if (Array.isArray(raw?.groupTimings)) {
-      return raw.groupTimings.map((t: any) => ({ timeToCompleteMs: Math.max(0, Math.round(Number(t?.timeToCompleteMs) || 0)) }));
+      return raw.groupTimings.map((t: any) => ({ timeToCompleteMs: Math.max(0, Number(t?.timeToCompleteMs) || 0) }));
     }
     return groups.map(() => ({ timeToCompleteMs: 0 }));
   })();
@@ -98,7 +98,7 @@ export const normalizeSession = (raw: any, opts?: { docId?: string }): SessionRe
     ? Math.floor(raw.totalChars)
     : calculateTotalChars(groups);
   const avgResponseMs = (typeof raw?.avgResponseMs === 'number' && isFinite(raw.avgResponseMs) && raw.avgResponseMs > 0)
-    ? Math.round(raw.avgResponseMs)
+    ? Number(raw.avgResponseMs)
     : computeAverageResponseMs(groupTimings);
   const score = (typeof raw?.score === 'number' && isFinite(raw.score) && raw.score > 0)
     ? Math.round(raw.score * 100) / 100

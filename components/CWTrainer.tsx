@@ -458,7 +458,12 @@ const CWTrainer: React.FC = () => {
           }
           break;
         }
-        if (settings.groupTimeout && Date.now() >= deadline) break;
+        if (settings.groupTimeout && Date.now() >= deadline) {
+          if (!groupAnswerAtRef.current[i]) {
+            groupAnswerAtRef.current[i] = deadline;
+          }
+          break;
+        }
         await sleepCancelable(100, mySession);
       }
       try { currentStopRef.current?.(); } catch {}
@@ -483,14 +488,6 @@ const CWTrainer: React.FC = () => {
     setIsTraining(false);
     const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
     const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
-    const now = Date.now();
-    for (let i = 0; i < activeSentGroupsRef.current.length; i++) {
-      const expectedLen = activeSentGroupsRef.current[i]?.length || 0;
-      const val = answers[i] || '';
-      if (expectedLen > 0 && val.length >= expectedLen && !groupAnswerAtRef.current[i]) {
-        groupAnswerAtRef.current[i] = now;
-      }
-    }
     processResults(answers, activeSentGroupsRef.current);
   };
 
@@ -527,6 +524,13 @@ const CWTrainer: React.FC = () => {
     nextAnswers[index] = value;
     setUserInput(nextAnswers);
     userInputRef.current = nextAnswers;
+    
+    // Stamp answer time immediately when user finishes typing the group
+    if (value.length === sentGroups[index]?.length && value.length > 0) {
+      if (!groupAnswerAtRef.current[index]) {
+        groupAnswerAtRef.current[index] = Date.now();
+      }
+    }
     
     if (value.length === sentGroups[index]?.length && value.length > 0 && 
         (settings.interactiveMode || index <= currentGroup)) {
@@ -570,7 +574,10 @@ const CWTrainer: React.FC = () => {
     const accuracy = groups.length > 0 ? groups.filter(g => g.correct).length / groups.length : 0;
     const groupTimings = groups.map((_, idx) => {
       const endAt = groupEndAtRef.current[idx] || 0;
-      const ansAt = groupAnswerAtRef.current[idx] || 0;
+      const rawAnsAt = groupAnswerAtRef.current[idx] || 0;
+      const timeoutMs = Math.max(0, (settings.groupTimeout || 0)) * 1000;
+      const fallbackAnsAt = endAt > 0 && timeoutMs > 0 ? (endAt + timeoutMs) : 0;
+      const ansAt = rawAnsAt > 0 ? rawAnsAt : fallbackAnsAt;
       const delta = Math.max(0, ansAt - endAt);
       return { timeToCompleteMs: Number.isFinite(delta) ? delta : 0 };
     });
