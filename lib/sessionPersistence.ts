@@ -1,6 +1,8 @@
 import { collection, deleteDoc, doc, getDocs, orderBy, query, setDoc } from 'firebase/firestore';
+import * as Firestore from 'firebase/firestore';
 import type { SessionResult } from '@/types/session';
 import { getDailyStats, getLetterStats } from '@/lib/stats';
+import { calculateAlphabetSize, computeAverageResponseMs, computeSessionScore, derivePublicIdFromUid } from '@/lib/score';
 
 export type FirebaseServicesLite = { db: any; auth: any } | null;
 
@@ -86,8 +88,72 @@ export const normalizeSession = (raw: any, opts?: { docId?: string }): SessionRe
   const date = raw?.date || new Date(ts).toISOString().split('T')[0];
   const startedAt = typeof raw?.startedAt === 'number' ? raw.startedAt : ts;
   const finishedAt = typeof raw?.finishedAt === 'number' ? raw.finishedAt : ts;
-  return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy, firestoreId: opts?.docId };
+  const alphabetSize = (typeof raw?.alphabetSize === 'number' && raw.alphabetSize > 0)
+    ? Math.floor(raw.alphabetSize)
+    : calculateAlphabetSize(groups);
+  const avgResponseMs = (typeof raw?.avgResponseMs === 'number' && isFinite(raw.avgResponseMs) && raw.avgResponseMs > 0)
+    ? Math.round(raw.avgResponseMs)
+    : computeAverageResponseMs(groupTimings);
+  const score = (typeof raw?.score === 'number' && isFinite(raw.score) && raw.score > 0)
+    ? Math.round(raw.score * 100) / 100
+    : computeSessionScore({ alphabetSize, accuracy: safeAccuracy, avgResponseMs });
+  return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy, alphabetSize, avgResponseMs, score, firestoreId: opts?.docId };
 };
+
+async function ensurePublicId(services: FirebaseServicesLite, user: { uid: string } | null): Promise<number | null> {
+  if (!(services && user && user.uid)) return null;
+  try {
+    const profileDocRef = doc(services.db, 'users', user.uid, 'meta', 'profile');
+    const snap = await Firestore.getDoc(profileDocRef as any);
+    const current = snap.exists() ? (snap.data() as any) : null;
+    const existing = (current && typeof current.publicId === 'number') ? current.publicId : null;
+    if (existing) return existing;
+    const derived = derivePublicIdFromUid(user.uid);
+    await setDoc(profileDocRef, { publicId: derived, updatedAt: Date.now() }, { merge: true });
+    return derived;
+  } catch {
+    // fallback to derived if Firestore not available
+    return derivePublicIdFromUid(user!.uid);
+  }
+}
+
+async function writeLeaderboardForSessions(
+  services: FirebaseServicesLite,
+  user: { uid: string } | null,
+  results: SessionResult[]
+): Promise<void> {
+  if (!(services && user && user.uid)) return;
+  const publicId = await ensurePublicId(services, user);
+  const now = Date.now();
+  await Promise.all(results.map(async (r) => {
+    // Nest under user scope for rules friendliness; one doc per session timestamp
+    const ref = doc(services.db, 'users', user.uid, 'leaderboard', String(r.timestamp));
+    try {
+      const ex = await Firestore.getDoc(ref as any);
+      if (ex.exists()) return; // immutable: do not overwrite
+    } catch {}
+    const alphabetSize = (typeof r.alphabetSize === 'number' && r.alphabetSize > 0) ? r.alphabetSize : calculateAlphabetSize(r.groups || []);
+    const avgResponseMs = (typeof r.avgResponseMs === 'number' && isFinite(r.avgResponseMs) && r.avgResponseMs > 0)
+      ? r.avgResponseMs
+      : computeAverageResponseMs(r.groupTimings || []);
+    const score = (typeof r.score === 'number' && isFinite(r.score) && r.score > 0)
+      ? r.score
+      : computeSessionScore({ alphabetSize, accuracy: r.accuracy || 0, avgResponseMs });
+    const payload: any = {
+      uid: user.uid,
+      publicId: publicId,
+      timestamp: r.timestamp,
+      date: r.date,
+      score,
+      accuracy: r.accuracy,
+      alphabetSize,
+      avgResponseMs,
+      createdAt: now,
+      version: 1
+    };
+    await setDoc(ref, payload, { merge: false });
+  }));
+}
 
 export async function loadSessions(services: FirebaseServicesLite, user: any): Promise<SessionResult[]> {
   let cloudLoaded: SessionResult[] | null = null;
@@ -149,6 +215,8 @@ export async function saveSessions(services: FirebaseServicesLite, user: any, re
         setDoc(doc(services.db, 'users', user.uid, 'stats', 'daily'), { items: daily, updatedAt: Date.now() }),
         setDoc(doc(services.db, 'users', user.uid, 'stats', 'letters'), { items: letters, updatedAt: Date.now() }),
       ]);
+      // Write immutable leaderboard entries (one per session). Skips existing docs.
+      await writeLeaderboardForSessions(services, user, results);
     } catch (e) {
       console.warn('Failed to write to Firestore; local copy saved.', e);
       const ops = readPendingOps(user);
@@ -166,6 +234,8 @@ export async function deleteSessionPersisted(services: FirebaseServicesLite, use
       const toDelete = currentResults.find(r => r.timestamp === timestamp);
       const docId = (toDelete as any)?.firestoreId || String(timestamp);
       await deleteDoc(doc(services.db, 'users', user.uid, 'sessions', docId));
+      // Delete matching leaderboard entry for consistency (per-session)
+      try { await deleteDoc(doc(services.db, 'users', user.uid, 'leaderboard', String(timestamp))); } catch {}
     } catch (e) {
       console.warn('Failed to delete from Firestore, will update local cache only.', e);
       const ops = readPendingOps(user);
@@ -218,6 +288,8 @@ export async function flushPendingOps(services: FirebaseServicesLite, user: any,
       setDoc(doc(services.db, 'users', user.uid, 'stats', 'daily'), { items: daily, updatedAt: Date.now() }),
       setDoc(doc(services.db, 'users', user.uid, 'stats', 'letters'), { items: letters, updatedAt: Date.now() }),
     ]);
+    // Also ensure leaderboard entries exist for all sessions (idempotent; skips existing)
+    await writeLeaderboardForSessions(services, user, currentResults);
     ops.needsFullSync = false;
   } catch (e) {
     console.warn('Pending ops flush failed; will retry later.', e);

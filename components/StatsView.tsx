@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar, Brush, ReferenceLine, ComposedChart, Scatter } from 'recharts';
 import ActivityHeatmap from './ActivityHeatmap';
+import Leaderboard from './Leaderboard';
 
 interface SessionGroup {
   sent: string;
@@ -29,7 +30,7 @@ interface StatsViewProps {
 const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete, thresholdPercent, embedded }) => {
   const [selectedSessionTs, setSelectedSessionTs] = useState<number | null>(null);
   const [range, setRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
-  const [tab, setTab] = useState<'overview' | 'sessions' | 'letters' | 'heatmap' | 'details'>('overview');
+  const [tab, setTab] = useState<'overview' | 'leaderboard' | 'sessions' | 'letters' | 'heatmap' | 'details'>('overview');
   const [threshold, setThreshold] = useState<number>(Math.max(0, Math.min(100, thresholdPercent ?? 90)));
 
   const sessionsSorted = useMemo(() => sessionResults.slice().sort((a, b) => a.timestamp - b.timestamp), [sessionResults]);
@@ -231,7 +232,7 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
           {/* Tabs + Controls */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm">
-              {(['overview','sessions','letters','heatmap','details'] as const).map((t) => (
+              {(['overview','leaderboard','sessions','letters','heatmap','details'] as const).map((t) => (
                 <button
                   key={t}
                   className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${tab === t ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600 hover:text-slate-800'}`}
@@ -350,6 +351,13 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
                 </ResponsiveContainer>
               </div>
             </div>
+          </div>
+        )}
+
+        {tab === 'leaderboard' && (
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-slate-700">Leaderboard</h3>
+            <Leaderboard limitCount={20} />
           </div>
         )}
 

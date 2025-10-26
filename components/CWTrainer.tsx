@@ -11,6 +11,7 @@ import { playMorseCode as externalPlayMorseCode, playMorseCodeControlled } from 
 import { trainingReducer as externalTrainingReducer } from '@/lib/trainingMachine';
 import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
 import { getDailyStats as computeDailyStats, getLetterStats as computeLetterStats } from '@/lib/stats';
+import { calculateAlphabetSize, computeAverageResponseMs, computeSessionScore } from '@/lib/score';
 import Sidebar from './Sidebar';
 import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'firebase/firestore';
 import { onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
@@ -574,6 +575,10 @@ const CWTrainer: React.FC = () => {
       return { timeToCompleteMs: Number.isFinite(delta) ? delta : 0 };
     });
     
+    const alphabetSize = calculateAlphabetSize(groups);
+    const avgResponseMs = computeAverageResponseMs(groupTimings);
+    const score = computeSessionScore({ alphabetSize, accuracy, avgResponseMs });
+
     const result: SessionResult = {
       date: new Date().toISOString().split('T')[0],
       timestamp: Date.now(),
@@ -582,7 +587,10 @@ const CWTrainer: React.FC = () => {
       groups,
       groupTimings,
       accuracy,
-      letterAccuracy
+      letterAccuracy,
+      alphabetSize,
+      avgResponseMs,
+      score
     };
 
     setSessionResults((prev) => {
@@ -725,31 +733,7 @@ const CWTrainer: React.FC = () => {
               startOfWeek={1}
             />
 
-            {sessionResults.length > 1 && (
-              <div className="rounded-2xl p-4 border border-slate-200 bg-white/70">
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Accuracy Trend</h3>
-                <div className="w-full h-[140px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={sessionResults.map((s) => ({ x: new Date(s.timestamp).toLocaleDateString(), y: Math.round(((s.accuracy || 0) * 100)) }))}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="x"
-                        tick={{ fontSize: 10, fill: '#475569' }}
-                        label={{ value: 'Date', position: 'insideBottomRight', offset: -2, fill: '#475569', fontSize: 10 }}
-                      />
-                      <YAxis
-                        domain={[0,100]}
-                        tick={{ fontSize: 10, fill: '#475569' }}
-                        label={{ value: 'Accuracy (%)', angle: -90, position: 'insideLeft', offset: 10, fill: '#475569', fontSize: 10 }}
-                      />
-                      <ReferenceLine y={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))} stroke="#ef4444" strokeDasharray="4 4" />
-                      <Tooltip formatter={(v: any) => [`${v}%`, 'Accuracy']} />
-                      <Line type="monotone" dataKey="y" stroke="#6366f1" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
+            {/* Accuracy Trend removed on front page (still available in Stats) */}
 
             <div className="flex justify-center gap-3 flex-wrap">
               <button
