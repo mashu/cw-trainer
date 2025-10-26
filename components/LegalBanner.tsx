@@ -26,21 +26,25 @@ export default function LegalBanner() {
   if (!visible) return null
 
   return (
-    <div className="fixed inset-x-0 top-0 z-50">
-      <div className="mx-auto max-w-5xl p-3">
-        <div className="rounded-md border border-yellow-300 bg-yellow-50 text-yellow-900 shadow">
-          <div className="flex items-start gap-3 p-3 sm:p-4">
-            <div className="mt-0.5 hidden sm:block">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={acknowledge} />
+      
+      {/* Modal */}
+      <div className="relative mx-auto max-w-2xl w-full">
+        <div className="rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-900 shadow-2xl">
+          <div className="flex items-start gap-4 p-6">
+            <div className="mt-1 flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
                 <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm10.5-4.125a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zM12 9.75a.75.75 0 01.75.75v6a.75.75 0 01-1.5 0v-6A.75.75 0 0112 9.75z" clipRule="evenodd" />
               </svg>
             </div>
-            <div className="flex-1 text-sm leading-6">
-              <p className="font-medium">Personal-use project with basic data collection</p>
-              <p className="mt-1 text-yellow-950/90">
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold mb-2">Personal-use project with basic data collection</h3>
+              <p className="text-sm leading-6 text-yellow-950/90 mb-4">
                 This open-source app stores training data locally and may sync anonymized stats for features like leaderboards. It is for personal use only. The author is not a legal expert and assumes no legal responsibility. If you do not agree, please leave this site.
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-4 mb-4">
                 <a href="#data-notice" className="text-yellow-900 underline underline-offset-2 hover:text-yellow-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-600/40">
                   Learn more
                 </a>
@@ -49,9 +53,14 @@ export default function LegalBanner() {
                   GitHub
                 </a>
               </div>
-            </div>
-            <div className="flex items-center">
-              <button onClick={acknowledge} className="rounded bg-yellow-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-yellow-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-600/40">I understand</button>
+              <div className="flex justify-end">
+                <button 
+                  onClick={acknowledge} 
+                  className="rounded-lg bg-yellow-600 px-6 py-2 text-sm font-medium text-white hover:bg-yellow-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-600/40 transition-colors"
+                >
+                  I understand
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -17,7 +17,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <LegalBanner />
-        <div className="pt-16">
+        <div>
           {children}
           <LegalFooter />
         </div>
