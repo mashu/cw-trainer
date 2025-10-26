@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import './global.css'
+import LegalBanner from '@/components/LegalBanner'
+import LegalFooter from '@/components/LegalFooter'
 
 export const metadata: Metadata = {
   title: 'CW Trainer',
@@ -13,7 +15,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <LegalBanner />
+        <div className="pt-16">
+          {children}
+          <LegalFooter />
+        </div>
+      </body>
     </html>
   )
 }
