@@ -17,14 +17,15 @@ interface SidebarProps {
   sessionResultsCount: number;
   latestAccuracyPercent?: number;
   onViewStats: () => void;
-  activeMode?: 'group' | 'icr';
-  onChangeMode?: (mode: 'group' | 'icr') => void;
+  activeMode?: 'group' | 'icr' | 'player';
+  onChangeMode?: (mode: 'group' | 'icr' | 'player') => void;
   icrSettings?: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number };
   setIcrSettings?: (s: any) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, activeMode, onChangeMode, icrSettings, setIcrSettings }) => {
   const [settingsOpen, setSettingsOpen] = useState(true);
+  const [showModeHelp, setShowModeHelp] = useState(false);
   // Mic preview state (for ICR calibration UI)
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [previewActive, setPreviewActive] = useState(false);
@@ -152,8 +153,29 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
           {/* Modes */}
           {onChangeMode && (
             <div className="mb-6 p-4 bg-slate-50 rounded-xl">
-              <h4 className="font-semibold text-slate-800 mb-3">Modes</h4>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-slate-800">Modes</h4>
+                <button
+                  type="button"
+                  onClick={() => setShowModeHelp((v) => !v)}
+                  className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${showModeHelp ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}`}
+                  title="What are these modes?"
+                  aria-expanded={showModeHelp}
+                >
+                  ?
+                </button>
+              </div>
+              {showModeHelp && (
+                <div className="mb-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
+                  <div className="font-semibold text-slate-800 mb-1">Mode guide</div>
+                  <ul className="list-disc ml-4 space-y-1">
+                    <li><span className="font-medium">Group</span>: Sends groups of characters at your settings. You type each group and get stats.</li>
+                    <li><span className="font-medium">ICR</span>: Instant Character Recognition drills. Say or type what you hear; focuses on single‑character speed.</li>
+                    <li><span className="font-medium">Player</span>: Type any text and play it as Morse using your tone and speed.</li>
+                  </ul>
+                </div>
+              )}
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   className={`px-3 py-2 rounded-lg text-sm border ${activeMode === 'group' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
                   onClick={() => { onChangeMode?.('group'); onClose(); }}
@@ -162,6 +184,10 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                   className={`px-3 py-2 rounded-lg text-sm border ${activeMode === 'icr' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
                   onClick={() => { onChangeMode?.('icr'); onClose(); }}
                 >ICR</button>
+                <button
+                  className={`px-3 py-2 rounded-lg text-sm border ${activeMode === 'player' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'}`}
+                  onClick={() => { onChangeMode?.('player'); onClose(); }}
+                >Player</button>
               </div>
             </div>
           )}

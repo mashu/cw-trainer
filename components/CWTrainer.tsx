@@ -13,6 +13,7 @@ import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
 import { getDailyStats as computeDailyStats, getLetterStats as computeLetterStats } from '@/lib/stats';
 import { calculateAlphabetSize, calculateEffectiveAlphabetSize, calculateTotalChars, computeAverageResponseMs, computeSessionScore } from '@/lib/score';
 import Sidebar from './Sidebar';
+import TextPlayer from './TextPlayer';
 import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'firebase/firestore';
 import { onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
 
@@ -75,8 +76,9 @@ const CWTrainer: React.FC = () => {
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [currentFocusedGroup, setCurrentFocusedGroup] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeMode, setActiveMode] = useState<'group' | 'icr'>('group');
+  const [activeMode, setActiveMode] = useState<'group' | 'icr' | 'player'>('group');
   const [groupTab, setGroupTab] = useState<'train' | 'stats'>('train');
+  
   const [icrSettings, setIcrSettings] = useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60, bucketGreenMaxMs: 300, bucketYellowMaxMs: 800 });
 
   // Load & save ICR settings with localStorage for persistence
@@ -842,6 +844,10 @@ const CWTrainer: React.FC = () => {
             envelopeSmoothing: settings.envelopeSmoothing,
           }} icrSettings={icrSettings} setIcrSettings={setIcrSettings} />
         </SwipeContainer>
+        ) : activeMode === 'player' ? (
+          <div className="space-y-6">
+            <TextPlayer settings={settings} />
+          </div>
         ) : null}
       </div>
     </div>
