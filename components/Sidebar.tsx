@@ -207,7 +207,29 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                 {/* ICR Mic & VAD controls (only in ICR mode) */}
                 {activeMode === 'icr' && icrSettings && setIcrSettings && (
                   <div className="mt-4 p-3 border rounded-lg bg-slate-50">
-                    <h4 className="font-semibold text-slate-800 mb-2">Mic & VAD (ICR)</h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold text-slate-800">Mic & VAD (ICR)</h4>
+                      <button
+                        type="button"
+                        onClick={() => setShowModeHelp((v) => !v)}
+                        className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${showModeHelp ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}`}
+                        title="What is Mic & VAD?"
+                        aria-expanded={showModeHelp}
+                      >
+                        ?
+                      </button>
+                    </div>
+                    {showModeHelp && (
+                      <div className="mb-2 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
+                        <div className="font-semibold text-slate-800 mb-1">Mic & VAD</div>
+                        <ul className="list-disc ml-4 space-y-1">
+                          <li><span className="font-medium">VAD</span>: Voice Activity Detection to capture when you start speaking.</li>
+                          <li><span className="font-medium">Threshold</span>: Sensitivity; increase if noise triggers, decrease if speech is missed.</li>
+                          <li><span className="font-medium">Hold</span>: Minimum sustained voice duration to trigger recognition.</li>
+                          <li><span className="font-medium">Mic</span>: Pick input device; use preview to calibrate levels.</li>
+                        </ul>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 mb-2 text-sm">
                       <label>VAD Enabled</label>
                       <input type="checkbox" checked={icrSettings.vadEnabled} onChange={(e) => setIcrSettings({ ...icrSettings, vadEnabled: e.target.checked })} />

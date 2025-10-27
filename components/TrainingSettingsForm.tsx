@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Line } from 'recharts';
 import { KOCH_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
 
@@ -81,11 +81,35 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
     }
     return KOCH_SEQUENCE.slice(0, Math.max(1, Math.min(KOCH_SEQUENCE.length, settings.kochLevel || 1)));
   })();
+  const [showSessionHelp, setShowSessionHelp] = useState(false);
+  const [showToneHelp, setShowToneHelp] = useState(false);
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2 p-4 border border-gray-200 rounded-lg bg-slate-50">
-          <h4 className="text-sm font-semibold text-slate-700 mb-3">Session & Groups</h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-slate-700">Session & Groups</h4>
+            <button
+              type="button"
+              onClick={() => setShowSessionHelp(v => !v)}
+              className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${showSessionHelp ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}`}
+              title="What is Session & Groups?"
+              aria-expanded={showSessionHelp}
+            >
+              ?
+            </button>
+          </div>
+          {showSessionHelp && (
+            <div className="mb-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
+              <div className="font-semibold text-slate-800 mb-1">Session & Groups</div>
+              <ul className="list-disc ml-4 space-y-1">
+                <li><span className="font-medium">Character set</span>: Pick Koch progression, digits, or a custom pool.</li>
+                <li><span className="font-medium">Speeds</span>: Character WPM vs Effective WPM (Farnsworth spacing). Link to keep equal.</li>
+                <li><span className="font-medium">Spacing</span>: Extra word spacing multiplies the inter‑word gap.</li>
+                <li><span className="font-medium">Groups</span>: Control number of groups, size range, timeout, and interactive mode.</li>
+              </ul>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Character Set</label>
@@ -229,7 +253,29 @@ const TrainingSettingsForm: React.FC<TrainingSettingsFormProps> = ({ settings, s
         </div>
 
         <div className="sm:col-span-2 p-4 border border-gray-200 rounded-lg bg-slate-50">
-          <h4 className="text-sm font-semibold text-slate-700 mb-3">Tone & Envelope</h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-slate-700">Tone & Envelope</h4>
+            <button
+              type="button"
+              onClick={() => setShowToneHelp(v => !v)}
+              className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${showToneHelp ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}`}
+              title="What is Tone & Envelope?"
+              aria-expanded={showToneHelp}
+            >
+              ?
+            </button>
+          </div>
+          {showToneHelp && (
+            <div className="mb-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
+              <div className="font-semibold text-slate-800 mb-1">Tone & Envelope</div>
+              <ul className="list-disc ml-4 space-y-1">
+                <li><span className="font-medium">Tone</span>: Choose min/max sidetone. Equal values lock a fixed tone.</li>
+                <li><span className="font-medium">Steepness</span>: Attack/decay time of each dit/dah; higher is smoother, slower.</li>
+                <li><span className="font-medium">Smoothness</span>: Curved vs linear envelope; higher blends edges to reduce clicks.</li>
+                <li><span className="font-medium">Preview</span>: The chart shows a dot’s amplitude envelope at current WPM.</li>
+              </ul>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4">
             {/* Speed and Side Tone in a single row as number inputs (spinbuttons) */}
             <div className="grid grid-cols-2 gap-4">
