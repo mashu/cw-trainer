@@ -119,16 +119,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
   useEffect(() => { void enumerateAudioInputs(); }, []);
   useEffect(() => { if (open) { void enumerateAudioInputs(); } }, [open]);
 
-  // Auto-start preview when settings panel is open and VAD enabled; stop on close
+  // Keep preview OFF by default; only stop it when panel closes or mode changes away
   useEffect(() => {
-    if (settingsOpen && open && icrSettings?.vadEnabled && activeMode === 'icr') {
-      void startMicPreview();
-    } else {
+    if (!(open && settingsOpen && activeMode === 'icr')) {
       stopMicPreview();
     }
-    // Cleanup on unmount
     return () => { stopMicPreview(); };
-  }, [settingsOpen, open, icrSettings?.vadEnabled, activeMode]);
+  }, [settingsOpen, open, activeMode]);
 
   // Restart preview on device change
   useEffect(() => {
