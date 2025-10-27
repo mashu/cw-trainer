@@ -6,6 +6,7 @@ export interface SessionGroup {
 
 export interface SessionTiming {
   timeToCompleteMs: number;
+  perCharMs?: number;
 }
 
 export interface SessionResult {

@@ -574,19 +574,20 @@ const CWTrainer: React.FC = () => {
     });
 
     const accuracy = groups.length > 0 ? groups.filter(g => g.correct).length / groups.length : 0;
-    const groupTimings = groups.map((_, idx) => {
+    const groupTimings = groups.map((g, idx) => {
       const endAt = groupEndAtRef.current[idx] || 0;
       const rawAnsAt = groupAnswerAtRef.current[idx] || 0;
       const timeoutMs = Math.max(0, (settings.groupTimeout || 0)) * 1000;
       const fallbackAnsAt = endAt > 0 && timeoutMs > 0 ? (endAt + timeoutMs) : 0;
       const ansAt = rawAnsAt > 0 ? rawAnsAt : fallbackAnsAt;
       const delta = Math.max(0, ansAt - endAt);
-      return { timeToCompleteMs: Number.isFinite(delta) ? delta : 0 };
+      const perChar = g.sent && g.sent.length > 0 ? Math.round(delta / g.sent.length) : 0;
+      return { timeToCompleteMs: Number.isFinite(delta) ? delta : 0, perCharMs: perChar };
     });
     
     const alphabetSize = calculateAlphabetSize(groups);
     const effectiveAlphabetSize = calculateEffectiveAlphabetSize(groups, { applyMillerMadow: true });
-    const avgResponseMs = computeAverageResponseMs(groupTimings);
+    const avgResponseMs = computeAverageResponseMs(groupTimings.map(t => ({ timeToCompleteMs: t.perCharMs || t.timeToCompleteMs })));
     const totalChars = calculateTotalChars(groups);
     const score = computeSessionScore({ effectiveAlphabetSize, alphabetSize, accuracy, avgResponseMs, totalChars });
 
