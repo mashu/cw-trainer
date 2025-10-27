@@ -237,9 +237,8 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
           vadArmedRef.current = true;
         }
         const trialIndex = i;
-        // Wait for stop event (VAD or any keypress fallback)
-        const deadline = performance.now() + 8000; // safety cap (ms)
-        while (performance.now() < deadline) {
+        // Wait for stop event (VAD or key) or until user has typed
+        while (sessionActiveRef.current) {
           if (stopRef.current) {
             const stopAt = Date.now();
             const base = trialsRef.current[trialIndex]?.heardAt || audioEndAt;
@@ -251,6 +250,11 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
             });
             stopRef.current = false;
             // Focus input for answer entry
+            try { inputRef.current?.focus(); } catch {}
+            break;
+          }
+          // If user already typed, move on without a reaction time
+          if (trialsRef.current[trialIndex]?.typed) {
             try { inputRef.current?.focus(); } catch {}
             break;
           }
