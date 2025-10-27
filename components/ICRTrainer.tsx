@@ -6,7 +6,7 @@ import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, CartesianGrid, T
 
 type ICRTrial = {
   target: string;
-  heardAt: number; // ms since epoch when audio started
+  heardAt: number; // ms since epoch at end of audio playback (reaction baseline)
   stopAt?: number; // ms since epoch when voice or key stopped timer
   reactionMs?: number; // computed stopAt - heardAt
   typed?: string; // user typed letter for scoring
@@ -48,6 +48,8 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
   const vadArmedRef = useRef<boolean>(false);
   const vadStartTimeRef = useRef<number | null>(null);
   const trialsRef = useRef<ICRTrial[]>([]);
+  const audioEndAtRef = useRef<number | null>(null);
+  const stopSourceRef = useRef<'voice' | 'key' | null>(null);
 
   // Focus input when entering the panel and after mount
   useEffect(() => {
@@ -147,6 +149,7 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
           const held = now - (vadStartTimeRef.current || now);
           if (held >= icrSettings.vadHoldMs) {
             // Trigger stop
+            stopSourceRef.current = 'voice';
             stopRef.current = true;
             // Keep VAD loop running; disarm until next trial re-arms it
             vadArmedRef.current = false;
@@ -207,17 +210,30 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
           digitsLevel: sharedAudio.digitsLevel,
           customSet: sharedAudio.customSet,
         });
-        const heardAt = Date.now();
+        // Reset per-trial gates
+        stopRef.current = false;
+        stopSourceRef.current = null;
         vadArmedRef.current = false;
-        setTrials(prev => [...prev, { target, heardAt }]);
+        audioEndAtRef.current = null;
+        // Add trial placeholder; will set heardAt to audio end timestamp
+        setTrials(prev => [...prev, { target, heardAt: 0 }]);
         setCurrentIndex(i);
-        // Small pre-delay to avoid arming VAD during playback start
-        await new Promise(r => setTimeout(r, 30));
-        const duration = await playChar(target);
-        // Arm VAD only after audio is finished to reduce echo triggers
+        // Schedule audio and compute when it will end
+        const playStartAt = Date.now();
+        const durationSec = await playChar(target);
+        const audioEndAt = playStartAt + Math.max(0, Math.round((durationSec || 0) * 1000));
+        audioEndAtRef.current = audioEndAt;
+        // Record heardAt as end-of-playback time for reaction baseline
+        setTrials(prev => {
+          const copy = prev.slice();
+          copy[i] = { ...copy[i], heardAt: audioEndAt };
+          return copy;
+        });
+        // Wait until audio has actually finished (approximate via wall clock)
+        const waitMs = Math.max(0, audioEndAt - Date.now());
+        if (waitMs > 0) { await new Promise(r => setTimeout(r, waitMs)); }
+        // Arm VAD immediately after playback
         if (icrSettings.vadEnabled) {
-          // small post-playback delay to avoid capturing tail/echo
-          await new Promise(r => setTimeout(r, 50));
           vadArmedRef.current = true;
         }
         const trialIndex = i;
@@ -226,7 +242,8 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
         while (performance.now() < deadline) {
           if (stopRef.current) {
             const stopAt = Date.now();
-            const reactionMs = stopAt - heardAt;
+            const base = trialsRef.current[trialIndex]?.heardAt || audioEndAt;
+            const reactionMs = Math.max(0, Math.round(stopAt - base));
             setTrials(prev => {
               const copy = prev.slice();
               copy[trialIndex] = { ...copy[trialIndex], stopAt, reactionMs };
@@ -284,8 +301,11 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!isRunning) return;
-      // Any key press can stop the timer (fallback)
+      // Key stops only after audio end
+      const audioEndAt = audioEndAtRef.current || 0;
+      if (Date.now() < audioEndAt) return;
       if (!stopRef.current) {
+        stopSourceRef.current = 'key';
         stopRef.current = true;
       }
     };
