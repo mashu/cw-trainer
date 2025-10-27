@@ -170,7 +170,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                   <div className="font-semibold text-slate-800 mb-1">Mode guide</div>
                   <ul className="list-disc ml-4 space-y-1">
                     <li><span className="font-medium">Group</span>: Sends groups of characters at your settings. You type each group and get stats.</li>
-                    <li><span className="font-medium">ICR</span>: Instant Character Recognition drills. Say or type what you hear; focuses on single‑character speed.</li>
+                    <li><span className="font-medium">ICR</span>: Instant Character Recognition drills. Speak to capture timing and type to verify correctness; focuses on single‑character speed.</li>
                     <li><span className="font-medium">Player</span>: Type any text and play it as Morse using your tone and speed.</li>
                   </ul>
                 </div>
