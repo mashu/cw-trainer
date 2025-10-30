@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { TrainingSettings } from './TrainingSettingsForm';
-import { playMorseCodeControlled } from '@/lib/morseAudio';
+import { playMorseCodeControlled, renderMorseToWavBlob } from '@/lib/morseAudio';
 
 interface TextPlayerProps {
   settings: TrainingSettings;
@@ -11,6 +11,7 @@ const TextPlayer: React.FC<TextPlayerProps> = ({ settings, initialText }) => {
   const [text, setText] = useState<string>(initialText || 'CQ CQ DE TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [durationSec, setDurationSec] = useState<number>(0);
+  const [isRendering, setIsRendering] = useState<boolean>(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const abortRef = useRef<boolean>(false);
@@ -79,6 +80,33 @@ const TextPlayer: React.FC<TextPlayerProps> = ({ settings, initialText }) => {
     setIsPlaying(false);
   };
 
+  const handleDownload = async () => {
+    if (!text.trim() || isRendering) return;
+    setIsRendering(true);
+    try {
+      const blob = renderMorseToWavBlob(text, {
+        charWpm: Math.max(1, settings.charWpm),
+        effectiveWpm: Math.max(1, settings.effectiveWpm),
+        extraWordSpaceMultiplier: Math.max(1, settings.extraWordSpaceMultiplier ?? 1),
+        sideTone: toneHz,
+        steepness: settings.steepness,
+        envelopeSmoothing: settings.envelopeSmoothing ?? 0,
+        sampleRate: 44100,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const preview = text.trim().slice(0, 24).replace(/\s+/g, '_');
+      a.download = `morse_${preview || 'text'}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 5000);
+    } finally {
+      setIsRendering(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -121,6 +149,14 @@ const TextPlayer: React.FC<TextPlayerProps> = ({ settings, initialText }) => {
                 ■ Stop
               </button>
             )}
+            <button
+              onClick={handleDownload}
+              disabled={!text.trim() || isPlaying || isRendering}
+              className="px-3 py-2 rounded-lg bg-indigo-600 text-white border border-indigo-700 hover:bg-indigo-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Download WAV"
+            >
+              {isRendering ? 'Preparing…' : '⬇ Download WAV'}
+            </button>
             <button
               onClick={() => setText('')}
               disabled={isPlaying}

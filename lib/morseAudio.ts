@@ -150,3 +150,150 @@ export async function playMorseCodeControlled(
 }
 
 
+export interface RenderWavOptions extends AudioSettings {
+  sampleRate?: number; // default 44100
+}
+
+function writePcm16Wav(samples: Float32Array, sampleRate: number): Blob {
+  const numChannels = 1;
+  const bytesPerSample = 2;
+  const blockAlign = numChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = samples.length * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  let offset = 0;
+  // RIFF header
+  view.setUint32(offset, 0x52494646, false); offset += 4; // 'RIFF'
+  view.setUint32(offset, 36 + dataSize, true); offset += 4; // chunk size
+  view.setUint32(offset, 0x57415645, false); offset += 4; // 'WAVE'
+  // fmt chunk
+  view.setUint32(offset, 0x666d7420, false); offset += 4; // 'fmt '
+  view.setUint32(offset, 16, true); offset += 4; // PCM chunk size
+  view.setUint16(offset, 1, true); offset += 2; // audio format PCM
+  view.setUint16(offset, numChannels, true); offset += 2;
+  view.setUint32(offset, sampleRate, true); offset += 4;
+  view.setUint32(offset, byteRate, true); offset += 4;
+  view.setUint16(offset, blockAlign, true); offset += 2;
+  view.setUint16(offset, 8 * bytesPerSample, true); offset += 2; // bits per sample
+  // data chunk
+  view.setUint32(offset, 0x64617461, false); offset += 4; // 'data'
+  view.setUint32(offset, dataSize, true); offset += 4;
+
+  // PCM samples
+  let idx = 44;
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(idx, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    idx += 2;
+  }
+
+  return new Blob([view], { type: 'audio/wav' });
+}
+
+export function renderMorseToWavBlob(text: string, options: RenderWavOptions): Blob {
+  const sampleRate = Math.max(8000, Math.floor(options.sampleRate ?? 44100));
+  const resolvedCharWpm = Math.max(1, options.charWpm ?? 20);
+  const resolvedEffWpm = Math.max(1, options.effectiveWpm ?? resolvedCharWpm);
+  const extraWordSpaceMultiplier = Math.max(1, options.extraWordSpaceMultiplier ?? 1);
+
+  const dotChar = 1.2 / resolvedCharWpm; // seconds
+  const dotEff = 1.2 / resolvedEffWpm; // seconds
+
+  const dotDuration = dotChar;
+  const dashDuration = dotChar * 3;
+  const symbolSpace = dotChar;
+  const charSpace = dotEff * 3;
+  const wordSpace = dotEff * 7 * extraWordSpaceMultiplier;
+  const riseTime = options.steepness / 1000;
+
+  // First pass: compute total duration
+  let totalSec = 0;
+  for (let i = 0; i < text.length; i++) {
+    const rawChar = text[i];
+    if (rawChar === ' ') {
+      totalSec += Math.max(0, wordSpace - charSpace);
+      continue;
+    }
+    const char = rawChar.toUpperCase();
+    const morse = MORSE_CODE[char];
+    if (!morse) continue;
+    for (let j = 0; j < morse.length; j++) {
+      const symbol = morse[j];
+      const duration = symbol === '.' ? dotDuration : dashDuration;
+      totalSec += duration + symbolSpace;
+    }
+    totalSec += charSpace - symbolSpace;
+  }
+
+  const totalSamples = Math.max(1, Math.ceil(totalSec * sampleRate));
+  const output = new Float32Array(totalSamples);
+
+  // Envelope config consistent with live playback
+  const targetGain = 0.3;
+  const smoothing = Math.max(0, Math.min(1, options.envelopeSmoothing ?? 0));
+
+  // Helper to apply one tone segment
+  const applySegment = (startSample: number, durationSec: number) => {
+    const freq = options.sideTone;
+    const segmentSamples = Math.max(1, Math.floor(durationSec * sampleRate));
+    const attackSamples = Math.max(1, Math.floor(Math.min(riseTime, durationSec / 2) * sampleRate));
+    const decaySamples = attackSamples;
+    const sustainSamples = Math.max(0, segmentSamples - attackSamples - decaySamples);
+    for (let n = 0; n < segmentSamples; n++) {
+      const t = n / sampleRate;
+      const phase = 2 * Math.PI * freq * t;
+      let env = targetGain;
+      if (smoothing === 0) {
+        if (n < attackSamples) {
+          env = targetGain * (n / attackSamples);
+        } else if (n >= attackSamples + sustainSamples) {
+          const d = n - (attackSamples + sustainSamples);
+          env = targetGain * (1 - d / Math.max(1, decaySamples));
+        }
+      } else {
+        // cosine-smoothed attack/sustain/decay
+        if (n < attackSamples) {
+          const tt = n / Math.max(1, attackSamples - 1);
+          env = targetGain * (1 - Math.cos(Math.PI * tt)) / 2;
+        } else if (n < attackSamples + sustainSamples) {
+          env = targetGain;
+        } else {
+          const d = n - (attackSamples + sustainSamples);
+          const tt = d / Math.max(1, decaySamples - 1);
+          env = targetGain * (1 + Math.cos(Math.PI * tt)) / 2;
+        }
+      }
+      const idx = startSample + n;
+      if (idx < output.length) {
+        output[idx] += Math.sin(phase) * env;
+      }
+    }
+    return segmentSamples;
+  };
+
+  // Second pass: synthesize
+  let cursor = 0;
+  const spaceToSamples = (sec: number) => Math.floor(sec * sampleRate);
+  for (let i = 0; i < text.length; i++) {
+    const rawChar = text[i];
+    if (rawChar === ' ') {
+      cursor += spaceToSamples(Math.max(0, wordSpace - charSpace));
+      continue;
+    }
+    const char = rawChar.toUpperCase();
+    const morse = MORSE_CODE[char];
+    if (!morse) continue;
+    for (let j = 0; j < morse.length; j++) {
+      const symbol = morse[j];
+      const duration = symbol === '.' ? dotDuration : dashDuration;
+      cursor += applySegment(cursor, duration);
+      cursor += spaceToSamples(symbolSpace);
+    }
+    cursor += spaceToSamples(charSpace - symbolSpace);
+  }
+
+  return writePcm16Wav(output, sampleRate);
+}
+
