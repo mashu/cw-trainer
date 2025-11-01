@@ -3,6 +3,7 @@ import * as Firestore from 'firebase/firestore';
 import type { SessionResult } from '@/types/session';
 import { getDailyStats, getLetterStats } from '@/lib/stats';
 import { calculateAlphabetSize, calculateEffectiveAlphabetSize, calculateTotalChars, computeAverageResponseMs, computeSessionScore, derivePublicIdFromUid } from '@/lib/score';
+import { calculateGroupLetterAccuracy } from '@/lib/groupAlignment';
 
 export type FirebaseServicesLite = { db: any; auth: any } | null;
 
@@ -71,16 +72,8 @@ export const normalizeSession = (raw: any, opts?: { docId?: string }): SessionRe
   })();
   const letterAccuracy = (() => {
     if (raw?.letterAccuracy && typeof raw.letterAccuracy === 'object') return raw.letterAccuracy as Record<string, { correct: number; total: number }>;
-    const acc: Record<string, { correct: number; total: number } & { }> = {} as any;
-    groups.forEach((grp: any) => {
-      for (let i = 0; i < grp.sent.length; i++) {
-        const ch = grp.sent[i];
-        if (!acc[ch]) acc[ch] = { correct: 0, total: 0 } as any;
-        acc[ch].total += 1;
-        if (grp.received[i] === ch) acc[ch].correct += 1;
-      }
-    });
-    return acc as Record<string, { correct: number; total: number }>;
+    // Use group alignment for accurate letter-level accuracy calculation
+    return calculateGroupLetterAccuracy(groups);
   })();
   const ts = typeof raw?.timestamp === 'number'
     ? raw.timestamp

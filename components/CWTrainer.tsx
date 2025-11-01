@@ -12,6 +12,7 @@ import { trainingReducer as externalTrainingReducer } from '@/lib/trainingMachin
 import { generateGroup as externalGenerateGroup } from '@/lib/trainingUtils';
 import { getDailyStats as computeDailyStats, getLetterStats as computeLetterStats } from '@/lib/stats';
 import { calculateAlphabetSize, calculateEffectiveAlphabetSize, calculateTotalChars, computeAverageResponseMs, computeSessionScore } from '@/lib/score';
+import { calculateGroupLetterAccuracy } from '@/lib/groupAlignment';
 import Sidebar from './Sidebar';
 import TextPlayer from './TextPlayer';
 import { collection, doc, getDocs, orderBy, query, setDoc, deleteDoc } from 'firebase/firestore';
@@ -558,20 +559,9 @@ const CWTrainer: React.FC = () => {
       };
     });
 
-    const letterAccuracy: Record<string, { correct: number; total: number }> = {};
-    
-    groups.forEach(group => {
-      for (let i = 0; i < group.sent.length; i++) {
-        const char = group.sent[i];
-        if (!letterAccuracy[char]) {
-          letterAccuracy[char] = { correct: 0, total: 0 };
-        }
-        letterAccuracy[char].total++;
-        if (group.received[i] === char) {
-          letterAccuracy[char].correct++;
-        }
-      }
-    });
+    // Use group alignment for accurate letter-level accuracy calculation
+    // This handles insertions, deletions, and substitutions properly
+    const letterAccuracy = calculateGroupLetterAccuracy(groups);
 
     const accuracy = groups.length > 0 ? groups.filter(g => g.correct).length / groups.length : 0;
     const groupTimings = groups.map((g, idx) => {

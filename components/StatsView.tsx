@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar, Brush, ReferenceLine, ComposedChart, Scatter } from 'recharts';
+import { createGroupDisplayAlignment } from '@/lib/groupAlignment';
 import ActivityHeatmap from './ActivityHeatmap';
 import Leaderboard from './Leaderboard';
 
@@ -142,8 +143,8 @@ const StatsView: React.FC<StatsViewProps> = ({ sessionResults, onBack, onDelete,
     const timings = selectedSession.groupTimings || [];
     const rows = (selectedSession.groups || []).map((g, idx) => {
       const timeMs = Math.max(0, Math.round(timings[idx]?.timeToCompleteMs || 0));
-      const maxLen = Math.max(g.sent.length, g.received.length);
-      const alignment = Array.from({ length: maxLen }).map((_, i) => ({ ch: g.received[i] || '', ok: g.received[i] === g.sent[i] }));
+      // Use group alignment for accurate visualization of letter matches
+      const alignment = createGroupDisplayAlignment(g.sent, g.received);
       return { idx, sent: g.sent, received: g.received, correct: g.correct, timeMs, alignment };
     });
     return rows;
