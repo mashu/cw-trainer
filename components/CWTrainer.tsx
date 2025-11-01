@@ -577,7 +577,11 @@ const CWTrainer: React.FC = () => {
     
     const alphabetSize = calculateAlphabetSize(groups);
     const effectiveAlphabetSize = calculateEffectiveAlphabetSize(groups, { applyMillerMadow: true });
-    const avgResponseMs = computeAverageResponseMs(groupTimings.map(t => ({ timeToCompleteMs: t.perCharMs || t.timeToCompleteMs })));
+    // Use perCharMs if available (preferred metric), otherwise fall back to timeToCompleteMs
+    // Note: perCharMs can be 0 (legitimate value when user answers immediately), so use nullish coalescing
+    const avgResponseMs = computeAverageResponseMs(groupTimings.map(t => ({ 
+      timeToCompleteMs: typeof t.perCharMs === 'number' ? t.perCharMs : t.timeToCompleteMs 
+    })));
     const totalChars = calculateTotalChars(groups);
     const score = computeSessionScore({ effectiveAlphabetSize, alphabetSize, accuracy, avgResponseMs, totalChars });
 
