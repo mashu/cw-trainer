@@ -175,7 +175,10 @@ const CWTrainer: React.FC = () => {
 
   useEffect(() => {
     firebaseRef.current = initFirebase();
-    setFirebaseReady(!!firebaseRef.current);
+    // Firebase is "ready" if it either initialized successfully OR if it's not configured (allowing local-only mode)
+    // This way users can still use the app without Firebase
+    const isReady = firebaseRef.current !== null || !process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    setFirebaseReady(isReady);
     let unsubscribe: (() => void) | undefined;
     (async () => {
       if (firebaseRef.current) {
@@ -210,6 +213,9 @@ const CWTrainer: React.FC = () => {
           setAuthInProgress(false);
           console.info('[Auth] Redirect login completed for', newUser.email);
         }
+      } else {
+        // Firebase not configured - app works in local-only mode
+        console.info('[Auth] Firebase not configured - running in local-only mode');
       }
     })();
     return () => { try { unsubscribe?.(); } catch {} };
@@ -732,6 +738,7 @@ const CWTrainer: React.FC = () => {
           await handleLogout();
           await handleLogin();
         }}
+        authInProgress={authInProgress}
         settings={settings}
         setSettings={setSettings}
         onSaveSettings={() => { void saveSettings({ source: 'manual' }); }}
