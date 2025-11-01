@@ -175,10 +175,9 @@ const CWTrainer: React.FC = () => {
 
   useEffect(() => {
     firebaseRef.current = initFirebase();
-    // Firebase is "ready" if it either initialized successfully OR if it's not configured (allowing local-only mode)
-    // This way users can still use the app without Firebase
-    const isReady = firebaseRef.current !== null || !process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-    setFirebaseReady(isReady);
+    // Firebase is "ready" only if it actually initialized successfully (not null)
+    // If Firebase is not configured, the app works in local-only mode but login won't be available
+    setFirebaseReady(firebaseRef.current !== null);
     let unsubscribe: (() => void) | undefined;
     (async () => {
       if (firebaseRef.current) {
@@ -378,7 +377,10 @@ const CWTrainer: React.FC = () => {
   }, [settings, user]);
 
   const handleLogin = async () => {
-    if (!firebaseRef.current) return;
+    if (!firebaseRef.current) {
+      setToast({ message: 'Firebase is not configured. Cannot sign in.', type: 'error' });
+      return;
+    }
     try {
       console.info('[Auth] Starting Google sign-in (redirect)');
       setAuthInProgress(true);

@@ -20,7 +20,7 @@ interface SidebarProps {
   activeMode?: 'group' | 'icr' | 'player';
   onChangeMode?: (mode: 'group' | 'icr' | 'player') => void;
   icrSettings?: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number };
-  setIcrSettings?: (s: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }) => void;
+  setIcrSettings?: React.Dispatch<React.SetStateAction<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>>;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, activeMode, onChangeMode, icrSettings, setIcrSettings }) => {
@@ -303,10 +303,10 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                       <h5 className="font-semibold text-slate-800 mb-2 text-sm">Performance Buckets (ICR)</h5>
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <label>Green &lt;= (ms)
-                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketGreenMaxMs} onChange={(e) => setIcrSettings((prev: any) => ({ ...prev, bucketGreenMaxMs: parseInt(e.target.value || '300') }))} />
+                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketGreenMaxMs} onChange={(e) => setIcrSettings?.((prev) => ({ ...prev, bucketGreenMaxMs: parseInt(e.target.value || '300') }))} />
                         </label>
                         <label>Yellow &lt;= (ms)
-                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketYellowMaxMs} onChange={(e) => setIcrSettings((prev: any) => ({ ...prev, bucketYellowMaxMs: parseInt(e.target.value || '800') }))} />
+                          <input type="number" className="block w-full border rounded px-2 py-1" value={icrSettings.bucketYellowMaxMs} onChange={(e) => setIcrSettings?.((prev) => ({ ...prev, bucketYellowMaxMs: parseInt(e.target.value || '800') }))} />
                         </label>
                       </div>
                       <p className="text-xs text-slate-600 mt-1">Bars: green &lt;= Green; yellow between Green..Yellow; red &gt; Yellow.</p>
@@ -352,7 +352,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-4 text-slate-800">Sign In</h3>
               <p className="text-xs text-slate-600 mb-2">Login is only needed to sync settings and history across devices. Without login, data stays on this device.</p>
-              {firebaseReady ? (
+              {firebaseReady && (
                 <button 
                   onClick={onGoogleLogin} 
                   disabled={authInProgress} 
@@ -366,7 +366,8 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
                   </svg>
                   {authInProgress ? 'Redirecting…' : 'Continue with Google'}
                 </button>
-              ) : (
+              )}
+              {!firebaseReady && (
                 <div className="px-4 py-3 mb-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-center">
                   <p className="text-sm text-slate-600">Firebase not configured</p>
                   <p className="text-xs text-slate-500 mt-1">App is running in local-only mode. Data will be saved locally.</p>
