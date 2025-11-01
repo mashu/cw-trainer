@@ -35,6 +35,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
   const micCtxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number | null>(null);
   const holdStartRef = useRef<number | null>(null);
+  const prevDeviceIdRef = useRef<string | undefined>(undefined);
   const [holdMs, setHoldMs] = useState(0);
 
   const stopMicPreview = () => {
@@ -127,10 +128,17 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
     return () => { stopMicPreview(); };
   }, [settingsOpen, open, activeMode]);
 
-  // Restart preview on device change
+  // Restart preview on device change (only if preview is active)
   useEffect(() => {
-    if (previewActive) { void startMicPreview(); }
-  }, [icrSettings?.micDeviceId]);
+    const currentDeviceId = icrSettings?.micDeviceId;
+    if (previewActive && currentDeviceId !== prevDeviceIdRef.current) {
+      prevDeviceIdRef.current = currentDeviceId;
+      void startMicPreview();
+    } else if (!previewActive) {
+      prevDeviceIdRef.current = currentDeviceId;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [icrSettings?.micDeviceId, previewActive]);
   return (
     <>
       {open && (

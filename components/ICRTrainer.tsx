@@ -258,11 +258,13 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
             try { inputRef.current?.focus(); } catch {}
             break;
           }
-          await new Promise(r => setTimeout(r, 10));
+          const POLLING_INTERVAL_MS = 10;
+          await new Promise(r => setTimeout(r, POLLING_INTERVAL_MS));
         }
         // Wait until user types and confirms input for this trial
         while (sessionActiveRef.current && !trialsRef.current[trialIndex]?.typed) {
-          await new Promise(r => setTimeout(r, 20));
+          const INPUT_POLLING_INTERVAL_MS = 20;
+          await new Promise(r => setTimeout(r, INPUT_POLLING_INTERVAL_MS));
         }
         if (!sessionActiveRef.current) break;
         // Delay before next trial
@@ -316,21 +318,6 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isRunning]);
-
-  const confirmInput = useCallback(() => {
-    const idx = trials.length - 1;
-    if (idx < 0) return;
-    const latest = trials[idx];
-    if (!latest) return;
-    const typed = currentInput.trim().slice(-1).toUpperCase();
-    const correct = !!typed && typed === latest.target.toUpperCase();
-    setTrials(prev => {
-      const copy = prev.slice();
-      copy[idx] = { ...copy[idx], typed, correct };
-      return copy;
-    });
-    setCurrentInput('');
-  }, [currentInput, trials, currentIndex]);
 
   // Calibration controls removed from this component
 

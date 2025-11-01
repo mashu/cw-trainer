@@ -112,7 +112,10 @@ async function ensurePublicId(services: FirebaseServicesLite, user: { uid: strin
     return derived;
   } catch {
     // fallback to derived if Firestore not available
-    return derivePublicIdFromUid(user!.uid);
+    if (user) {
+      return derivePublicIdFromUid(user.uid);
+    }
+    return null;
   }
 }
 

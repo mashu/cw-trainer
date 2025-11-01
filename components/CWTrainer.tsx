@@ -5,7 +5,7 @@ import ProgressHeader from './ProgressHeader';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import GroupsList from './GroupsList';
 import TrainingControls from './TrainingControls';
-import StatsView, { SessionResult as StatsSessionResult } from './StatsView';
+import StatsView from './StatsView';
 import { initFirebase, googleSignIn, googleSignOut, getRedirectedUser } from '@/lib/firebaseClient';
 import { playMorseCode as externalPlayMorseCode, playMorseCodeControlled } from '@/lib/morseAudio';
 import { trainingReducer as externalTrainingReducer } from '@/lib/trainingMachine';
@@ -30,6 +30,7 @@ import { serializeSettings as tsSerialize, normalizeSettings as tsNormalize } fr
 interface User {
   email: string;
   username?: string;
+  uid?: string;
 }
 
 const CWTrainer: React.FC = () => {
@@ -146,6 +147,7 @@ const CWTrainer: React.FC = () => {
   const settingsDebounceTimerRef = useRef<number | undefined>(undefined);
   const lastSavedSettingsRef = useRef<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const confirmTimeoutRef = useRef<Record<number, number | undefined>>({});
 
   const serializeSettings = tsSerialize;
   const normalizeSettings = (raw: any): TrainingSettings => tsNormalize(raw, settings);
@@ -153,14 +155,22 @@ const CWTrainer: React.FC = () => {
   useEffect(() => {
     firebaseRef.current = initFirebase();
     setFirebaseReady(!!firebaseRef.current);
-    let unsubscribe: any;
+    let unsubscribe: (() => void) | undefined;
     (async () => {
       if (firebaseRef.current) {
         // Ensure auth persistence so user stays logged in across reloads
-        try { await setPersistence(firebaseRef.current.auth, browserLocalPersistence); } catch {}
+        try { 
+          await setPersistence(firebaseRef.current.auth, browserLocalPersistence); 
+        } catch (e) {
+          console.warn('[Auth] Failed to set persistence', e);
+        }
         unsubscribe = onAuthStateChanged(firebaseRef.current.auth, (fu: any) => {
           if (fu) {
-            const newUser: User & { uid: string } = { email: fu.email || '', username: fu.displayName || undefined, uid: fu.uid };
+            const newUser: User = { 
+              email: fu.email || '', 
+              username: fu.displayName || undefined, 
+              uid: fu.uid 
+            };
             setUser(newUser);
             setAuthInProgress(false);
             console.info('[Auth] Logged in as', newUser.email);
@@ -170,7 +180,11 @@ const CWTrainer: React.FC = () => {
         });
         const redirected = await getRedirectedUser(firebaseRef.current);
         if (redirected) {
-          const newUser: User & { uid: string } = { email: redirected.email || '', username: redirected.displayName || undefined, uid: redirected.uid };
+          const newUser: User = { 
+            email: redirected.email || '', 
+            username: redirected.displayName || undefined, 
+            uid: redirected.uid 
+          };
           setUser(newUser);
           setAuthInProgress(false);
           console.info('[Auth] Redirect login completed for', newUser.email);
@@ -205,13 +219,13 @@ const CWTrainer: React.FC = () => {
 
   // Load settings from Firestore if available; fallback to localStorage
   const loadSettings = async () => {
-    if (firebaseRef.current && user && (user as any).uid) {
+    if (firebaseRef.current && user && user.uid) {
       try {
         const db = firebaseRef.current.db;
-        const settingsSnap = await getDocs(collection(db, 'users', (user as any).uid, 'settings'));
+        const settingsSnap = await getDocs(collection(db, 'users', user.uid, 'settings'));
         const defaultDoc = settingsSnap.docs.find((d: any) => d.id === 'default');
         if (defaultDoc && defaultDoc.exists()) {
-          const data = defaultDoc.data() as any;
+          const data = defaultDoc.data();
           setSettings(prev => {
             const next = normalizeSettings({ ...prev, ...data });
             lastSavedSettingsRef.current = serializeSettings(next);
@@ -257,21 +271,30 @@ const CWTrainer: React.FC = () => {
         setIsTraining(false);
         dispatchMachine({ type: 'ABORT' });
       }
+      // Clean up all pending confirmation timeouts
+      Object.values(confirmTimeoutRef.current).forEach((timeoutId) => {
+        if (timeoutId !== undefined) {
+          try {
+            window.clearTimeout(timeoutId);
+          } catch {}
+        }
+      });
+      confirmTimeoutRef.current = {};
     };
   }, [isTraining]);
 
   const loadData = async () => {
     const services = firebaseRef.current;
-    const firebaseUser = (user && (user as any).uid) ? { uid: (user as any).uid, email: user.email } : null;
-    const loaded = await spLoadSessions(services as any, firebaseUser);
+    const firebaseUser = (user && user.uid) ? { uid: user.uid, email: user.email } : null;
+    const loaded = await spLoadSessions(services, firebaseUser);
     setSessionResults(loaded);
     await loadSettings();
   };
 
   const saveData = async (results: SessionResult[]) => {
     const services = firebaseRef.current;
-    const firebaseUser = (user && (user as any).uid) ? { uid: (user as any).uid, email: user.email } : null;
-    await spSaveSessions(services as any, firebaseUser, results);
+    const firebaseUser = (user && user.uid) ? { uid: user.uid, email: user.email } : null;
+    await spSaveSessions(services, firebaseUser, results);
   };
 
   const saveSettings = async (opts?: { source?: 'auto' | 'manual' }) => {
@@ -279,10 +302,10 @@ const CWTrainer: React.FC = () => {
     setIsSavingSettings(true);
     try {
       try { localStorage.setItem('morse_settings_local', JSON.stringify(settings)); } catch {}
-      if (firebaseRef.current && user && (user as any).uid) {
+      if (firebaseRef.current && user && user.uid) {
         try {
           const db = firebaseRef.current.db;
-          await setDoc(doc(db, 'users', (user as any).uid, 'settings', 'default'), settings, { merge: true });
+          await setDoc(doc(db, 'users', user.uid, 'settings', 'default'), settings, { merge: true });
           setToast({ message: opts?.source === 'auto' ? 'Settings synced' : 'Settings saved', type: 'success' });
         } catch (e) {
           console.warn('Failed to save settings to Firestore', e);
@@ -314,20 +337,6 @@ const CWTrainer: React.FC = () => {
     if (!firebaseRef.current) return;
     try {
       console.info('[Auth] Starting Google sign-in (redirect)');
-      setAuthInProgress(true);
-      setToast({ message: 'Redirecting to Google…', type: 'info' });
-      await googleSignIn(firebaseRef.current); // redirect flow
-    } catch (e) {
-      console.error('[Auth] Google sign-in start failed', e);
-      setAuthInProgress(false);
-      setToast({ message: 'Failed to start Google sign-in.', type: 'error' });
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    if (!firebaseRef.current) return;
-    try {
-      console.info('[Auth] Google sign-in button clicked');
       setAuthInProgress(true);
       setToast({ message: 'Redirecting to Google…', type: 'info' });
       await googleSignIn(firebaseRef.current); // redirect flow
@@ -535,11 +544,21 @@ const CWTrainer: React.FC = () => {
       }
     }
     
+    // Clear any pending confirmation timeout for this index
+    if (confirmTimeoutRef.current[index] !== undefined) {
+      try {
+        window.clearTimeout(confirmTimeoutRef.current[index]);
+      } catch {}
+      delete confirmTimeoutRef.current[index];
+    }
+    
     if (value.length === sentGroups[index]?.length && value.length > 0 && 
         (settings.interactiveMode || index <= currentGroup)) {
-      setTimeout(() => {
+      const AUTO_CONFIRM_DELAY_MS = 300;
+      confirmTimeoutRef.current[index] = window.setTimeout(() => {
         confirmGroupAnswer(index, value);
-      }, 300);
+        delete confirmTimeoutRef.current[index];
+      }, AUTO_CONFIRM_DELAY_MS) as unknown as number;
     }
   };
 
@@ -637,8 +656,8 @@ const CWTrainer: React.FC = () => {
 
   const deleteSession = async (timestamp: number) => {
     const services = firebaseRef.current;
-    const firebaseUser = (user && (user as any).uid) ? { uid: (user as any).uid, email: user.email } : null;
-    const filtered = await spDeleteSession(services as any, firebaseUser, timestamp, sessionResults);
+    const firebaseUser = (user && user.uid) ? { uid: user.uid, email: user.email } : null;
+    const filtered = await spDeleteSession(services, firebaseUser, timestamp, sessionResults);
     setSessionResults(filtered);
   };
 
@@ -681,7 +700,14 @@ const CWTrainer: React.FC = () => {
         latestAccuracyPercent={Math.round((sessionResults[sessionResults.length - 1]?.accuracy || 0) * 100)}
         onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setActiveMode('group'); setGroupTab('stats'); }}
         activeMode={activeMode}
-        onChangeMode={(m) => { setActiveMode(m); setSidebarOpen(false); if (m === 'group') { /* keep tab */ } }}
+        onChangeMode={(m) => { 
+          setActiveMode(m); 
+          setSidebarOpen(false);
+          // Keep current tab when switching to group mode
+          if (m !== 'group') {
+            setGroupTab('train');
+          }
+        }}
         icrSettings={icrSettings}
         setIcrSettings={setIcrSettings as any}
       />
@@ -770,7 +796,7 @@ const CWTrainer: React.FC = () => {
             </div>
             <StatsView
               embedded
-              sessionResults={sessionResults as unknown as StatsSessionResult[]}
+              sessionResults={sessionResults}
               onBack={() => setGroupTab('train')}
               onDelete={deleteSession}
               thresholdPercent={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))}

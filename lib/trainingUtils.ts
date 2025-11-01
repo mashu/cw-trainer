@@ -32,10 +32,10 @@ export function computeCharPool(settings: Pick<TrainingSettings, 'kochLevel' | '
 export function generateGroup(settings: TrainingSettingsLite): string {
   const availableChars = computeCharPool({
     kochLevel: settings.kochLevel,
-    charSetMode: settings.charSetMode as any,
+    charSetMode: settings.charSetMode,
     digitsLevel: settings.digitsLevel,
     customSet: settings.customSet,
-  } as any);
+  });
   const groupSize = Math.floor(Math.random() * (settings.maxGroupSize - settings.minGroupSize + 1)) + settings.minGroupSize;
   let group = '';
   const safePool = Array.isArray(availableChars) && availableChars.length > 0 ? availableChars : KOCH_SEQUENCE.slice(0, Math.max(1, settings.kochLevel || 1));

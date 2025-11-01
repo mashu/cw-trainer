@@ -63,9 +63,21 @@ export async function playMorseCodeControlled(
       groupGain.gain.cancelScheduledValues(now);
       groupGain.gain.setTargetAtTime(0, now, 0.01);
       stopped = true;
-      // Best-effort disconnect later
-      setTimeout(() => { try { groupGain.disconnect(); } catch {} }, 100);
-    } catch {}
+      // Best-effort disconnect later (only if context is still open)
+      const DISCONNECT_DELAY_MS = 100;
+      setTimeout(() => { 
+        try { 
+          if (ctx.state !== 'closed') {
+            groupGain.disconnect(); 
+          }
+        } catch (e) {
+          // Context may already be closed or disconnected
+          console.debug('[morseAudio] Cleanup: AudioContext already closed or disconnected', e);
+        } 
+      }, DISCONNECT_DELAY_MS);
+    } catch (e) {
+      console.error('[morseAudio] Error stopping audio playback', e);
+    }
   };
 
   let currentTime = ctx.currentTime;
@@ -104,9 +116,9 @@ export async function playMorseCodeControlled(
         gainNode.gain.setValueAtTime(targetGain, currentTime + duration - riseTime);
         gainNode.gain.linearRampToValueAtTime(0, currentTime + duration);
       } else {
-        const sampleRate = 256;
-        const attackSteps = Math.max(2, Math.floor(sampleRate * Math.min(riseTime, duration / 2)));
-        const sustainSteps = Math.max(0, Math.floor(sampleRate * Math.max(0, duration - 2 * riseTime)));
+        const ENVELOPE_SAMPLE_RATE = 256;
+        const attackSteps = Math.max(2, Math.floor(ENVELOPE_SAMPLE_RATE * Math.min(riseTime, duration / 2)));
+        const sustainSteps = Math.max(0, Math.floor(ENVELOPE_SAMPLE_RATE * Math.max(0, duration - 2 * riseTime)));
         const decaySteps = attackSteps;
         const totalSteps = attackSteps + sustainSteps + decaySteps;
         const curve = new Float32Array(Math.max(2, totalSteps));
@@ -193,8 +205,11 @@ function writePcm16Wav(samples: Float32Array, sampleRate: number): Blob {
   // PCM samples
   let idx = 44;
   for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(idx, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    const clamped = Math.max(-1, Math.min(1, samples[i]));
+    const pcm = clamped < 0 
+      ? Math.round(clamped * 0x8000) 
+      : Math.round(clamped * 0x7FFF);
+    view.setInt16(idx, pcm, true);
     idx += 2;
   }
 
