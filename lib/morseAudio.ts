@@ -69,6 +69,7 @@ export async function playMorseCodeControlled(
   };
 
   let currentTime = ctx.currentTime;
+  const startTime = ctx.currentTime;
 
   for (let i = 0; i < text.length; i++) {
     if (stopped || shouldStop()) break;
@@ -143,10 +144,18 @@ export async function playMorseCodeControlled(
 
       currentTime += duration + symbolSpace;
     }
-    currentTime += charSpace - symbolSpace;
+    // Add character space after each character
+    // Note: After the last character, we don't add charSpace since group gaps
+    // handle spacing between groups. This ensures accurate timing and proper spacing.
+    const isLastChar = (i === text.length - 1);
+    if (!isLastChar) {
+      currentTime += charSpace - symbolSpace;
+    }
   }
 
-  return { durationSec: currentTime - ctx.currentTime, stop };
+  // Return duration: this is the actual audio duration without any trailing space
+  // The trailing space after the last character is handled by group gaps in the trainer
+  return { durationSec: currentTime - startTime, stop };
 }
 
 
@@ -224,7 +233,11 @@ export function renderMorseToWavBlob(text: string, options: RenderWavOptions): B
       const duration = symbol === '.' ? dotDuration : dashDuration;
       totalSec += duration + symbolSpace;
     }
-    totalSec += charSpace - symbolSpace;
+    // Skip charSpace after the last character to match playMorseCodeControlled behavior
+    const isLastChar = (i === text.length - 1);
+    if (!isLastChar) {
+      totalSec += charSpace - symbolSpace;
+    }
   }
 
   const totalSamples = Math.max(1, Math.ceil(totalSec * sampleRate));
@@ -291,7 +304,11 @@ export function renderMorseToWavBlob(text: string, options: RenderWavOptions): B
       cursor += applySegment(cursor, duration);
       cursor += spaceToSamples(symbolSpace);
     }
-    cursor += spaceToSamples(charSpace - symbolSpace);
+    // Skip charSpace after the last character to match playMorseCodeControlled behavior
+    const isLastChar = (i === text.length - 1);
+    if (!isLastChar) {
+      cursor += spaceToSamples(charSpace - symbolSpace);
+    }
   }
 
   return writePcm16Wav(output, sampleRate);
