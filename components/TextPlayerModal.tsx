@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { TrainingSettings } from './TrainingSettingsForm';
 import { playMorseCodeControlled } from '@/lib/morseAudio';
+import { computeCharPool } from '@/lib/trainingUtils';
+import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 
 interface TextPlayerModalProps {
   open: boolean;
@@ -16,6 +18,7 @@ const TextPlayerModal: React.FC<TextPlayerModalProps> = ({ open, onClose, settin
   const audioContextRef = useRef<AudioContext | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const abortRef = useRef<boolean>(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const toneHz = useMemo(() => {
     const min = Math.max(100, settings.sideToneMin);
@@ -23,6 +26,77 @@ const TextPlayerModal: React.FC<TextPlayerModalProps> = ({ open, onClose, settin
     if (min === max) return min;
     return Math.floor(min + Math.random() * (max - min + 1));
   }, [settings.sideToneMin, settings.sideToneMax]);
+
+  const generateLineOfGroups = (): string => {
+    const charPool = computeCharPool({
+      kochLevel: settings.kochLevel,
+      charSetMode: settings.charSetMode,
+      digitsLevel: settings.digitsLevel,
+      customSet: settings.customSet,
+    });
+    const safePool = Array.isArray(charPool) && charPool.length > 0 
+      ? charPool 
+      : KOCH_SEQUENCE.slice(0, Math.max(1, settings.kochLevel || 1));
+    
+    const numGroups = Math.max(1, settings.numGroups || 5);
+    const groups: string[] = [];
+    
+    for (let i = 0; i < numGroups; i++) {
+      let groupSize: number;
+      if (settings.charsPerGroup && settings.charsPerGroup > 0) {
+        groupSize = settings.charsPerGroup;
+      } else {
+        const minSize = Math.max(1, settings.minGroupSize || 2);
+        const maxSize = Math.max(minSize, settings.maxGroupSize || 3);
+        groupSize = Math.floor(Math.random() * (maxSize - minSize + 1)) + minSize;
+      }
+      
+      let group = '';
+      for (let j = 0; j < groupSize; j++) {
+        group += safePool[Math.floor(Math.random() * safePool.length)];
+      }
+      groups.push(group);
+    }
+    
+    return groups.join(' ');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = text.substring(0, start);
+      const after = text.substring(end);
+      
+      const newLine = generateLineOfGroups();
+      const needsNewlineBefore = before && !before.endsWith('\n');
+      const newText = before + (needsNewlineBefore ? '\n' : '') + newLine + (after ? '\n' + after : '');
+      
+      setText(newText);
+      
+      // Restore cursor position after state update
+      setTimeout(() => {
+        if (textarea) {
+          const newPos = start + newLine.length + (needsNewlineBefore ? 1 : 0) + (after ? 1 : 0);
+          textarea.setSelectionRange(newPos, newPos);
+          textarea.focus();
+        }
+      }, 0);
+    }
+  };
+
+  const handlePrefill = () => {
+    const lines: string[] = [];
+    const numLines = 3;
+    for (let i = 0; i < numLines; i++) {
+      lines.push(generateLineOfGroups());
+    }
+    setText(lines.join('\n'));
+  };
 
   useEffect(() => {
     if (!open) {
@@ -116,9 +190,11 @@ const TextPlayerModal: React.FC<TextPlayerModalProps> = ({ open, onClose, settin
 
         <div className="mt-4 space-y-3">
           <textarea
+            ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Type text here..."
+            onKeyDown={handleKeyDown}
+            placeholder="Type text here... (Press Enter to generate a line of groups)"
             className="w-full h-32 sm:h-36 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
 
@@ -147,6 +223,14 @@ const TextPlayerModal: React.FC<TextPlayerModalProps> = ({ open, onClose, settin
                   ■ Stop
                 </button>
               )}
+              <button
+                onClick={handlePrefill}
+                disabled={isPlaying}
+                className="px-3 py-2 rounded-lg bg-blue-600 text-white border border-blue-700 hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Pre-fill with groups based on current settings"
+              >
+                Pre-fill
+              </button>
               <button
                 onClick={() => setText('')}
                 disabled={isPlaying}
