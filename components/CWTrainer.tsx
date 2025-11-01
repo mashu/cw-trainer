@@ -81,7 +81,26 @@ const CWTrainer: React.FC = () => {
   const [activeMode, setActiveMode] = useState<'group' | 'icr' | 'player'>('group');
   const [groupTab, setGroupTab] = useState<'train' | 'stats'>('train');
   
-  const [icrSettings, setIcrSettings] = useState<{ trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }>({ trialsPerSession: 30, trialDelayMs: 700, vadEnabled: true, vadThreshold: 0.08, vadHoldMs: 60, bucketGreenMaxMs: 300, bucketYellowMaxMs: 800 });
+  interface ICRSettings {
+    trialsPerSession: number;
+    trialDelayMs: number;
+    vadEnabled: boolean;
+    vadThreshold: number;
+    vadHoldMs: number;
+    micDeviceId?: string;
+    bucketGreenMaxMs: number;
+    bucketYellowMaxMs: number;
+  }
+
+  const [icrSettings, setIcrSettings] = useState<ICRSettings>({ 
+    trialsPerSession: 30, 
+    trialDelayMs: 700, 
+    vadEnabled: true, 
+    vadThreshold: 0.08, 
+    vadHoldMs: 60, 
+    bucketGreenMaxMs: 300, 
+    bucketYellowMaxMs: 800 
+  });
 
   // Load & save ICR settings with localStorage for persistence
   useEffect(() => {
@@ -143,11 +162,13 @@ const CWTrainer: React.FC = () => {
   const firebaseRef = useRef<ReturnType<typeof initFirebase> | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const prevUserRef = useRef<User | null>(null);
-  const toastTimerRef = useRef<number | undefined>(undefined);
-  const settingsDebounceTimerRef = useRef<number | undefined>(undefined);
+  // Use number for browser setTimeout return type (NodeJS.Timeout in Node, but we're in browser)
+  type TimeoutId = number;
+  const toastTimerRef = useRef<TimeoutId | undefined>(undefined);
+  const settingsDebounceTimerRef = useRef<TimeoutId | undefined>(undefined);
   const lastSavedSettingsRef = useRef<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const confirmTimeoutRef = useRef<Record<number, number | undefined>>({});
+  const confirmTimeoutRef = useRef<Record<number, TimeoutId | undefined>>({});
 
   const serializeSettings = tsSerialize;
   const normalizeSettings = (raw: any): TrainingSettings => tsNormalize(raw, settings);
@@ -209,11 +230,19 @@ const CWTrainer: React.FC = () => {
 
   useEffect(() => {
     if (toast) {
-      try { window.clearTimeout(toastTimerRef.current); } catch {}
-      toastTimerRef.current = window.setTimeout(() => setToast(null), 4000) as unknown as number;
+      try { 
+        if (toastTimerRef.current) {
+          window.clearTimeout(toastTimerRef.current); 
+        }
+      } catch {}
+      toastTimerRef.current = window.setTimeout(() => setToast(null), 4000) as TimeoutId;
     }
     return () => {
-      try { window.clearTimeout(toastTimerRef.current); } catch {}
+      try { 
+        if (toastTimerRef.current) {
+          window.clearTimeout(toastTimerRef.current); 
+        }
+      } catch {}
     };
   }, [toast]);
 
@@ -324,12 +353,21 @@ const CWTrainer: React.FC = () => {
   useEffect(() => {
     const serialized = serializeSettings(settings);
     if (serialized === lastSavedSettingsRef.current) return;
-    try { if (settingsDebounceTimerRef.current) window.clearTimeout(settingsDebounceTimerRef.current); } catch {}
+    try { 
+      if (settingsDebounceTimerRef.current) {
+        window.clearTimeout(settingsDebounceTimerRef.current); 
+      }
+    } catch {}
+    const AUTO_SAVE_DELAY_MS = 2500;
     settingsDebounceTimerRef.current = window.setTimeout(() => {
       void saveSettings({ source: 'auto' });
-    }, 2500) as unknown as number;
+    }, AUTO_SAVE_DELAY_MS) as TimeoutId;
     return () => {
-      try { if (settingsDebounceTimerRef.current) window.clearTimeout(settingsDebounceTimerRef.current); } catch {}
+      try { 
+        if (settingsDebounceTimerRef.current) {
+          window.clearTimeout(settingsDebounceTimerRef.current); 
+        }
+      } catch {}
     };
   }, [settings, user]);
 
@@ -488,8 +526,9 @@ const CWTrainer: React.FC = () => {
     if (!(trainingAbortRef.current || sessionIdRef.current !== mySession)) {
       dispatchMachine({ type: 'COMPLETE' });
       if (!resultsProcessedRef.current) {
-        const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
-        const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
+        // Use ref as source of truth for async operations
+        const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput)
+          .map(a => (a || '').trim().toUpperCase());
         processResults(answers, groups);
       }
     }
@@ -498,8 +537,9 @@ const CWTrainer: React.FC = () => {
   const submitAnswer = () => {
     trainingAbortRef.current = true;
     setIsTraining(false);
-    const latestUserInput = (userInputRef.current?.length ? userInputRef.current : userInput) || [];
-    const answers = (latestUserInput.length ? latestUserInput : currentInput.split(' ')).map(a => (a || '').trim().toUpperCase());
+    // Use ref as source of truth for async operations
+    const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput)
+      .map(a => (a || '').trim().toUpperCase());
     processResults(answers, activeSentGroupsRef.current);
   };
 
@@ -547,7 +587,7 @@ const CWTrainer: React.FC = () => {
     // Clear any pending confirmation timeout for this index
     if (confirmTimeoutRef.current[index] !== undefined) {
       try {
-        window.clearTimeout(confirmTimeoutRef.current[index]);
+        window.clearTimeout(confirmTimeoutRef.current[index]!);
       } catch {}
       delete confirmTimeoutRef.current[index];
     }
@@ -558,7 +598,7 @@ const CWTrainer: React.FC = () => {
       confirmTimeoutRef.current[index] = window.setTimeout(() => {
         confirmGroupAnswer(index, value);
         delete confirmTimeoutRef.current[index];
-      }, AUTO_CONFIRM_DELAY_MS) as unknown as number;
+      }, AUTO_CONFIRM_DELAY_MS) as TimeoutId;
     }
   };
 
@@ -709,7 +749,7 @@ const CWTrainer: React.FC = () => {
           }
         }}
         icrSettings={icrSettings}
-        setIcrSettings={setIcrSettings as any}
+        setIcrSettings={setIcrSettings}
       />
       
       <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl ring-1 ring-black/5 p-3 sm:p-6 lg:p-8 border border-white/20">

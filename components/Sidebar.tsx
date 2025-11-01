@@ -20,7 +20,7 @@ interface SidebarProps {
   activeMode?: 'group' | 'icr' | 'player';
   onChangeMode?: (mode: 'group' | 'icr' | 'player') => void;
   icrSettings?: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number };
-  setIcrSettings?: (s: any) => void;
+  setIcrSettings?: (s: { trialsPerSession: number; trialDelayMs: number; vadEnabled: boolean; vadThreshold: number; vadHoldMs: number; micDeviceId?: string; bucketGreenMaxMs: number; bucketYellowMaxMs: number }) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, onGoogleLogin, onLogout, onSwitchAccount, authInProgress, settings, setSettings, onSaveSettings, isSavingSettings, activeMode, onChangeMode, icrSettings, setIcrSettings }) => {
