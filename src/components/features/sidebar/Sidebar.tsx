@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';

@@ -38,3 +38,5 @@ export function Providers({ children }: ProvidersProps): JSX.Element {
     </ErrorBoundary>
   );
 }
+
+

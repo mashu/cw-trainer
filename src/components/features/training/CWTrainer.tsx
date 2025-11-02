@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { ICRTrainer } from '@/components/features/icr/ICRTrainer';

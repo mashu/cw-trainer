@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
