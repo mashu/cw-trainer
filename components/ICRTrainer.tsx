@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
 import { playMorseCode as externalPlayMorseCode, ensureContext } from '@/lib/morseAudio';
+import { ICR_POLLING_INTERVAL_MS, ICR_INPUT_POLLING_INTERVAL_MS } from '@/lib/constants';
 import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Scatter, Line, ScatterChart, Legend, Cell } from 'recharts';
 
 type ICRTrial = {
@@ -18,10 +19,10 @@ type ICRTrial = {
 const pickRandomChar = (opts: { kochLevel: number; charSetMode?: 'koch' | 'digits' | 'custom'; digitsLevel?: number; customSet?: string[] }) => {
   const pool = computeCharPool({
     kochLevel: opts.kochLevel,
-    charSetMode: opts.charSetMode as any,
+    charSetMode: opts.charSetMode ?? 'koch',
     digitsLevel: opts.digitsLevel,
     customSet: opts.customSet,
-  } as any);
+  });
   const idx = Math.floor(Math.random() * pool.length);
   return pool[idx];
 };
@@ -258,13 +259,11 @@ const ICRTrainer: React.FC<ICRTrainerProps> = ({ sharedAudio, icrSettings, setIc
             try { inputRef.current?.focus(); } catch {}
             break;
           }
-          const POLLING_INTERVAL_MS = 10;
-          await new Promise(r => setTimeout(r, POLLING_INTERVAL_MS));
+          await new Promise(r => setTimeout(r, ICR_POLLING_INTERVAL_MS));
         }
         // Wait until user types and confirms input for this trial
         while (sessionActiveRef.current && !trialsRef.current[trialIndex]?.typed) {
-          const INPUT_POLLING_INTERVAL_MS = 20;
-          await new Promise(r => setTimeout(r, INPUT_POLLING_INTERVAL_MS));
+          await new Promise(r => setTimeout(r, ICR_INPUT_POLLING_INTERVAL_MS));
         }
         if (!sessionActiveRef.current) break;
         // Delay before next trial

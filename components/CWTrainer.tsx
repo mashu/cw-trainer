@@ -24,6 +24,14 @@ import type { TrainingSettings } from './TrainingSettingsForm';
 import type { SessionResult } from '@/types/session';
 import { loadSessions as spLoadSessions, saveSessions as spSaveSessions, deleteSessionPersisted as spDeleteSession, flushPendingOps as spFlushPendingOps } from '@/lib/sessionPersistence';
 import { serializeSettings as tsSerialize, normalizeSettings as tsNormalize } from '@/lib/trainingSettings';
+import {
+  AUTO_CONFIRM_DELAY_MS,
+  AUTO_SAVE_DELAY_MS,
+  TOAST_DURATION_MS,
+  MAX_KOCH_LEVEL_GUESS,
+  INPUT_FOCUS_DELAY_MS,
+  SLEEP_CANCELABLE_STEP_MS,
+} from '@/lib/constants';
 
 // Training state machine moved to lib/trainingMachine
 
@@ -240,7 +248,7 @@ const CWTrainer: React.FC = () => {
           window.clearTimeout(toastTimerRef.current); 
         }
       } catch {}
-      toastTimerRef.current = window.setTimeout(() => setToast(null), 4000) as TimeoutId;
+      toastTimerRef.current = window.setTimeout(() => setToast(null), TOAST_DURATION_MS) as TimeoutId;
     }
     return () => {
       try { 
@@ -363,7 +371,6 @@ const CWTrainer: React.FC = () => {
         window.clearTimeout(settingsDebounceTimerRef.current); 
       }
     } catch {}
-    const AUTO_SAVE_DELAY_MS = 2500;
     settingsDebounceTimerRef.current = window.setTimeout(() => {
       void saveSettings({ source: 'auto' });
     }, AUTO_SAVE_DELAY_MS) as TimeoutId;
@@ -450,12 +457,11 @@ const CWTrainer: React.FC = () => {
   };
 
   const sleepCancelable = async (ms: number, sessionId: number) => {
-    const stepMs = 50;
     const end = Date.now() + ms;
     while (Date.now() < end) {
       if (trainingAbortRef.current || sessionIdRef.current !== sessionId) return;
       const remaining = end - Date.now();
-      await new Promise(r => setTimeout(r, Math.min(stepMs, Math.max(0, remaining))));
+      await new Promise(r => setTimeout(r, Math.min(SLEEP_CANCELABLE_STEP_MS, Math.max(0, remaining))));
     }
   };
 
@@ -570,7 +576,7 @@ const CWTrainer: React.FC = () => {
       setCurrentFocusedGroup(nextIndex);
       setTimeout(() => {
         inputRefs.current[nextIndex]?.focus();
-      }, 100);
+      }, INPUT_FOCUS_DELAY_MS);
     }
 
     const allAnswered = nextAnswers.length === sentGroups.length && nextAnswers.every((a, i) => (a && a.length === sentGroups[i].length));
@@ -602,7 +608,6 @@ const CWTrainer: React.FC = () => {
     
     if (value.length === sentGroups[index]?.length && value.length > 0 && 
         (settings.interactiveMode || index <= currentGroup)) {
-      const AUTO_CONFIRM_DELAY_MS = 300;
       confirmTimeoutRef.current[index] = window.setTimeout(() => {
         confirmGroupAnswer(index, value);
         delete confirmTimeoutRef.current[index];
@@ -686,8 +691,7 @@ const CWTrainer: React.FC = () => {
           delta = -1;
         }
         if (delta !== 0) {
-          const maxLevelGuess = 60;
-          const nextLevel = Math.max(1, Math.min((settings.kochLevel || 1) + delta, maxLevelGuess));
+            const nextLevel = Math.max(1, Math.min((settings.kochLevel || 1) + delta, MAX_KOCH_LEVEL_GUESS));
           if (nextLevel !== settings.kochLevel) {
             setSettings(prev => ({ ...prev, kochLevel: nextLevel }));
             setToast({ message: `Koch level ${delta > 0 ? 'increased' : 'decreased'} to ${nextLevel} (accuracy ${Math.round(accuracyPct)}%, threshold ${threshold}%)`, type: delta > 0 ? 'success' : 'info' });

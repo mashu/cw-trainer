@@ -131,14 +131,18 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose, user, firebaseReady, o
   // Restart preview on device change (only if preview is active)
   useEffect(() => {
     const currentDeviceId = icrSettings?.micDeviceId;
+    // Only restart if preview is active and device changed
     if (previewActive && currentDeviceId !== prevDeviceIdRef.current) {
       prevDeviceIdRef.current = currentDeviceId;
       void startMicPreview();
     } else if (!previewActive) {
+      // Track device even when preview is off so we can restart with correct device
       prevDeviceIdRef.current = currentDeviceId;
     }
+    // Note: startMicPreview is stable (wrapped in useCallback with proper deps)
+    // We intentionally don't include previewActive in deps to avoid infinite loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [icrSettings?.micDeviceId, previewActive]);
+  }, [icrSettings?.micDeviceId]);
   return (
     <>
       {open && (

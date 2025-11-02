@@ -1,4 +1,13 @@
 import { MORSE_CODE } from './morseConstants';
+import {
+  AUDIO_DISCONNECT_DELAY_MS,
+  ENVELOPE_SAMPLE_RATE,
+  DEFAULT_TARGET_GAIN,
+  DEFAULT_SAMPLE_RATE,
+  MIN_SAMPLE_RATE,
+  PCM_INT16_MIN,
+  PCM_INT16_MAX,
+} from './constants';
 
 export interface AudioSettings {
   // Farnsworth support
@@ -64,7 +73,6 @@ export async function playMorseCodeControlled(
       groupGain.gain.setTargetAtTime(0, now, 0.01);
       stopped = true;
       // Best-effort disconnect later (only if context is still open)
-      const DISCONNECT_DELAY_MS = 100;
       setTimeout(() => { 
         try { 
           if (ctx.state !== 'closed') {
@@ -74,7 +82,7 @@ export async function playMorseCodeControlled(
           // Context may already be closed or disconnected
           console.debug('[morseAudio] Cleanup: AudioContext already closed or disconnected', e);
         } 
-      }, DISCONNECT_DELAY_MS);
+      }, AUDIO_DISCONNECT_DELAY_MS);
     } catch (e) {
       console.error('[morseAudio] Error stopping audio playback', e);
     }
@@ -108,7 +116,7 @@ export async function playMorseCodeControlled(
       oscillator.connect(gainNode);
       gainNode.connect(groupGain);
 
-      const targetGain = 0.3;
+      const targetGain = DEFAULT_TARGET_GAIN;
       const smoothing = Math.max(0, Math.min(1, settings.envelopeSmoothing ?? 0));
       if (smoothing === 0) {
         gainNode.gain.setValueAtTime(0, currentTime);
@@ -116,7 +124,6 @@ export async function playMorseCodeControlled(
         gainNode.gain.setValueAtTime(targetGain, currentTime + duration - riseTime);
         gainNode.gain.linearRampToValueAtTime(0, currentTime + duration);
       } else {
-        const ENVELOPE_SAMPLE_RATE = 256;
         const attackSteps = Math.max(2, Math.floor(ENVELOPE_SAMPLE_RATE * Math.min(riseTime, duration / 2)));
         const sustainSteps = Math.max(0, Math.floor(ENVELOPE_SAMPLE_RATE * Math.max(0, duration - 2 * riseTime)));
         const decaySteps = attackSteps;
@@ -207,8 +214,8 @@ function writePcm16Wav(samples: Float32Array, sampleRate: number): Blob {
   for (let i = 0; i < samples.length; i++) {
     const clamped = Math.max(-1, Math.min(1, samples[i]));
     const pcm = clamped < 0 
-      ? Math.round(clamped * 0x8000) 
-      : Math.round(clamped * 0x7FFF);
+      ? Math.round(clamped * -PCM_INT16_MIN) 
+      : Math.round(clamped * PCM_INT16_MAX);
     view.setInt16(idx, pcm, true);
     idx += 2;
   }
@@ -217,7 +224,7 @@ function writePcm16Wav(samples: Float32Array, sampleRate: number): Blob {
 }
 
 export function renderMorseToWavBlob(text: string, options: RenderWavOptions): Blob {
-  const sampleRate = Math.max(8000, Math.floor(options.sampleRate ?? 44100));
+  const sampleRate = Math.max(MIN_SAMPLE_RATE, Math.floor(options.sampleRate ?? DEFAULT_SAMPLE_RATE));
   const resolvedCharWpm = Math.max(1, options.charWpm ?? 20);
   const resolvedEffWpm = Math.max(1, options.effectiveWpm ?? resolvedCharWpm);
   const extraWordSpaceMultiplier = Math.max(1, options.extraWordSpaceMultiplier ?? 1);
@@ -259,7 +266,7 @@ export function renderMorseToWavBlob(text: string, options: RenderWavOptions): B
   const output = new Float32Array(totalSamples);
 
   // Envelope config consistent with live playback
-  const targetGain = 0.3;
+  const targetGain = DEFAULT_TARGET_GAIN;
   const smoothing = Math.max(0, Math.min(1, options.envelopeSmoothing ?? 0));
 
   // Helper to apply one tone segment
