@@ -94,6 +94,8 @@ export function StatsView({
   const sessionResults = sessions;
   const isLoading = sessionsStatus === 'loading';
   const isIcrLoading = icrSessionsStatus === 'loading';
+  const hasTrainingSessions = sessionResults.length > 0;
+  const hasIcrSessions = icrSessions.length > 0;
 
   const {
     sessionsSorted,
@@ -336,6 +338,28 @@ export function StatsView({
           {icrSessionsError && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
               {icrSessionsError}
+            </div>
+          )}
+
+          {!isLoading && !hasTrainingSessions && (
+            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-800">No sessions yet</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                Start a training run to populate charts and accuracy insights. Your sessions are
+                saved locally, so feel free to experiment and come back later.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700"
+                >
+                  Go to Trainer
+                </button>
+                <span className="text-xs text-slate-500 self-center">
+                  Tip: sessions sync automatically after each run.
+                </span>
+              </div>
             </div>
           )}
 
@@ -709,7 +733,7 @@ export function StatsView({
               <button
                 onClick={handleClearIcrSessions}
                 className="self-start sm:self-auto px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled={icrSessionsSaving || icrSessions.length === 0}
+                disabled={icrSessionsSaving || !hasIcrSessions}
               >
                 Clear history
               </button>
@@ -721,14 +745,14 @@ export function StatsView({
               </div>
             )}
 
-            {icrSessionsStatus !== 'loading' && icrSessions.length === 0 && (
+            {icrSessionsStatus !== 'loading' && !hasIcrSessions && (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
                 No ICR sessions recorded yet. Run the ICR trainer to see detailed reaction and
                 accuracy analytics here.
               </div>
             )}
 
-            {icrSessions.length > 0 && (
+            {hasIcrSessions && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {icrSessions
                   .slice()

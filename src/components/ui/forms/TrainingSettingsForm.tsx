@@ -161,9 +161,12 @@ export function TrainingSettingsForm({
                       min="1"
                       max={KOCH_SEQUENCE.length}
                       value={settings.kochLevel}
-                      onChange={(event) =>
-                        setSettings({ ...settings, kochLevel: parseInt(event.target.value, 10) })
-                      }
+                      onChange={(event) => {
+                        const numValue = parseInt(event.target.value, 10);
+                        if (!isNaN(numValue) && numValue >= 1 && numValue <= KOCH_SEQUENCE.length) {
+                          setSettings({ ...settings, kochLevel: numValue });
+                        }
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded"
                     />
                   </div>
@@ -276,10 +279,14 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
+                min={1}
                 value={settings.numGroups}
-                onChange={(event) =>
-                  setSettings({ ...settings, numGroups: parseInt(event.target.value, 10) })
-                }
+                onChange={(event) => {
+                  const numValue = parseInt(event.target.value, 10);
+                  if (!isNaN(numValue) && numValue > 0) {
+                    setSettings({ ...settings, numGroups: numValue });
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
             </div>
@@ -289,15 +296,18 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
-                min={1}
+                min={0.1}
+                step={0.1}
                 value={settings.charWpm}
                 onChange={(event) => {
-                  const value = parseInt(event.target.value || '1', 10);
-                  setSettings({
-                    ...settings,
-                    charWpm: value,
-                    effectiveWpm: settings.linkSpeeds ? value : settings.effectiveWpm,
-                  });
+                  const numValue = parseFloat(event.target.value);
+                  if (!isNaN(numValue) && numValue > 0) {
+                    setSettings({
+                      ...settings,
+                      charWpm: numValue,
+                      effectiveWpm: settings.linkSpeeds ? numValue : settings.effectiveWpm,
+                    });
+                  }
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
@@ -308,15 +318,19 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
-                min={1}
+                min={0.1}
+                step={0.1}
                 value={settings.effectiveWpm}
                 disabled={Boolean(settings.linkSpeeds)}
-                onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    effectiveWpm: parseInt(event.target.value || '1', 10),
-                  })
-                }
+                onChange={(event) => {
+                  const numValue = parseFloat(event.target.value);
+                  if (!isNaN(numValue) && numValue > 0) {
+                    setSettings({
+                      ...settings,
+                      effectiveWpm: numValue,
+                    });
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100"
               />
               <div className="mt-1 text-xs text-slate-600 flex items-center gap-2">
@@ -341,15 +355,18 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
-                min={1}
+                min={0.1}
                 step={0.1}
-                value={Math.max(1, settings.extraWordSpaceMultiplier ?? 1)}
-                onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    extraWordSpaceMultiplier: Math.max(1, parseFloat(event.target.value || '1')),
-                  })
-                }
+                value={settings.extraWordSpaceMultiplier ?? 1}
+                onChange={(event) => {
+                  const numValue = parseFloat(event.target.value);
+                  if (!isNaN(numValue) && numValue > 0) {
+                    setSettings({
+                      ...settings,
+                      extraWordSpaceMultiplier: numValue,
+                    });
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
             </div>
@@ -359,11 +376,15 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
-                step="0.5"
+                min={0}
+                step={0.1}
                 value={settings.groupTimeout}
-                onChange={(event) =>
-                  setSettings({ ...settings, groupTimeout: parseFloat(event.target.value) })
-                }
+                onChange={(event) => {
+                  const numValue = parseFloat(event.target.value);
+                  if (!isNaN(numValue) && numValue >= 0) {
+                    setSettings({ ...settings, groupTimeout: numValue });
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
             </div>
@@ -373,10 +394,14 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
+                min={1}
                 value={settings.minGroupSize}
-                onChange={(event) =>
-                  setSettings({ ...settings, minGroupSize: parseInt(event.target.value, 10) })
-                }
+                onChange={(event) => {
+                  const numValue = parseInt(event.target.value, 10);
+                  if (!isNaN(numValue) && numValue > 0) {
+                    setSettings({ ...settings, minGroupSize: numValue });
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
             </div>
@@ -386,10 +411,14 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
+                min={1}
                 value={settings.maxGroupSize}
-                onChange={(event) =>
-                  setSettings({ ...settings, maxGroupSize: parseInt(event.target.value, 10) })
-                }
+                onChange={(event) => {
+                  const numValue = parseInt(event.target.value, 10);
+                  if (!isNaN(numValue) && numValue > 0) {
+                    setSettings({ ...settings, maxGroupSize: numValue });
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
             </div>
@@ -435,16 +464,16 @@ export function TrainingSettingsForm({
                   min={0}
                   max={100}
                   step={1}
-                  value={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      autoAdjustThreshold: Math.max(
-                        0,
-                        Math.min(100, parseInt(event.target.value || '0', 10)),
-                      ),
-                    })
-                  }
+                  value={settings.autoAdjustThreshold ?? 90}
+                  onChange={(event) => {
+                    const numValue = parseInt(event.target.value, 10);
+                    if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                      setSettings({
+                        ...settings,
+                        autoAdjustThreshold: numValue,
+                      });
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -505,14 +534,17 @@ export function TrainingSettingsForm({
                   type="number"
                   min={100}
                   max={2000}
-                  step={50}
+                  step={1}
                   value={settings.sideToneMin}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      sideToneMin: parseInt(event.target.value || '600', 10),
-                    })
-                  }
+                  onChange={(event) => {
+                    const numValue = parseInt(event.target.value, 10);
+                    if (!isNaN(numValue) && numValue >= 100 && numValue <= 2000) {
+                      setSettings({
+                        ...settings,
+                        sideToneMin: numValue,
+                      });
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 />
               </div>
@@ -524,14 +556,17 @@ export function TrainingSettingsForm({
                   type="number"
                   min={100}
                   max={2000}
-                  step={50}
+                  step={1}
                   value={settings.sideToneMax}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      sideToneMax: parseInt(event.target.value || '600', 10),
-                    })
-                  }
+                  onChange={(event) => {
+                    const numValue = parseInt(event.target.value, 10);
+                    if (!isNaN(numValue) && numValue >= 100 && numValue <= 2000) {
+                      setSettings({
+                        ...settings,
+                        sideToneMax: numValue,
+                      });
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 />
                 <p className="text-xs text-gray-500 mt-1">Equal min/max = fixed tone.</p>
