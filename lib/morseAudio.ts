@@ -1,4 +1,3 @@
-import { MORSE_CODE } from './morseConstants';
 import {
   AUDIO_DISCONNECT_DELAY_MS,
   ENVELOPE_SAMPLE_RATE,
@@ -8,6 +7,7 @@ import {
   PCM_INT16_MIN,
   PCM_INT16_MAX,
 } from './constants';
+import { MORSE_CODE } from './morseConstants';
 
 export interface AudioSettings {
   // Farnsworth support
@@ -20,9 +20,13 @@ export interface AudioSettings {
   envelopeSmoothing?: number; // 0..1
 }
 
-export const ensureContext = async (ctx: AudioContext) => {
+export const ensureContext = async (ctx: AudioContext): Promise<void> => {
   if (ctx.state === 'suspended') {
-    try { await ctx.resume(); } catch {}
+    try {
+      await ctx.resume();
+    } catch {
+      // Ignore resume errors
+    }
   }
 };
 

@@ -1,8 +1,8 @@
-import type { SessionResult, AppUser } from '@/types';
 
 import type { SessionRepository, SessionRepositoryContext } from '@/lib/db/repositories';
 import { SessionService } from '@/lib/services';
 import { sessionResultSchema, type SessionResultInput } from '@/lib/validators';
+import type { SessionResult, AppUser } from '@/types';
 
 class InMemorySessionRepository implements SessionRepository {
   private sessions: SessionResult[] = [];

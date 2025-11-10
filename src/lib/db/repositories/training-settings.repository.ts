@@ -1,4 +1,5 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import type { getFirestore } from 'firebase/firestore';
 
 import type { FirebaseServicesLite } from '@/lib/sessionPersistence';
 import {
@@ -81,7 +82,7 @@ const toFirebaseUser = (
   };
 };
 
-const resolveFirestore = (services?: FirebaseServicesLite): any => {
+const resolveFirestore = (services?: FirebaseServicesLite): ReturnType<typeof getFirestore> | null => {
   if (!services?.db) {
     return null;
   }

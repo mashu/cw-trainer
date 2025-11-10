@@ -5,7 +5,7 @@ export interface SessionResultLite {
   letterAccuracy: Record<string, { correct: number; total: number }>;
 }
 
-export function getDailyStats(sessionResults: SessionResultLite[]) {
+export function getDailyStats(sessionResults: SessionResultLite[]): Array<{ date: string; average: number; sessions: number[] }> {
   const dailyData: Record<string, number[]> = {};
   sessionResults.forEach(result => {
     const date = result.date;
@@ -29,7 +29,7 @@ export function getDailyStats(sessionResults: SessionResultLite[]) {
   });
 }
 
-export function getLetterStats(sessionResults: SessionResultLite[]) {
+export function getLetterStats(sessionResults: SessionResultLite[]): Array<{ letter: string; accuracy: number; total: number }> {
   const letterStats: Record<string, { correct: number; total: number }> = {};
   sessionResults.forEach(result => {
     Object.keys(result.letterAccuracy).forEach(letter => {

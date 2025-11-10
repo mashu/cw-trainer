@@ -19,7 +19,6 @@ import {
 import { useIcrAnalytics } from '@/hooks/useIcrAnalytics';
 import { useIcrSessionsActions, useIcrSessionsState } from '@/hooks/useIcrSessions';
 import { KOCH_SEQUENCE } from '@/lib/morseConstants';
-import type { IcrSessionResult } from '@/types';
 
 interface ICRStatsProps {
   onBack: () => void;

@@ -96,7 +96,7 @@ export function alignGroup(sent: string, received: string): GroupAlignmentPair[]
       if (current === undefined) break;
       const substitution = (prevRow[j - 1] ?? 0) + matchCost;
       const deletion = (prevRow[j] ?? 0) + 1;
-      const insertion = (row[j - 1] ?? 0) + 1;
+      const _insertion = (row[j - 1] ?? 0) + 1;
       
       if (current === substitution) {
         // Match or substitution

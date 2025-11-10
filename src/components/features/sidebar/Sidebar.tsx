@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import React, { useState, type Dispatch, type SetStateAction } from 'react';
 
+import { ICRSettingsForm } from '@/components/ui/forms/ICRSettingsForm';
 import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingSettingsForm } from '@/components/ui/forms/TrainingSettingsForm';
-import { ICRSettingsForm } from '@/components/ui/forms/ICRSettingsForm';
 import type { AuthUserSummary } from '@/hooks/useAuth';
 import type { IcrSettings } from '@/types';
 

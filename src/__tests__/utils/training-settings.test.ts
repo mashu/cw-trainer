@@ -1,12 +1,12 @@
 import { describe, expect, it } from '@jest/globals';
 
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
-import type { TrainingSettings } from '@/types';
 import {
   normalizeTrainingSettings,
   serializeTrainingSettings,
   hasSettingsChanged,
 } from '@/lib/utils/training-settings';
+import type { TrainingSettings } from '@/types';
 
 describe('normalizeTrainingSettings', () => {
   it('returns fallback for null input', () => {

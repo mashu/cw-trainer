@@ -1,12 +1,11 @@
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
-import type { TrainingSettings } from '@/types';
-
 import type {
   TrainingSettingsRepository,
   TrainingSettingsRepositoryContext,
 } from '@/lib/db/repositories';
 import { TrainingSettingsService } from '@/lib/services';
 import type { TrainingSettingsInput } from '@/lib/validators';
+import type { TrainingSettings } from '@/types';
 
 class InMemoryTrainingSettingsRepository implements TrainingSettingsRepository {
   private storage: Map<string, TrainingSettings> = new Map();

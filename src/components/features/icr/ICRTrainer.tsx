@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 
 import { ICRStats } from '@/components/features/stats/ICRStats';
+import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { useIcrSessionsActions } from '@/hooks/useIcrSessions';
 // Removed polling interval imports - now using event-driven approach
 import { ensureContext, playMorseCode as externalPlayMorseCode } from '@/lib/morseAudio';
@@ -24,7 +25,6 @@ import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
 import { formatSession } from '@/lib/utils/icrSessionFormatter';
 import type { IcrSettings } from '@/types';
-import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 
 type ICRTrial = {
   id: string; // unique ID for event-driven identification
@@ -461,13 +461,13 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
             }
             
             // Set up resolver for stop event - keyed by trial ID
-            stopEventResolversRef.current[trialId] = (stopAt: number) => {
+            stopEventResolversRef.current[trialId] = (stopAt: number): void => {
               delete stopEventResolversRef.current[trialId];
               resolve({ stopAt, typed: false });
             };
             
             // Set up resolver for input event - keyed by trial ID
-            inputEventResolversRef.current[trialId] = () => {
+            inputEventResolversRef.current[trialId] = (): void => {
               delete inputEventResolversRef.current[trialId];
               resolve({ typed: true });
             };
@@ -521,7 +521,7 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
             }
             
             // Set up resolver for input event - keyed by trial ID
-            inputEventResolversRef.current[trialId] = () => {
+            inputEventResolversRef.current[trialId] = (): void => {
               delete inputEventResolversRef.current[trialId];
               resolve();
             };

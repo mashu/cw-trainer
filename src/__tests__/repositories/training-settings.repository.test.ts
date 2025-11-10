@@ -1,9 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
-import type { TrainingSettings, AppUser } from '@/types';
 import { FirebaseTrainingSettingsRepository } from '@/lib/db/repositories/training-settings.repository';
 import type { TrainingSettingsRepositoryContext } from '@/lib/db/repositories/training-settings.repository';
+import type { TrainingSettings, AppUser } from '@/types';
 
 describe('FirebaseTrainingSettingsRepository', () => {
   let repository: FirebaseTrainingSettingsRepository;
@@ -84,7 +84,7 @@ describe('FirebaseTrainingSettingsRepository', () => {
 
     it('handles localStorage read errors gracefully', async () => {
       const originalGetItem = global.localStorage.getItem;
-      global.localStorage.getItem = () => {
+      global.localStorage.getItem = (): string | null => {
         throw new Error('Storage error');
       };
 
@@ -121,7 +121,7 @@ describe('FirebaseTrainingSettingsRepository', () => {
 
     it('handles localStorage write failures gracefully', async () => {
       const originalSetItem = global.localStorage.setItem;
-      global.localStorage.setItem = () => {
+      global.localStorage.setItem = (): void => {
         throw new Error('Quota exceeded');
       };
 
@@ -155,7 +155,7 @@ describe('FirebaseTrainingSettingsRepository', () => {
 
     it('handles localStorage remove errors gracefully', async () => {
       const originalRemoveItem = global.localStorage.removeItem;
-      global.localStorage.removeItem = () => {
+      global.localStorage.removeItem = (): void => {
         throw new Error('Remove error');
       };
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 
-import type { IcrSessionResult } from '@/types';
 import { IcrSessionService } from '@/lib/services/icr-session.service';
+import type { IcrSessionResult } from '@/types';
 
 describe('IcrSessionService', () => {
   let service: IcrSessionService;
@@ -147,12 +147,12 @@ describe('IcrSessionService', () => {
     it('handles localStorage write failures gracefully', async () => {
       const originalSetItem = global.localStorage.setItem;
       let setItemCallCount = 0;
-      global.localStorage.setItem = () => {
+      global.localStorage.setItem = (): void => {
         setItemCallCount++;
         if (setItemCallCount === 1) {
           throw new Error('Quota exceeded');
         }
-        originalSetItem.apply(global.localStorage, arguments as any);
+        originalSetItem.apply(global.localStorage, arguments as unknown as Parameters<typeof global.localStorage.setItem>);
       };
 
       const session = buildSession(1000);

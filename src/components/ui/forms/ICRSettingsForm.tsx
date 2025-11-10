@@ -113,14 +113,14 @@ export function ICRSettingsForm({
   useEffect(() => {
     void enumerateAudioInputs();
     navigator.mediaDevices.addEventListener('devicechange', enumerateAudioInputs);
-    return () => {
+    return (): void => {
       navigator.mediaDevices.removeEventListener('devicechange', enumerateAudioInputs);
       stopMicPreview();
     };
   }, []);
 
   useEffect(() => {
-    return () => {
+    return (): void => {
       stopMicPreview();
     };
   }, []);

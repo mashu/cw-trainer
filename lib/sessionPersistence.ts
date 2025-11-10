@@ -1,11 +1,14 @@
-import { collection, deleteDoc, doc, getDocs, orderBy, query, setDoc } from 'firebase/firestore';
-import * as Firestore from 'firebase/firestore';
-import type { SessionResult } from '@/src/types/domain';
-import { getDailyStats, getLetterStats } from '@/lib/stats';
-import { calculateAlphabetSize, calculateEffectiveAlphabetSize, calculateTotalChars, computeAverageResponseMs, computeSessionScore, derivePublicIdFromUid } from '@/lib/score';
-import { calculateGroupLetterAccuracy } from '@/lib/groupAlignment';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { getAuth } from 'firebase/auth';
+import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, setDoc } from 'firebase/firestore';
+import type { getFirestore } from 'firebase/firestore';
 
-export type FirebaseServicesLite = { db: any; auth: any } | null;
+import { calculateGroupLetterAccuracy } from '@/lib/groupAlignment';
+import { calculateAlphabetSize, calculateEffectiveAlphabetSize, calculateTotalChars, computeAverageResponseMs, computeSessionScore, derivePublicIdFromUid } from '@/lib/score';
+import { getDailyStats, getLetterStats } from '@/lib/stats';
+import type { SessionResult } from '@/src/types/domain';
+
+export type FirebaseServicesLite = { db: ReturnType<typeof getFirestore> | null; auth: ReturnType<typeof getAuth> | null } | null;
 
 type PendingOps = { deletions: number[]; deletionIds?: Record<string, string>; needsFullSync?: boolean };
 
@@ -34,7 +37,7 @@ const readPendingOps = (user: { email?: string } | null): PendingOps => {
   }
 };
 
-const writePendingOps = (user: { email?: string } | null, ops: PendingOps) => {
+const writePendingOps = (user: { email?: string } | null, ops: PendingOps): void => {
   try {
     const dedupedDeletions = Array.from(new Set(ops.deletions)) as number[];
     const cleanedDeletionIds: Record<string, string> = {};
@@ -51,50 +54,53 @@ const writePendingOps = (user: { email?: string } | null, ops: PendingOps) => {
   } catch {}
 };
 
-export const normalizeSession = (raw: any, opts?: { docId?: string }): SessionResult => {
-  const groupsArr = Array.isArray(raw?.groups) ? raw.groups : [];
-  const groups = groupsArr.map((g: any) => {
-    const sent = String(g?.sent || '').toUpperCase();
-    const received = String(g?.received || '').toUpperCase();
-    const correct = typeof g?.correct === 'boolean' ? g.correct : (sent.length > 0 && sent === received);
+export const normalizeSession = (raw: unknown, opts?: { docId?: string }): SessionResult => {
+  const rawObj = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const groupsArr = Array.isArray(rawObj?.['groups']) ? rawObj['groups'] : [];
+  const groups = groupsArr.map((g: unknown) => {
+    const groupObj = g && typeof g === 'object' ? g as Record<string, unknown> : {};
+    const sent = String(groupObj?.['sent'] || '').toUpperCase();
+    const received = String(groupObj?.['received'] || '').toUpperCase();
+    const correct = typeof groupObj?.['correct'] === 'boolean' ? groupObj['correct'] : (sent.length > 0 && sent === received);
     return { sent, received, correct };
   });
   const groupTimings = (() => {
-    if (Array.isArray(raw?.groupTimings)) {
-      return raw.groupTimings.map((t: any) => ({ timeToCompleteMs: Math.max(0, Number(t?.timeToCompleteMs) || 0) }));
+    if (Array.isArray(rawObj['groupTimings'])) {
+      return (rawObj['groupTimings'] as unknown[]).map((t: any) => ({ timeToCompleteMs: Math.max(0, Number(t?.timeToCompleteMs) || 0) }));
     }
     return groups.map(() => ({ timeToCompleteMs: 0 }));
   })();
   const safeAccuracy = (() => {
-    if (typeof raw?.accuracy === 'number' && isFinite(raw.accuracy)) return raw.accuracy;
+    if (typeof rawObj['accuracy'] === 'number' && isFinite(rawObj['accuracy'] as number)) return rawObj['accuracy'] as number;
     const total = groups.length;
     return total > 0 ? groups.filter((g: any) => g.correct).length / total : 0;
   })();
   const letterAccuracy = (() => {
-    if (raw?.letterAccuracy && typeof raw.letterAccuracy === 'object') return raw.letterAccuracy as Record<string, { correct: number; total: number }>;
+    if (rawObj['letterAccuracy'] && typeof rawObj['letterAccuracy'] === 'object') return rawObj['letterAccuracy'] as Record<string, { correct: number; total: number }>;
     // Use group alignment for accurate letter-level accuracy calculation
     return calculateGroupLetterAccuracy(groups);
   })();
-  const ts = typeof raw?.timestamp === 'number'
-    ? raw.timestamp
+  const ts = typeof rawObj['timestamp'] === 'number'
+    ? rawObj['timestamp'] as number
     : (opts?.docId && /^\d+$/.test(opts.docId) ? Number(opts.docId) : Date.now());
-  const date = raw?.date || new Date(ts).toISOString().split('T')[0];
-  const startedAt = typeof raw?.startedAt === 'number' ? raw.startedAt : ts;
-  const finishedAt = typeof raw?.finishedAt === 'number' ? raw.finishedAt : ts;
-  const alphabetSize = (typeof raw?.alphabetSize === 'number' && raw.alphabetSize > 0)
-    ? Math.floor(raw.alphabetSize)
+  const dateValue = rawObj['date'];
+  const date: string = typeof dateValue === 'string' ? dateValue : (new Date(ts).toISOString().split('T')[0] ?? '1970-01-01');
+  const startedAt = typeof rawObj['startedAt'] === 'number' ? rawObj['startedAt'] as number : ts;
+  const finishedAt = typeof rawObj['finishedAt'] === 'number' ? rawObj['finishedAt'] as number : ts;
+  const alphabetSize = (typeof rawObj['alphabetSize'] === 'number' && (rawObj['alphabetSize'] as number) > 0)
+    ? Math.floor(rawObj['alphabetSize'] as number)
     : calculateAlphabetSize(groups);
-  const effectiveAlphabetSize = (typeof raw?.effectiveAlphabetSize === 'number' && raw.effectiveAlphabetSize > 0)
-    ? Number(raw.effectiveAlphabetSize)
+  const effectiveAlphabetSize = (typeof rawObj['effectiveAlphabetSize'] === 'number' && (rawObj['effectiveAlphabetSize'] as number) > 0)
+    ? Number(rawObj['effectiveAlphabetSize'])
     : calculateEffectiveAlphabetSize(groups, { applyMillerMadow: true });
-  const totalChars = (typeof raw?.totalChars === 'number' && raw.totalChars > 0)
-    ? Math.floor(raw.totalChars)
+  const totalChars = (typeof rawObj['totalChars'] === 'number' && (rawObj['totalChars'] as number) > 0)
+    ? Math.floor(rawObj['totalChars'] as number)
     : calculateTotalChars(groups);
-  const avgResponseMs = (typeof raw?.avgResponseMs === 'number' && isFinite(raw.avgResponseMs) && raw.avgResponseMs > 0)
-    ? Number(raw.avgResponseMs)
+  const avgResponseMs = (typeof rawObj['avgResponseMs'] === 'number' && isFinite(rawObj['avgResponseMs'] as number) && (rawObj['avgResponseMs'] as number) > 0)
+    ? Number(rawObj['avgResponseMs'])
     : computeAverageResponseMs(groupTimings);
-  const score = (typeof raw?.score === 'number' && isFinite(raw.score) && raw.score > 0)
-    ? Math.round(raw.score * 100) / 100
+  const score = (typeof rawObj['score'] === 'number' && isFinite(rawObj['score'] as number) && (rawObj['score'] as number) > 0)
+    ? Math.round((rawObj['score'] as number) * 100) / 100
     : computeSessionScore({ effectiveAlphabetSize, alphabetSize, accuracy: safeAccuracy, avgResponseMs, totalChars });
   const result: SessionResult = { 
     date, 
@@ -119,7 +125,7 @@ async function ensurePublicId(services: FirebaseServicesLite, user: { uid: strin
   if (!(services && user && user.uid)) return null;
   try {
     const profileDocRef = doc(services.db, 'users', user.uid, 'meta', 'profile');
-    const snap = await Firestore.getDoc(profileDocRef as any);
+    const snap = await getDoc(profileDocRef);
     const current = snap.exists() ? (snap.data() as any) : null;
     const existing = (current && typeof current.publicId === 'number') ? current.publicId : null;
     if (existing) return existing;
@@ -141,13 +147,13 @@ async function writeLeaderboardForSessions(
   results: SessionResult[]
 ): Promise<void> {
   if (!(services && user && user.uid)) return;
-  const publicId = await ensurePublicId(services, user);
+      const publicId = user?.uid ? await ensurePublicId(services, { uid: user.uid }) : null;
   const now = Date.now();
   await Promise.all(results.map(async (r) => {
     // Nest under user scope for rules friendliness; one doc per session timestamp
     const ref = doc(services.db, 'users', user.uid, 'leaderboard', String(r.timestamp));
     try {
-      const ex = await Firestore.getDoc(ref as any);
+      const ex = await getDoc(ref as any);
       if (ex.exists()) return; // immutable: do not overwrite
     } catch {}
     const alphabetSize = (typeof r.alphabetSize === 'number' && r.alphabetSize > 0) ? r.alphabetSize : calculateAlphabetSize(r.groups || []);
@@ -179,7 +185,7 @@ async function writeLeaderboardForSessions(
   }));
 }
 
-export async function loadSessions(services: FirebaseServicesLite, user: any): Promise<SessionResult[]> {
+export async function loadSessions(services: FirebaseServicesLite, user: { uid?: string; email?: string } | null): Promise<SessionResult[]> {
   let cloudLoaded: SessionResult[] | null = null;
   if (services && user && user.uid) {
     try {
@@ -222,7 +228,7 @@ export async function loadSessions(services: FirebaseServicesLite, user: any): P
   return [];
 }
 
-export async function saveSessions(services: FirebaseServicesLite, user: any, results: SessionResult[]) {
+export async function saveSessions(services: FirebaseServicesLite, user: { uid?: string; email?: string } | null, results: SessionResult[]): Promise<void> {
   try {
     localStorage.setItem(localKeyForResults(user), JSON.stringify(results));
   } catch {}
@@ -240,7 +246,7 @@ export async function saveSessions(services: FirebaseServicesLite, user: any, re
         setDoc(doc(services.db, 'users', user.uid, 'stats', 'letters'), { items: letters, updatedAt: Date.now() }),
       ]);
       // Write immutable leaderboard entries (one per session). Skips existing docs.
-      await writeLeaderboardForSessions(services, user, results);
+      await writeLeaderboardForSessions(services, { uid: user.uid }, results);
     } catch (e) {
       console.warn('Failed to write to Firestore; local copy saved.', e);
       const ops = readPendingOps(user);
@@ -250,7 +256,7 @@ export async function saveSessions(services: FirebaseServicesLite, user: any, re
   }
 }
 
-export async function deleteSessionPersisted(services: FirebaseServicesLite, user: any, timestamp: number, currentResults: SessionResult[]) {
+export async function deleteSessionPersisted(services: FirebaseServicesLite, user: { uid?: string; email?: string } | null, timestamp: number, currentResults: SessionResult[]): Promise<SessionResult[]> {
   const filtered = currentResults.filter(r => r.timestamp !== timestamp);
   try { localStorage.setItem(localKeyForResults(user), JSON.stringify(filtered)); } catch {}
   if (services && user && user.uid) {
@@ -276,7 +282,7 @@ export async function deleteSessionPersisted(services: FirebaseServicesLite, use
   return filtered;
 }
 
-export async function flushPendingOps(services: FirebaseServicesLite, user: any, currentResults: SessionResult[]) {
+export async function flushPendingOps(services: FirebaseServicesLite, user: { uid?: string; email?: string } | null, currentResults: SessionResult[]): Promise<void> {
   if (!(services && user && user.uid)) return;
   const ops = readPendingOps(user);
   if (!ops.needsFullSync && (ops.deletions || []).length === 0) return;
@@ -313,7 +319,9 @@ export async function flushPendingOps(services: FirebaseServicesLite, user: any,
       setDoc(doc(services.db, 'users', user.uid, 'stats', 'letters'), { items: letters, updatedAt: Date.now() }),
     ]);
     // Also ensure leaderboard entries exist for all sessions (idempotent; skips existing)
-    await writeLeaderboardForSessions(services, user, currentResults);
+    if (user?.uid) {
+      await writeLeaderboardForSessions(services, { uid: user.uid }, currentResults);
+    }
     ops.needsFullSync = false;
   } catch (e) {
     console.warn('Pending ops flush failed; will retry later.', e);

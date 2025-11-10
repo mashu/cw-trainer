@@ -477,7 +477,7 @@ export function CWTrainer(): JSX.Element {
           }
           
           // Store resolver for immediate resolution when user confirms (event-driven, no polling!)
-          resolver = (result: { timedOut: boolean }) => {
+          resolver = (result: { timedOut: boolean }): void => {
             if (timeoutId !== undefined) {
               try {
                 window.clearTimeout(timeoutId);
@@ -880,7 +880,7 @@ export function CWTrainer(): JSX.Element {
                     Last Accuracy
                   </p>
                   <p className="text-3xl font-extrabold text-emerald-800 mt-1">
-                    {(() => {
+                    {((): number => {
                       const lastSession = sessions[sessions.length - 1];
                       return lastSession && Number.isFinite(lastSession.accuracy)
                         ? Math.round(lastSession.accuracy * 100)
