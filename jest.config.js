@@ -11,6 +11,7 @@ const customJestConfig = {
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': ['<rootDir>/src/$1', '<rootDir>/$1'],
+    '\\.css$': 'identity-obj-proxy',
   },
   collectCoverageFrom: [
     'src/components/**/*.{ts,tsx}',

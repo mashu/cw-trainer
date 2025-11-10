@@ -1,0 +1,140 @@
+import { renderHook } from '@testing-library/react';
+
+import { useIcrSessionsState, useIcrSessionsActions } from '@/hooks/useIcrSessions';
+import { AppStoreProvider } from '@/store/providers/app-store-provider';
+import type { IcrSessionResult } from '@/types';
+
+import type { IcrSessionService } from '@/lib/services/icr-session.service';
+import type { SessionService } from '@/lib/services/session.service';
+import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
+
+const mockTrainingSettingsService: TrainingSettingsService = {
+  load: jest.fn(),
+  save: jest.fn(),
+  reset: jest.fn(),
+};
+
+const mockSessionService: SessionService = {
+  listSessions: jest.fn(),
+  upsertSession: jest.fn(),
+  deleteSession: jest.fn(),
+  syncPendingSessions: jest.fn(),
+};
+
+const mockIcrSessionService: IcrSessionService = {
+  listSessions: jest.fn(),
+  saveSession: jest.fn(),
+  clearSessions: jest.fn(),
+  deleteSession: jest.fn(),
+};
+
+const createWrapper = () => {
+  return ({ children }: { children: React.ReactNode }) => (
+    <AppStoreProvider
+      user={null}
+      sessionService={mockSessionService}
+      trainingSettingsService={mockTrainingSettingsService}
+      icrSessionService={mockIcrSessionService}
+    >
+      {children}
+    </AppStoreProvider>
+  );
+};
+
+const createMockIcrSession = (overrides?: Partial<IcrSessionResult>): IcrSessionResult => ({
+  timestamp: Date.now(),
+  trials: [],
+  accuracyPercent: 100,
+  averageReactionMs: 500,
+  perLetter: {},
+  ...overrides,
+});
+
+describe('useIcrSessionsState', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should return ICR sessions state', () => {
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useIcrSessionsState(), { wrapper });
+
+    expect(result.current).toHaveProperty('icrSessions');
+    expect(result.current).toHaveProperty('icrSessionsStatus');
+    expect(result.current).toHaveProperty('icrSessionsSaving');
+  });
+
+  it('should return empty sessions array initially', () => {
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useIcrSessionsState(), { wrapper });
+
+    expect(result.current.icrSessions).toEqual([]);
+    expect(result.current.icrSessionsSaving).toBe(false);
+  });
+});
+
+describe('useIcrSessionsActions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should return all action functions', () => {
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useIcrSessionsActions(), { wrapper });
+
+    expect(result.current).toHaveProperty('loadIcrSessions');
+    expect(result.current).toHaveProperty('saveIcrSession');
+    expect(result.current).toHaveProperty('clearIcrSessions');
+    expect(result.current).toHaveProperty('deleteIcrSession');
+  });
+
+  it('should call loadIcrSessions', async () => {
+    const mockSessions = [createMockIcrSession()];
+    (mockIcrSessionService.listSessions as jest.Mock).mockResolvedValue(mockSessions);
+
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useIcrSessionsActions(), { wrapper });
+
+    await result.current.loadIcrSessions();
+
+    expect(mockIcrSessionService.listSessions).toHaveBeenCalled();
+  });
+
+  it('should call saveIcrSession', async () => {
+    const mockSession = createMockIcrSession();
+    const mockSessions = [mockSession];
+    (mockIcrSessionService.saveSession as jest.Mock).mockResolvedValue(mockSessions);
+
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useIcrSessionsActions(), { wrapper });
+
+    await result.current.saveIcrSession(mockSession);
+
+    expect(mockIcrSessionService.saveSession).toHaveBeenCalledWith(mockSession);
+  });
+
+  it('should call clearIcrSessions', async () => {
+    (mockIcrSessionService.clearSessions as jest.Mock).mockResolvedValue(undefined);
+
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useIcrSessionsActions(), { wrapper });
+
+    await result.current.clearIcrSessions();
+
+    expect(mockIcrSessionService.clearSessions).toHaveBeenCalled();
+  });
+
+  it('should call deleteIcrSession', async () => {
+    const timestamp = Date.now();
+    const mockSessions: IcrSessionResult[] = [];
+    (mockIcrSessionService.deleteSession as jest.Mock).mockResolvedValue(mockSessions);
+
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useIcrSessionsActions(), { wrapper });
+
+    await result.current.deleteIcrSession(timestamp);
+
+    expect(mockIcrSessionService.deleteSession).toHaveBeenCalledWith(timestamp);
+  });
+});
+
