@@ -8,6 +8,7 @@ interface GroupItemProps {
   value: string;
   confirmed: boolean;
   isFocused?: boolean;
+  disabled?: boolean;
   onChange: (value: string) => void;
   onConfirm: (value?: string) => void;
   onFocus?: () => void;
@@ -20,6 +21,7 @@ export function GroupItem({
   value,
   confirmed,
   isFocused = false,
+  disabled = false,
   onChange,
   onConfirm,
   onFocus,
@@ -81,18 +83,25 @@ export function GroupItem({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => onFocus?.()}
+        onFocus={() => {
+          if (!disabled) {
+            onFocus?.();
+          }
+        }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === 'Enter' && !disabled) {
             onConfirm((e.target as HTMLInputElement).value);
           }
         }}
+        disabled={disabled}
         className={`w-full px-2 sm:px-3 lg:px-4 py-2 sm:py-3 border-2 rounded-xl text-sm font-mono transition-all duration-200 ${
-          isFocused
-            ? 'border-blue-400 focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-blue-200 focus:border-blue-500'
-            : 'border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400'
+          disabled
+            ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed opacity-60'
+            : isFocused
+              ? 'border-blue-400 focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-blue-200 focus:border-blue-500'
+              : 'border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400'
         }`}
-        placeholder="Type group answer..."
+        placeholder={disabled ? 'Waiting...' : 'Type group answer...'}
       />
       {confirmed && (
         <div className="mt-2">

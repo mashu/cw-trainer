@@ -17,7 +17,6 @@ import { useTrainingSettingsActions, useTrainingSettingsState } from '@/hooks/us
 import {
   AUTO_CONFIRM_DELAY_MS,
   AUTO_SAVE_DELAY_MS,
-  INPUT_FOCUS_DELAY_MS,
   MAX_KOCH_LEVEL_GUESS,
   SLEEP_CANCELABLE_STEP_MS,
   TOAST_DURATION_MS,
@@ -133,6 +132,8 @@ export function CWTrainer(): JSX.Element {
   const groupStartAtRef = useRef<number[]>([]);
   const groupEndAtRef = useRef<number[]>([]);
   const groupAnswerAtRef = useRef<number[]>([]);
+  // Event-driven group completion: promise resolvers for each group index
+  const groupCompletionResolversRef = useRef<Record<number, ((result: { timedOut: boolean }) => void) | null>>({});
 
   const prevUserRef = useRef<AuthUserSummary | null>(null);
   // Use number for browser setTimeout return type (NodeJS.Timeout in Node, but we're in browser)
@@ -181,12 +182,12 @@ export function CWTrainer(): JSX.Element {
     }
   }, [serializeSettings, settings, trainingSettingsStatus]);
 
-  // Keep the currently focused group's input fully visible at the top of the scroll area
+  // Keep the currently focused group centered in the viewport
   useEffect(() => {
     const target = inputRefs.current[currentFocusedGroup];
     if (target) {
       try {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } catch {
         // no-op
       }
@@ -210,6 +211,8 @@ export function CWTrainer(): JSX.Element {
         }
       });
       confirmTimeoutRef.current = {};
+      // Clean up group completion resolvers
+      groupCompletionResolversRef.current = {};
     };
   }, [isTraining]);
 
@@ -396,7 +399,20 @@ export function CWTrainer(): JSX.Element {
     for (let i = 0; i < groups.length; i++) {
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
       setCurrentGroup(i);
+      setCurrentFocusedGroup(i);
       dispatchMachine({ type: 'GROUP_START', index: i });
+      // Focus and center the active group when it starts - use requestAnimationFrame for instant, smooth focusing
+      requestAnimationFrame(() => {
+        const target = inputRefs.current[i];
+        if (target) {
+          try {
+            target.focus();
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch {
+            // no-op
+          }
+        }
+      });
       const delayMs = Math.max(0, computeAutoGroupGapMs());
       if (delayMs > 0) {
         await sleepCancelable(delayMs, mySession);
@@ -408,26 +424,87 @@ export function CWTrainer(): JSX.Element {
       groupEndAtRef.current[i] = endTs;
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
       dispatchMachine({ type: 'WAIT_INPUT' });
-      const deadline = Date.now() + Math.max(0, settings.groupTimeout || 0) * 1000;
-      while (true) {
-        if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
+      
+      // Event-driven approach: wait for either confirmation or timeout (no polling!)
+      const waitForGroupCompletion = (): Promise<{ timedOut: boolean }> => {
+        return new Promise((resolve) => {
+          // Check if already confirmed (user might have confirmed ahead)
+          if (confirmedGroupsRef.current[i]) {
+            resolve({ timedOut: false });
+            return;
+          }
+          
+          // Store resolver for event-driven completion
+          let resolver: ((result: { timedOut: boolean }) => void) | null = null;
+          
+          // Set up timeout if configured (this is the user's groupTimeout setting)
+          let timeoutId: TimeoutId | undefined = undefined;
+          if (settings.groupTimeout && settings.groupTimeout > 0) {
+            const timeoutMs = settings.groupTimeout * 1000;
+            timeoutId = window.setTimeout(() => {
+              if (!groupAnswerAtRef.current[i]) {
+                groupAnswerAtRef.current[i] = Date.now();
+              }
+              if (resolver) {
+                resolver({ timedOut: true });
+              }
+              delete groupCompletionResolversRef.current[i];
+            }, timeoutMs) as TimeoutId;
+          }
+          
+          // Store resolver for immediate resolution when user confirms (event-driven, no polling!)
+          resolver = (result: { timedOut: boolean }) => {
+            if (timeoutId !== undefined) {
+              try {
+                window.clearTimeout(timeoutId);
+              } catch {}
+            }
+            resolve(result);
+            delete groupCompletionResolversRef.current[i];
+          };
+          
+          groupCompletionResolversRef.current[i] = resolver;
+        });
+      };
+      
+      const result = await waitForGroupCompletion();
+      const timedOut = result.timedOut;
+      
+      // Auto-advance on timeout: confirm the current group and move to next
+      if (timedOut && !confirmedGroupsRef.current[i]) {
+        // Clear any pending confirmation timeout for this index
+        if (confirmTimeoutRef.current[i] !== undefined) {
+          try {
+            window.clearTimeout(confirmTimeoutRef.current[i]!);
+          } catch {}
+          delete confirmTimeoutRef.current[i];
+        }
         const currentValue = (userInputRef.current[i] || '').trim().toUpperCase();
-        const isConfirmed = !!confirmedGroupsRef.current[i];
-        const targetLen = groups[i].length;
-        if (isConfirmed) break;
-        if (targetLen > 0 && currentValue.length >= targetLen) {
-          if (!groupAnswerAtRef.current[i]) {
-            groupAnswerAtRef.current[i] = Date.now();
-          }
-          break;
+        const nextAnswers = [...userInputRef.current];
+        nextAnswers[i] = currentValue;
+        setUserInput(nextAnswers);
+        userInputRef.current = nextAnswers;
+        const nextConfirmed = { ...confirmedGroupsRef.current, [i]: true };
+        setConfirmedGroups(nextConfirmed);
+        confirmedGroupsRef.current = nextConfirmed;
+        // Advance focus to next group if available - use requestAnimationFrame for instant focusing
+        const nextIndex = i + 1;
+        if (nextIndex < groups.length) {
+          setCurrentFocusedGroup(nextIndex);
+          requestAnimationFrame(() => {
+            const target = inputRefs.current[nextIndex];
+            if (target) {
+              try {
+                target.focus();
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              } catch {
+                // no-op
+              }
+            }
+          });
         }
-        if (settings.groupTimeout && Date.now() >= deadline) {
-          if (!groupAnswerAtRef.current[i]) {
-            groupAnswerAtRef.current[i] = deadline;
-          }
-          break;
-        }
-        await sleepCancelable(100, mySession);
+        // Note: If nextIndex === groups.length, we're on the last group and the loop will
+        // naturally advance to it, where it will be focused in the normal flow
       }
       try {
         currentStopRef.current?.();
@@ -473,13 +550,28 @@ export function CWTrainer(): JSX.Element {
     if (!groupAnswerAtRef.current[index]) {
       groupAnswerAtRef.current[index] = Date.now();
     }
+    
+    // Resolve the promise immediately for event-driven completion (no polling delay!)
+    const resolver = groupCompletionResolversRef.current[index];
+    if (resolver) {
+      resolver({ timedOut: false });
+      delete groupCompletionResolversRef.current[index];
+    }
 
     const nextIndex = index + 1;
     if (nextIndex < sentGroups.length) {
       setCurrentFocusedGroup(nextIndex);
-      setTimeout(() => {
-        inputRefs.current[nextIndex]?.focus();
-      }, INPUT_FOCUS_DELAY_MS);
+      requestAnimationFrame(() => {
+        const target = inputRefs.current[nextIndex];
+        if (target) {
+          try {
+            target.focus();
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch {
+            // no-op
+          }
+        }
+      });
     }
 
     const allAnswered =
@@ -501,6 +593,9 @@ export function CWTrainer(): JSX.Element {
       if (!groupAnswerAtRef.current[index]) {
         groupAnswerAtRef.current[index] = Date.now();
       }
+      // Note: We don't resolve the wait promise here - it will be resolved when the group is
+      // actually confirmed (either manually or via auto-confirm). This ensures the auto-confirm
+      // delay still works properly.
     }
 
     // Clear any pending confirmation timeout for this index
@@ -820,17 +915,20 @@ export function CWTrainer(): JSX.Element {
                   Enter answers per group (auto-advances when complete):
                 </label>
 
-                {/* Group Navigation for Mobile */}
+                {/* Group Navigation for Mobile - disabled during training */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-sm text-gray-600 whitespace-nowrap">Jump to:</span>
                   <select
                     value={currentFocusedGroup}
                     onChange={(e) => {
-                      const groupIndex = parseInt(e.target.value);
-                      setCurrentFocusedGroup(groupIndex);
-                      inputRefs.current[groupIndex]?.focus();
+                      if (!isTraining) {
+                        const groupIndex = parseInt(e.target.value);
+                        setCurrentFocusedGroup(groupIndex);
+                        inputRefs.current[groupIndex]?.focus();
+                      }
                     }}
-                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
+                    disabled={isTraining}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100"
                   >
                     {sentGroups.map((_, idx) => (
                       <option key={idx} value={idx}>
@@ -846,9 +944,19 @@ export function CWTrainer(): JSX.Element {
                 userInput={userInput}
                 confirmedGroups={confirmedGroups}
                 currentFocusedGroup={currentFocusedGroup}
+                currentActiveGroup={currentGroup}
+                isTraining={isTraining}
+                interactiveMode={settings.interactiveMode}
                 onChange={handleAnswerChange}
                 onConfirm={confirmGroupAnswer}
-                onFocus={(idx) => setCurrentFocusedGroup(idx)}
+                onFocus={(idx) => {
+                  // Only allow focus changes during training if it's the current active group
+                  // This prevents accidental focus changes while session is playing
+                  // In interactive mode, allow focus on any group
+                  if (!isTraining || settings.interactiveMode || idx === currentGroup) {
+                    setCurrentFocusedGroup(idx);
+                  }
+                }}
                 inputRef={(idx, el) => {
                   inputRefs.current[idx] = el;
                 }}
