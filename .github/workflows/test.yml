@@ -36,12 +36,9 @@ jobs:
       - name: Generate coverage report
         run: npm run test:coverage -- --coverageThreshold='{}' || true
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-          files: ./coverage/lcov.info,./coverage/coverage-final.json
-          flags: unittests
-          name: codecov-umbrella
+          slug: mashu/cw-trainer
 
