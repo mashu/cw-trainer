@@ -111,6 +111,7 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioContextBaseTimeRef = useRef<number | null>(null); // Wall-clock time when AudioContext was created/resumed
   const stopRef = useRef<boolean>(false);
   const sessionActiveRef = useRef<boolean>(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -147,8 +148,16 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
   const setupAudioContext = useCallback(async (): Promise<AudioContext> => {
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
+      // Record the wall-clock time when AudioContext is created
+      // This allows us to convert AudioContext time to wall-clock time precisely
+      audioContextBaseTimeRef.current = Date.now() - (audioContextRef.current.currentTime * 1000);
     }
     await ensureContext(audioContextRef.current);
+    // Update base time if context was resumed (currentTime resets on resume)
+    if (audioContextRef.current.state === 'running') {
+      const ctx = audioContextRef.current;
+      audioContextBaseTimeRef.current = Date.now() - (ctx.currentTime * 1000);
+    }
     return audioContextRef.current;
   }, []);
 
@@ -220,6 +229,18 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
 
     const tick = (): void => {
       if (!vadActiveRef.current) return;
+      
+      // Don't react to microphone input while audio is still playing
+      // This prevents the playback sound from triggering VAD
+      const audioEndAt = audioEndAtRef.current;
+      if (audioEndAt && Date.now() < audioEndAt) {
+        // Audio is still playing - ignore microphone input completely
+        // Reset hold timer since we're ignoring input
+        vadStartTimeRef.current = null;
+        requestAnimationFrame(tick);
+        return;
+      }
+      
       const level = measureInputLevel();
       if (!vadArmedRef.current) {
         // Wait until armed to ignore immediate echo
@@ -271,9 +292,13 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
   }, [sharedAudio.sideToneMin, sharedAudio.sideToneMax]);
 
   const playChar = useCallback(
-    async (ch: string): Promise<number | undefined> => {
+    async (ch: string): Promise<{ durationSec: number; audioEndTimeAudioContext: number }> => {
       const ctx = await setupAudioContext();
       stopRef.current = false;
+      
+      // Get the AudioContext time when playback starts
+      const audioStartTimeAudioContext = ctx.currentTime;
+      
       const durationSec = await externalPlayMorseCode(
         ctx,
         ch,
@@ -286,7 +311,11 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         },
         () => stopRef.current,
       );
-      return durationSec;
+      
+      // Calculate the precise AudioContext time when audio will complete
+      const audioEndTimeAudioContext = audioStartTimeAudioContext + (durationSec ?? 0);
+      
+      return { durationSec: durationSec ?? 0, audioEndTimeAudioContext };
     },
     [
       sharedAudio.charWpm,
@@ -312,8 +341,6 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
       if (icrSettings.vadEnabled) {
         await setupMic(icrSettings.micDeviceId);
       }
-      // Clear previous session's trials only when we're about to start the first trial
-      setTrials([]);
       // Focus input field when session starts
       requestAnimationFrame(() => {
         try {
@@ -321,6 +348,11 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         } catch {}
       });
       for (let i = 0; i < icrSettings.trialsPerSession; i++) {
+        // Clear previous session's trials only when we're about to start the first trial
+        // This preserves the previous session's data for analysis until the new session actually begins
+        if (i === 0) {
+          setTrials([]);
+        }
         if (!sessionActiveRef.current) break;
         const target = pickRandomChar({
           kochLevel: sharedAudio.kochLevel,
@@ -332,34 +364,73 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         stopRef.current = false;
         stopSourceRef.current = null;
         vadArmedRef.current = false;
-        audioEndAtRef.current = null;
+        // Set audioEndAt to a future time initially to prevent VAD from triggering during playback
+        // We'll update it with the precise time after audio starts
+        audioEndAtRef.current = Date.now() + 10000; // Set to far future initially
         // Add trial placeholder with unique ID; will set heardAt to audio end timestamp
         const trialId = `${sessionTokenRef.current}-${i}-${Date.now()}`;
         setTrials((prev) => [...prev, { id: trialId, target, heardAt: 0 }]);
         setCurrentIndex(i);
         currentIndexRef.current = i;
-        // Schedule audio and compute when it will end
-        const playStartAt = Date.now();
-        const durationSec = await playChar(target);
-        const audioEndAt = playStartAt + Math.max(0, Math.round((durationSec ?? 0) * 1000));
-        audioEndAtRef.current = audioEndAt;
-        // Record heardAt as end-of-playback time for reaction baseline
-        setTrials((prev) => {
-          const copy = prev.slice();
-          const trial = copy[i];
-          if (trial && trial.id === trialId) {
-            copy[i] = { ...trial, heardAt: audioEndAt };
+        // Schedule audio and get precise completion time
+        const { durationSec, audioEndTimeAudioContext } = await playChar(target);
+        
+        // Convert AudioContext time to precise wall-clock time
+        // This gives us the exact moment when audio completes
+        const baseTime = audioContextBaseTimeRef.current;
+        if (!baseTime) {
+          // Fallback if base time not set (shouldn't happen)
+          const fallbackEndAt = Date.now() + Math.max(0, Math.round(durationSec * 1000));
+          audioEndAtRef.current = fallbackEndAt;
+          setTrials((prev) => {
+            const copy = prev.slice();
+            const trial = copy[i];
+            if (trial && trial.id === trialId) {
+              copy[i] = { ...trial, heardAt: fallbackEndAt };
+            }
+            return copy;
+          });
+          const waitMs = Math.max(0, fallbackEndAt - Date.now());
+          if (waitMs > 0) {
+            await new Promise((r) => setTimeout(r, waitMs));
           }
-          return copy;
-        });
-        // Wait until audio has actually finished (approximate via wall clock)
-        const waitMs = Math.max(0, audioEndAt - Date.now());
-        if (waitMs > 0) {
-          await new Promise((r) => setTimeout(r, waitMs));
-        }
-        // Arm VAD immediately after playback
-        if (icrSettings.vadEnabled) {
-          vadArmedRef.current = true;
+          // Clear audioEndAt after audio completes so VAD can work
+          audioEndAtRef.current = null;
+          if (icrSettings.vadEnabled) {
+            vadArmedRef.current = true;
+          }
+        } else {
+          // Calculate precise wall-clock time when audio completes
+          const audioEndAt = baseTime + (audioEndTimeAudioContext * 1000);
+          // Set this immediately so VAD loop knows audio is playing
+          audioEndAtRef.current = audioEndAt;
+          
+          // Wait until the exact moment audio completes
+          const waitMs = audioEndAt - Date.now();
+          if (waitMs > 0) {
+            await new Promise((r) => setTimeout(r, waitMs));
+          }
+          
+          // At the exact moment audio completes, start timer and arm VAD simultaneously
+          const preciseAudioEndAt = Date.now(); // Capture the precise moment
+          
+          // Record heardAt as the precise end-of-playback time for reaction baseline
+          setTrials((prev) => {
+            const copy = prev.slice();
+            const trial = copy[i];
+            if (trial && trial.id === trialId) {
+              copy[i] = { ...trial, heardAt: preciseAudioEndAt };
+            }
+            return copy;
+          });
+          
+          // Clear audioEndAt after audio completes so VAD can work
+          audioEndAtRef.current = null;
+          
+          // Arm VAD at the exact same moment - timer and mic start together
+          if (icrSettings.vadEnabled) {
+            vadArmedRef.current = true;
+          }
         }
         
         // Event-driven wait for stop event (VAD or key) or user typing
@@ -398,7 +469,8 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
           // Stop event occurred (VAD or key)
           const stopAt = stopResult.stopAt;
           const currentTrial = trialsRef.current.find(t => t.id === trialId);
-          const base = currentTrial?.heardAt || audioEndAt;
+          // Use heardAt from trial, or fallback to audioEndAtRef if trial not updated yet
+          const base = currentTrial?.heardAt || audioEndAtRef.current || stopAt;
           const reactionMs = Math.max(0, Math.round(stopAt - base));
           setTrials((prev) => {
             const copy = prev.slice();
@@ -446,8 +518,15 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         if (!sessionActiveRef.current) break;
         // Delay before next trial
         await new Promise((resolve) => setTimeout(resolve, Math.max(0, icrSettings.trialDelayMs)));
-        setCurrentIndex(i + 1);
-        currentIndexRef.current = i + 1;
+        // Only update currentIndex if there are more trials coming
+        if (i + 1 < icrSettings.trialsPerSession) {
+          setCurrentIndex(i + 1);
+          currentIndexRef.current = i + 1;
+        } else {
+          // Session complete - point to the last trial for display
+          setCurrentIndex(i);
+          currentIndexRef.current = i;
+        }
         // Focus input field for next trial
         requestAnimationFrame(() => {
           try {
@@ -457,6 +536,13 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
       }
     } finally {
       setIsRunning(false);
+      // Ensure currentIndex points to the last trial when session ends
+      // Use trialsRef to get the latest value (trials state might be stale in finally block)
+      if (trialsRef.current.length > 0) {
+        const lastIndex = trialsRef.current.length - 1;
+        setCurrentIndex(lastIndex);
+        currentIndexRef.current = lastIndex;
+      }
       vadActiveRef.current = false;
       vadArmedRef.current = false;
       sessionActiveRef.current = false;

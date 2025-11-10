@@ -76,9 +76,11 @@ export function ICRSettingsForm({
       holdStartRef.current = null;
 
       const measure = (): void => {
-        if (!previewActive || !micAnalyserRef.current) {
+        // Check micAnalyserRef instead of previewActive state (which may be stale in closure)
+        if (!micAnalyserRef.current) {
           return;
         }
+        const analyser = micAnalyserRef.current;
         const buffer = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(buffer);
         let peak = 0;
