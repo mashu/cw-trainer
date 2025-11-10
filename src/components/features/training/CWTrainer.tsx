@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useReducer, useRef, useState } from 'rea
 
 import { ICRTrainer } from '@/components/features/icr/ICRTrainer';
 import { Sidebar } from '@/components/features/sidebar/Sidebar';
-import { StatsView } from '@/components/features/stats/StatsView';
+import { GroupTrainingStats } from '@/components/features/stats/GroupTrainingStats';
 import { ActivityHeatmap } from '@/components/ui/charts/ActivityHeatmap';
 import { GroupsList } from '@/components/ui/training/GroupsList';
 import { ProgressHeader } from '@/components/ui/training/ProgressHeader';
@@ -776,7 +776,7 @@ export function CWTrainer(): JSX.Element {
         activeMode={activeMode}
         onChangeMode={(m) => {
           setActiveMode(m);
-          setSidebarOpen(false);
+          // Don't close sidebar - let user continue configuring settings
           // Keep current tab when switching to group mode
           if (m !== 'group') {
             setGroupTab('train');
@@ -899,7 +899,7 @@ export function CWTrainer(): JSX.Element {
                 Back to Training
               </button>
             </div>
-            <StatsView
+            <GroupTrainingStats
               embedded
               onBack={() => setGroupTab('train')}
               thresholdPercent={Math.max(0, Math.min(100, settings.autoAdjustThreshold ?? 90))}

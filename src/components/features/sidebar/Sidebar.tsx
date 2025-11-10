@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, type Dispatch, type SetStateAction 
 
 import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingSettingsForm } from '@/components/ui/forms/TrainingSettingsForm';
+import { ICRSettingsForm } from '@/components/ui/forms/ICRSettingsForm';
 import type { AuthUserSummary } from '@/hooks/useAuth';
 import type { IcrSettings } from '@/types';
 
@@ -49,140 +50,6 @@ export function Sidebar({
 }: SidebarProps): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [showModeHelp, setShowModeHelp] = useState(false);
-  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
-  const [previewActive, setPreviewActive] = useState(false);
-  const [micLevel, setMicLevel] = useState(0);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const micAnalyserRef = useRef<AnalyserNode | null>(null);
-  const micCtxRef = useRef<AudioContext | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const holdStartRef = useRef<number | null>(null);
-  const prevDeviceIdRef = useRef<string | undefined>(undefined);
-  const [holdMs, setHoldMs] = useState(0);
-
-  const stopMicPreview = (): void => {
-    try {
-      if (rafRef.current != null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    } catch {}
-    try {
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach((track) => track.stop());
-        micStreamRef.current = null;
-      }
-    } catch {}
-    try {
-      micAnalyserRef.current?.disconnect();
-    } catch {}
-    micAnalyserRef.current = null;
-    setPreviewActive(false);
-    setMicLevel(0);
-    setHoldMs(0);
-  };
-
-  const enumerateAudioInputs = async (): Promise<void> => {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      setMicDevices(devices.filter((device) => device.kind === 'audioinput'));
-    } catch {
-      // ignore errors enumerating devices
-    }
-  };
-
-  const startMicPreview = async (): Promise<void> => {
-    if (!icrSettings || !setIcrSettings) {
-      return;
-    }
-    try {
-      stopMicPreview();
-      const constraints: MediaStreamConstraints = {
-        audio: icrSettings.micDeviceId ? { deviceId: { exact: icrSettings.micDeviceId } } : true,
-        video: false,
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      micStreamRef.current = stream;
-      if (!micCtxRef.current) {
-        micCtxRef.current = new AudioContext();
-        try {
-          if (micCtxRef.current.state === 'suspended') {
-            await micCtxRef.current.resume();
-          }
-        } catch {}
-      }
-      const context = micCtxRef.current;
-      const source = context.createMediaStreamSource(stream);
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.8;
-      source.connect(analyser);
-      micAnalyserRef.current = analyser;
-      setPreviewActive(true);
-      void enumerateAudioInputs();
-
-      const buffer = new Uint8Array(analyser.fftSize);
-      const tick = (): void => {
-        if (!micAnalyserRef.current) {
-          return;
-        }
-        micAnalyserRef.current.getByteTimeDomainData(buffer);
-        let peak = 0;
-        for (let index = 0; index < buffer.length; index += 1) {
-          const value = Math.abs(buffer[index] - 128) / 128;
-          if (value > peak) {
-            peak = value;
-          }
-        }
-        setMicLevel(peak);
-        const threshold = Math.max(0, Math.min(1, icrSettings.vadThreshold ?? 0));
-        const now = performance.now();
-        if (peak >= threshold) {
-          if (holdStartRef.current == null) {
-            holdStartRef.current = now;
-          }
-          setHoldMs(Math.max(0, Math.round(now - (holdStartRef.current || now))));
-        } else {
-          holdStartRef.current = null;
-          setHoldMs(0);
-        }
-        rafRef.current = requestAnimationFrame(tick);
-      };
-      rafRef.current = requestAnimationFrame(tick);
-    } catch {
-      stopMicPreview();
-    }
-  };
-
-  useEffect(() => {
-    void enumerateAudioInputs();
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      void enumerateAudioInputs();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!(open && settingsOpen && activeMode === 'icr')) {
-      stopMicPreview();
-    }
-    return (): void => {
-      stopMicPreview();
-    };
-  }, [settingsOpen, open, activeMode]);
-
-  useEffect(() => {
-    const currentDeviceId = icrSettings?.micDeviceId;
-    if (previewActive && currentDeviceId !== prevDeviceIdRef.current) {
-      prevDeviceIdRef.current = currentDeviceId;
-      void startMicPreview();
-    } else if (!previewActive) {
-      prevDeviceIdRef.current = currentDeviceId;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [icrSettings?.micDeviceId]);
 
   return (
     <>
@@ -258,7 +125,7 @@ export function Sidebar({
                   }`}
                   onClick={() => {
                     onChangeMode?.('group');
-                    onClose();
+                    // Don't close sidebar - let user continue configuring settings
                   }}
                 >
                   Group
@@ -271,7 +138,7 @@ export function Sidebar({
                   }`}
                   onClick={() => {
                     onChangeMode?.('icr');
-                    onClose();
+                    // Don't close sidebar - let user continue configuring settings
                   }}
                 >
                   ICR
@@ -284,7 +151,7 @@ export function Sidebar({
                   }`}
                   onClick={() => {
                     onChangeMode?.('player');
-                    onClose();
+                    // Don't close sidebar - let user continue configuring settings
                   }}
                 >
                   Player
@@ -303,230 +170,12 @@ export function Sidebar({
             </button>
             {settingsOpen && (
               <div className="px-4 pb-4">
+                {/* Shared settings - always visible (character set, audio, etc.) */}
                 <TrainingSettingsForm settings={settings} setSettings={setSettings} />
+                
+                {/* ICR Settings - only visible when in ICR mode */}
                 {activeMode === 'icr' && icrSettings && setIcrSettings && (
-                  <div className="mt-4 p-3 border rounded-lg bg-slate-50">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-slate-800">Mic &amp; VAD (ICR)</h4>
-                      <button
-                        type="button"
-                        onClick={() => setShowModeHelp((value) => !value)}
-                        className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${
-                          showModeHelp
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                        }`}
-                        title="What is Mic &amp; VAD?"
-                        aria-expanded={showModeHelp}
-                      >
-                        ?
-                      </button>
-                    </div>
-                    {showModeHelp && (
-                      <div className="mb-2 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
-                        <div className="font-semibold text-slate-800 mb-1">Mic &amp; VAD</div>
-                        <ul className="list-disc ml-4 space-y-1">
-                          <li>
-                            <span className="font-medium">VAD</span>: Voice Activity Detection to
-                            capture when you start speaking.
-                          </li>
-                          <li>
-                            <span className="font-medium">Threshold</span>: Adjust sensitivity to
-                            avoid false triggers.
-                          </li>
-                          <li>
-                            <span className="font-medium">Hold</span>: Minimum sustained voice
-                            duration to trigger recognition.
-                          </li>
-                          <li>
-                            <span className="font-medium">Mic</span>: Pick input device; use preview
-                            to calibrate levels.
-                          </li>
-                        </ul>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 mb-2 text-sm">
-                      <label>VAD Enabled</label>
-                      <input
-                        type="checkbox"
-                        checked={icrSettings.vadEnabled}
-                        onChange={(event) =>
-                          setIcrSettings({ ...icrSettings, vadEnabled: event.target.checked })
-                        }
-                      />
-                      <span className="text-slate-600">
-                        When on, voice onset stops the timer. Use keyboard as fallback.
-                      </span>
-                    </div>
-                    <div className="mb-2 text-sm">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Threshold: {icrSettings.vadThreshold.toFixed(2)}
-                      </label>
-                      <input
-                        className="w-full"
-                        type="range"
-                        min={0}
-                        max={0.5}
-                        step={0.01}
-                        value={icrSettings.vadThreshold}
-                        onChange={(event) =>
-                          setIcrSettings({
-                            ...icrSettings,
-                            vadThreshold: Number(event.target.value),
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="mb-2 text-sm">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Hold (ms): {icrSettings.vadHoldMs}
-                      </label>
-                      <input
-                        className="w-full"
-                        type="range"
-                        min={20}
-                        max={200}
-                        step={5}
-                        value={icrSettings.vadHoldMs}
-                        onChange={(event) =>
-                          setIcrSettings({ ...icrSettings, vadHoldMs: Number(event.target.value) })
-                        }
-                      />
-                    </div>
-                    <div className="mb-2 text-sm">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Microphone
-                      </label>
-                      <select
-                        className="w-full border rounded px-2 py-1"
-                        value={icrSettings.micDeviceId || ''}
-                        onChange={(event) =>
-                          setIcrSettings({
-                            ...icrSettings,
-                            micDeviceId: event.target.value || undefined,
-                          })
-                        }
-                      >
-                        <option value="">System default</option>
-                        {micDevices.map((device) => (
-                          <option key={device.deviceId} value={device.deviceId}>
-                            {device.label || `Mic ${device.deviceId.slice(0, 6)}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="mb-2">
-                      <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
-                        <span>Mic Level</span>
-                        <span>{Math.round(Math.min(1, micLevel) * 100)}%</span>
-                      </div>
-                      <div className="relative h-2 w-full bg-slate-200 rounded">
-                        <div
-                          className="h-2 bg-emerald-500 rounded"
-                          style={{ width: `${Math.min(100, Math.round(micLevel * 100))}%` }}
-                        />
-                        <div
-                          className="absolute -top-1 -bottom-1 w-px bg-rose-500"
-                          style={{
-                            left: `${Math.min(100, Math.max(0, Math.round((icrSettings.vadThreshold || 0) * 100)))}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
-                        <span>Threshold</span>
-                        <span>{Math.round((icrSettings.vadThreshold || 0) * 100)}%</span>
-                      </div>
-                      <div className="mt-2">
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                          <span>Hold to trigger</span>
-                          <span>
-                            {Math.min(holdMs, icrSettings.vadHoldMs)} / {icrSettings.vadHoldMs} ms
-                          </span>
-                        </div>
-                        <div className="h-1.5 w-full bg-slate-200 rounded">
-                          <div
-                            className="h-1.5 bg-indigo-500 rounded"
-                            style={{
-                              width: `${Math.min(
-                                100,
-                                Math.round(
-                                  (Math.min(holdMs, icrSettings.vadHoldMs) /
-                                    Math.max(1, icrSettings.vadHoldMs)) *
-                                    100,
-                                ),
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <button
-                        type="button"
-                        className={`px-3 py-1 rounded text-sm ${
-                          previewActive ? 'bg-gray-200 text-gray-600' : 'bg-blue-600 text-white'
-                        }`}
-                        onClick={() => {
-                          if (!previewActive) {
-                            void startMicPreview();
-                          }
-                        }}
-                        disabled={previewActive}
-                      >
-                        Start Preview
-                      </button>
-                      <button
-                        type="button"
-                        className="px-3 py-1 rounded text-sm bg-gray-100"
-                        onClick={() => stopMicPreview()}
-                        disabled={!previewActive}
-                      >
-                        Stop Preview
-                      </button>
-                    </div>
-                    <div className="text-xs text-slate-600 mt-2">
-                      Calibrate: while quiet the bar should be low; when saying &quot;TEST&quot; it
-                      should spike above 60–80% depending on your Threshold.
-                    </div>
-                    <div className="mt-3 p-3 border rounded bg-white">
-                      <h5 className="font-semibold text-slate-800 mb-2 text-sm">
-                        Performance Buckets (ICR)
-                      </h5>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <label>
-                          Green &lt;= (ms)
-                          <input
-                            type="number"
-                            className="block w-full border rounded px-2 py-1"
-                            value={icrSettings.bucketGreenMaxMs}
-                            onChange={(event) =>
-                              setIcrSettings?.((previous) => ({
-                                ...previous,
-                                bucketGreenMaxMs: parseInt(event.target.value || '300', 10),
-                              }))
-                            }
-                          />
-                        </label>
-                        <label>
-                          Yellow &lt;= (ms)
-                          <input
-                            type="number"
-                            className="block w-full border rounded px-2 py-1"
-                            value={icrSettings.bucketYellowMaxMs}
-                            onChange={(event) =>
-                              setIcrSettings?.((previous) => ({
-                                ...previous,
-                                bucketYellowMaxMs: parseInt(event.target.value || '800', 10),
-                              }))
-                            }
-                          />
-                        </label>
-                      </div>
-                      <p className="text-xs text-slate-600 mt-1">
-                        Bars: green &lt;= Green; yellow between Green..Yellow; red &gt; Yellow.
-                      </p>
-                    </div>
-                  </div>
+                  <ICRSettingsForm settings={icrSettings} setSettings={setIcrSettings} />
                 )}
                 <div className="flex justify-end mt-4">
                   <button

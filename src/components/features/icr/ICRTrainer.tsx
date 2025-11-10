@@ -16,8 +16,9 @@ import {
   Cell,
 } from 'recharts';
 
+import { ICRStats } from '@/components/features/stats/ICRStats';
 import { useIcrSessionsActions } from '@/hooks/useIcrSessions';
-import { ICR_INPUT_POLLING_INTERVAL_MS, ICR_POLLING_INTERVAL_MS } from '@/lib/constants';
+// Removed polling interval imports - now using event-driven approach
 import { ensureContext, playMorseCode as externalPlayMorseCode } from '@/lib/morseAudio';
 import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
@@ -121,6 +122,9 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
   const stopSourceRef = useRef<'voice' | 'key' | null>(null);
   const sessionTokenRef = useRef(0);
   const lastPersistedTokenRef = useRef<number | null>(null);
+  // Event-driven resolvers for trial completion
+  const stopEventResolversRef = useRef<Record<number, (stopAt: number) => void>>({});
+  const inputEventResolversRef = useRef<Record<number, () => void>>({});
 
   // Focus input when entering the panel and after mount
   useEffect(() => {
@@ -220,9 +224,22 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
           if (vadStartTimeRef.current == null) vadStartTimeRef.current = now;
           const held = now - (vadStartTimeRef.current || now);
           if (held >= icrSettings.vadHoldMs) {
-            // Trigger stop
+            // Trigger stop via event-driven resolver
             stopSourceRef.current = 'voice';
             stopRef.current = true;
+            const stopAt = Date.now();
+            // Resolve pending stop event promise for current trial
+            // Find the most recent trial index that's waiting
+            const waitingTrialIndices = Object.keys(stopEventResolversRef.current).map(Number).sort((a, b) => b - a);
+            if (waitingTrialIndices.length > 0) {
+              const trialIdx = waitingTrialIndices[0]; // Most recent trial
+              const resolver = stopEventResolversRef.current[trialIdx];
+              if (resolver) {
+                try {
+                  resolver(stopAt);
+                } catch {}
+              }
+            }
             // Keep VAD loop running; disarm until next trial re-arms it
             vadArmedRef.current = false;
             vadStartTimeRef.current = null;
@@ -277,7 +294,8 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
   const runSession = useCallback(async (): Promise<void> => {
     if (isRunning) return;
     sessionTokenRef.current += 1;
-    setTrials([]);
+    // Don't clear trials here - clear them when we actually start the first trial
+    // This preserves the previous session's stats until the new session begins
     setCurrentIndex(0);
     setIsRunning(true);
     sessionActiveRef.current = true;
@@ -286,6 +304,14 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
       if (icrSettings.vadEnabled) {
         await setupMic(icrSettings.micDeviceId);
       }
+      // Clear previous session's trials only when we're about to start the first trial
+      setTrials([]);
+      // Focus input field when session starts
+      requestAnimationFrame(() => {
+        try {
+          inputRef.current?.focus();
+        } catch {}
+      });
       for (let i = 0; i < icrSettings.trialsPerSession; i++) {
         if (!sessionActiveRef.current) break;
         const target = pickRandomChar({
@@ -323,41 +349,93 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
           vadArmedRef.current = true;
         }
         const trialIndex = i;
-        // Wait for stop event (VAD or key) or until user has typed
-        while (sessionActiveRef.current) {
-          if (stopRef.current) {
-            const stopAt = Date.now();
-            const base = trialsRef.current[trialIndex]?.heardAt || audioEndAt;
-            const reactionMs = Math.max(0, Math.round(stopAt - base));
-            setTrials((prev) => {
-              const copy = prev.slice();
-              copy[trialIndex] = { ...copy[trialIndex], stopAt, reactionMs };
-              return copy;
-            });
-            stopRef.current = false;
-            // Focus input for answer entry
+        
+        // Event-driven wait for stop event (VAD or key) or user typing
+        const waitForStopOrInput = (): Promise<{ stopAt?: number; typed: boolean }> => {
+          return new Promise((resolve) => {
+            // Check if already stopped or typed
+            if (stopRef.current) {
+              const stopAt = Date.now();
+              resolve({ stopAt, typed: false });
+              return;
+            }
+            const currentTrial = trialsRef.current[trialIndex];
+            if (currentTrial?.typed) {
+              resolve({ typed: true });
+              return;
+            }
+            
+            // Set up resolver for stop event
+            stopEventResolversRef.current[trialIndex] = (stopAt: number) => {
+              delete stopEventResolversRef.current[trialIndex];
+              resolve({ stopAt, typed: false });
+            };
+            
+            // Set up resolver for input event
+            inputEventResolversRef.current[trialIndex] = () => {
+              delete inputEventResolversRef.current[trialIndex];
+              resolve({ typed: true });
+            };
+          });
+        };
+        
+        const stopResult = await waitForStopOrInput();
+        
+        if (stopResult.stopAt !== undefined) {
+          // Stop event occurred (VAD or key)
+          const stopAt = stopResult.stopAt;
+          const base = trialsRef.current[trialIndex]?.heardAt || audioEndAt;
+          const reactionMs = Math.max(0, Math.round(stopAt - base));
+          setTrials((prev) => {
+            const copy = prev.slice();
+            copy[trialIndex] = { ...copy[trialIndex], stopAt, reactionMs };
+            return copy;
+          });
+          stopRef.current = false;
+          // Focus input for answer entry
+          requestAnimationFrame(() => {
             try {
               inputRef.current?.focus();
             } catch {}
-            break;
-          }
-          // If user already typed, move on without a reaction time
-          if (trialsRef.current[trialIndex]?.typed) {
+          });
+        } else if (stopResult.typed) {
+          // User already typed - reaction time should be recorded in onChange handler
+          requestAnimationFrame(() => {
             try {
               inputRef.current?.focus();
             } catch {}
-            break;
-          }
-          await new Promise((r) => setTimeout(r, ICR_POLLING_INTERVAL_MS));
+          });
         }
-        // Wait until user types and confirms input for this trial
-        while (sessionActiveRef.current && !trialsRef.current[trialIndex]?.typed) {
-          await new Promise((r) => setTimeout(r, ICR_INPUT_POLLING_INTERVAL_MS));
-        }
+        
+        // Event-driven wait for user input if not already provided
+        const waitForInput = (): Promise<void> => {
+          return new Promise((resolve) => {
+            // Check if already typed
+            const currentTrial = trialsRef.current[trialIndex];
+            if (currentTrial?.typed) {
+              resolve();
+              return;
+            }
+            
+            // Set up resolver for input event
+            inputEventResolversRef.current[trialIndex] = () => {
+              delete inputEventResolversRef.current[trialIndex];
+              resolve();
+            };
+          });
+        };
+        
+        await waitForInput();
         if (!sessionActiveRef.current) break;
         // Delay before next trial
         await new Promise((resolve) => setTimeout(resolve, Math.max(0, icrSettings.trialDelayMs)));
         setCurrentIndex(i + 1);
+        // Focus input field for next trial
+        requestAnimationFrame(() => {
+          try {
+            inputRef.current?.focus();
+          } catch {}
+        });
       }
     } finally {
       setIsRunning(false);
@@ -365,6 +443,9 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
       vadArmedRef.current = false;
       sessionActiveRef.current = false;
       stopMic();
+      // Clean up any pending resolvers
+      stopEventResolversRef.current = {};
+      inputEventResolversRef.current = {};
     }
   }, [isRunning, icrSettings, sharedAudio, setupAudioContext, setupMic, playChar, stopMic]);
 
@@ -403,6 +484,19 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
       if (!stopRef.current) {
         stopSourceRef.current = 'key';
         stopRef.current = true;
+        const stopAt = Date.now();
+        // Resolve pending stop event promise for current trial
+        // Find the most recent trial index that's waiting
+        const waitingTrialIndices = Object.keys(stopEventResolversRef.current).map(Number).sort((a, b) => b - a);
+        if (waitingTrialIndices.length > 0) {
+          const trialIdx = waitingTrialIndices[0]; // Most recent trial
+          const resolver = stopEventResolversRef.current[trialIdx];
+          if (resolver) {
+            try {
+              resolver(stopAt);
+            } catch {}
+          }
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -516,6 +610,17 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
     });
   }, [icrSettings, isRunning, saveIcrSession, sharedAudio, trials]);
 
+  const [showStats, setShowStats] = useState(false);
+
+  if (showStats) {
+    return (
+      <ICRStats
+        embedded
+        onBack={() => setShowStats(false)}
+      />
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto p-4">
       <div className="flex items-center justify-between mb-4">
@@ -525,7 +630,8 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
             className={`px-3 py-2 rounded ${isRunning ? 'bg-gray-300 text-gray-600' : 'bg-emerald-600 text-white'}`}
             onClick={() => {
               if (!isRunning) {
-                setTrials([]);
+                // Don't clear trials here - let runSession clear them when it actually starts
+                // This preserves the previous session's stats until the new session begins
                 setCurrentIndex(0);
                 void runSession();
               }
@@ -546,6 +652,12 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
             }}
           >
             Stop
+          </button>
+          <button
+            className="px-3 py-2 rounded bg-blue-600 text-white"
+            onClick={() => setShowStats(true)}
+          >
+            📊 Stats
           </button>
         </div>
       </div>
@@ -577,16 +689,51 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
                   const idx = trials.length - 1;
                   if (idx >= 0 && trials[idx]) {
                     const correct = letter === trials[idx].target.toUpperCase();
+                    const typedAt = Date.now();
+                    const currentTrial = trials[idx];
+                    const base = currentTrial.heardAt || 0;
+                    
+                    // Calculate reaction time if not already set
+                    let reactionMs: number | undefined = currentTrial.reactionMs;
+                    if (!reactionMs && base > 0) {
+                      reactionMs = Math.max(0, Math.round(typedAt - base));
+                    }
+                    
+                    // Apply penalty for incorrect letters
+                    // Use bucketYellowMaxMs as a penalty timeout, or multiply by penalty factor
+                    const penaltyFactor = 2.0; // Double the time for incorrect answers
+                    if (!correct && reactionMs !== undefined) {
+                      // For incorrect letters, use max of actual time or penalty timeout
+                      const penaltyTimeout = icrSettings.bucketYellowMaxMs || 800;
+                      reactionMs = Math.max(reactionMs * penaltyFactor, penaltyTimeout);
+                    }
+                    
                     setTrials((prev) => {
                       const copy = prev.slice();
-                      copy[idx] = { ...copy[idx], typed: letter, correct };
+                      copy[idx] = { 
+                        ...copy[idx], 
+                        typed: letter, 
+                        correct,
+                        stopAt: typedAt,
+                        reactionMs,
+                      };
                       return copy;
                     });
+                    
+                    // Resolve input event promise if waiting
+                    if (inputEventResolversRef.current[idx]) {
+                      try {
+                        inputEventResolversRef.current[idx]();
+                      } catch {}
+                    }
+                    
                     // clear field and keep focus for next trial
                     setCurrentInput('');
-                    try {
-                      inputRef.current?.focus();
-                    } catch {}
+                    requestAnimationFrame(() => {
+                      try {
+                        inputRef.current?.focus();
+                      } catch {}
+                    });
                   }
                 }
               }}
