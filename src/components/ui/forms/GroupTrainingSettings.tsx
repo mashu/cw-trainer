@@ -178,7 +178,7 @@ export function GroupTrainingSettings({
             step={0.1}
             value={settings.extraWordSpaceMultiplier ?? 1}
             onChange={(event) => {
-              const numValue = parseFloat(event.target.value || '1', 10);
+              const numValue = parseFloat(event.target.value || '1');
               if (!isNaN(numValue) && numValue >= 1) {
                 setSettings({
                   ...settings,

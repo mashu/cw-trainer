@@ -34,7 +34,6 @@ const applySuccessState = (set: StoreSetter<SessionsSlice>, sessions: SessionRes
     sessions,
     sessionsStatus: 'ready',
     sessionsSyncing: false,
-    sessionsError: undefined,
     lastSessionsUpdatedAt: Date.now(),
   });
 };
@@ -46,12 +45,10 @@ export const createSessionsSlice = ({
 }: CreateSessionsSliceParams): SessionsSlice => ({
   sessions: [],
   sessionsStatus: 'idle',
-  sessionsError: undefined,
   sessionsSyncing: false,
-  lastSessionsUpdatedAt: undefined,
 
   loadSessions: async (): Promise<SessionResult[]> => {
-    set({ sessionsStatus: 'loading', sessionsError: undefined });
+    set({ sessionsStatus: 'loading' });
 
     try {
       const context = getContext();
@@ -68,7 +65,7 @@ export const createSessionsSlice = ({
   },
 
   saveSession: async (input: SessionResultInput): Promise<SessionResult[]> => {
-    set({ sessionsSyncing: true, sessionsError: undefined });
+    set({ sessionsSyncing: true });
 
     try {
       const context = getContext();
@@ -85,7 +82,7 @@ export const createSessionsSlice = ({
   },
 
   replaceSessions: async (inputs: readonly SessionResultInput[]): Promise<SessionResult[]> => {
-    set({ sessionsSyncing: true, sessionsError: undefined });
+    set({ sessionsSyncing: true });
 
     try {
       const context = getContext();
@@ -102,7 +99,7 @@ export const createSessionsSlice = ({
   },
 
   removeSessionByTimestamp: async (timestamp: number): Promise<SessionResult[]> => {
-    set({ sessionsSyncing: true, sessionsError: undefined });
+    set({ sessionsSyncing: true });
 
     try {
       const context = getContext();
@@ -119,7 +116,7 @@ export const createSessionsSlice = ({
   },
 
   syncPendingSessions: async (): Promise<SessionResult[]> => {
-    set({ sessionsSyncing: true, sessionsError: undefined });
+    set({ sessionsSyncing: true });
 
     try {
       const context = getContext();

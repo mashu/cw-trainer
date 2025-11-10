@@ -12,6 +12,7 @@ export interface IcrSessionsSlice {
   loadIcrSessions: () => Promise<IcrSessionResult[]>;
   saveIcrSession: (session: IcrSessionResult) => Promise<IcrSessionResult[]>;
   clearIcrSessions: () => Promise<void>;
+  deleteIcrSession: (timestamp: number) => Promise<IcrSessionResult[]>;
 }
 
 interface CreateIcrSessionsSliceParams {
@@ -29,7 +30,6 @@ const applySuccessState = (set: StoreSetter<IcrSessionsSlice>, sessions: IcrSess
     icrSessions: sessions,
     icrSessionsStatus: 'ready',
     icrSessionsSaving: false,
-    icrSessionsError: undefined,
   });
 };
 
@@ -39,11 +39,10 @@ export const createIcrSessionsSlice = ({
 }: CreateIcrSessionsSliceParams): IcrSessionsSlice => ({
   icrSessions: [],
   icrSessionsStatus: 'idle',
-  icrSessionsError: undefined,
   icrSessionsSaving: false,
 
   loadIcrSessions: async (): Promise<IcrSessionResult[]> => {
-    set({ icrSessionsStatus: 'loading', icrSessionsError: undefined });
+    set({ icrSessionsStatus: 'loading' });
 
     try {
       const sessions = await service.listSessions();
@@ -59,7 +58,7 @@ export const createIcrSessionsSlice = ({
   },
 
   saveIcrSession: async (session: IcrSessionResult): Promise<IcrSessionResult[]> => {
-    set({ icrSessionsSaving: true, icrSessionsError: undefined });
+    set({ icrSessionsSaving: true });
 
     try {
       const sessions = await service.saveSession(session);
@@ -75,11 +74,30 @@ export const createIcrSessionsSlice = ({
   },
 
   clearIcrSessions: async (): Promise<void> => {
-    set({ icrSessionsSaving: true, icrSessionsError: undefined });
+    set({ icrSessionsSaving: true });
 
     try {
       await service.clearSessions();
       applySuccessState(set, []);
+    } catch (error) {
+      set({
+        icrSessionsSaving: false,
+        icrSessionsError: mapErrorMessage(error),
+      });
+      throw ensureAppError(error);
+    }
+  },
+
+  deleteIcrSession: async (timestamp: number): Promise<IcrSessionResult[]> => {
+    set({ icrSessionsSaving: true });
+
+    try {
+      if (!service.deleteSession) {
+        throw new Error('deleteSession method not available on IcrSessionService');
+      }
+      const sessions = await service.deleteSession(timestamp);
+      applySuccessState(set, sessions);
+      return sessions;
     } catch (error) {
       set({
         icrSessionsSaving: false,

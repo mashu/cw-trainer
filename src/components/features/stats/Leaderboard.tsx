@@ -7,7 +7,6 @@ import {
   limit,
   orderBy,
   query,
-  type Query,
 } from 'firebase/firestore';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -67,32 +66,32 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
         const limitN = Math.max(1, Math.min(100, limitCount));
         let lastErrorCode: string | null = null;
 
-        const attempt = async (makeQuery: () => Query): Promise<boolean> => {
+        const attempt = async (makeQuery: () => ReturnType<typeof query>): Promise<boolean> => {
           const q = makeQuery();
           try {
             const snap = await getDocs(q);
             rows.length = 0;
-            snap.forEach((document) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            snap.forEach((document: any) => {
               const data = document.data() as LeaderboardDoc;
               if (typeof data.score !== 'number' || typeof data.publicId !== 'number') {
                 return;
               }
 
-              rows.push({
+              const entry: LeaderboardEntry = {
                 publicId: data.publicId,
                 score: Math.round(data.score * 100) / 100,
                 timestamp: typeof data.timestamp === 'number' ? data.timestamp : 0,
-                date: typeof data.date === 'string' ? data.date : undefined,
-                accuracy: typeof data.accuracy === 'number' ? data.accuracy : undefined,
-                alphabetSize: typeof data.alphabetSize === 'number' ? data.alphabetSize : undefined,
-                avgResponseMs:
-                  typeof data.avgResponseMs === 'number' ? data.avgResponseMs : undefined,
-                effectiveAlphabetSize:
-                  typeof data.effectiveAlphabetSize === 'number'
-                    ? data.effectiveAlphabetSize
-                    : undefined,
-                totalChars: typeof data.totalChars === 'number' ? data.totalChars : undefined,
-              });
+                ...(typeof data.date === 'string' ? { date: data.date } : {}),
+                ...(typeof data.accuracy === 'number' ? { accuracy: data.accuracy } : {}),
+                ...(typeof data.alphabetSize === 'number' ? { alphabetSize: data.alphabetSize } : {}),
+                ...(typeof data.avgResponseMs === 'number' ? { avgResponseMs: data.avgResponseMs } : {}),
+                ...(typeof data.effectiveAlphabetSize === 'number'
+                  ? { effectiveAlphabetSize: data.effectiveAlphabetSize }
+                  : {}),
+                ...(typeof data.totalChars === 'number' ? { totalChars: data.totalChars } : {}),
+              };
+              rows.push(entry);
             });
             return true;
           } catch (error) {

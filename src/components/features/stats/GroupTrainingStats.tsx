@@ -114,14 +114,18 @@ export function GroupTrainingStats({
       });
     });
     return Object.keys(letterStats)
-      .map((letter) => ({
-        letter,
-        accuracy: letterStats[letter].total
-          ? (letterStats[letter].correct / letterStats[letter].total) * 100
-          : 0,
-        total: letterStats[letter].total,
-        correct: letterStats[letter].correct,
-      }))
+      .map((letter) => {
+        const stat = letterStats[letter];
+        if (!stat || stat.total === 0) {
+          return { letter, accuracy: 0, total: 0, correct: 0 };
+        }
+        return {
+          letter,
+          accuracy: (stat.correct / stat.total) * 100,
+          total: stat.total,
+          correct: stat.correct,
+        };
+      })
       .sort((a, b) => b.accuracy - a.accuracy);
   }, []);
 
@@ -233,10 +237,9 @@ export function GroupTrainingStats({
       });
       const avgMs = nMs ? sumMs / nMs : 0;
       const days = new Set(rangeFilteredSessions.map((s) => s.date)).size;
-      const best = rangeLetterStats.length > 0 ? rangeLetterStats[0] : null;
-      const worst = rangeLetterStats.length > 0
-        ? rangeLetterStats[rangeLetterStats.length - 1]
-        : null;
+      const best: LetterStatsPoint | null = rangeLetterStats.length > 0 ? (rangeLetterStats[0] ?? null) : null;
+      const worstIdx = rangeLetterStats.length > 0 ? rangeLetterStats.length - 1 : -1;
+      const worst: LetterStatsPoint | null = worstIdx >= 0 ? (rangeLetterStats[worstIdx] ?? null) : null;
       return {
         kpiAvgAccuracy: avgAcc,
         kpiSessions: totalSessions,
@@ -719,10 +722,13 @@ export function GroupTrainingStats({
                     </tr>
                   </thead>
                   <tbody>
-                    {bigramHeatmap.letters.map((rowL, rIdx) => (
+                    {bigramHeatmap.letters.map((rowL, rIdx) => {
+                      const row = bigramHeatmap.matrix[rIdx];
+                      if (!row) return null;
+                      return (
                       <tr key={rowL}>
                         <td className="p-2 font-semibold sticky left-0 bg-white">{rowL}</td>
-                        {bigramHeatmap.matrix[rIdx].map((cell) => {
+                        {row.map((cell) => {
                           const color =
                             cell.total === 0
                               ? '#f1f5f9'
@@ -738,7 +744,8 @@ export function GroupTrainingStats({
                           );
                         })}
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

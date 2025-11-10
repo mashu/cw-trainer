@@ -39,22 +39,22 @@ export const normalizeTrainingSettings = (
 
   const candidate = raw as Record<string, unknown>;
   const normalizedDigits =
-    typeof candidate.digitsLevel === 'number'
-      ? Math.min(Math.max(Math.trunc(candidate.digitsLevel), DIGITS_LEVEL_MIN), DIGITS_LEVEL_MAX)
+    typeof candidate['digitsLevel'] === 'number'
+      ? Math.min(Math.max(Math.trunc(candidate['digitsLevel']), DIGITS_LEVEL_MIN), DIGITS_LEVEL_MAX)
       : fallback.digitsLevel;
 
   const merged = {
     ...fallback,
     ...candidate,
-    charSetMode: normalizeCharSetMode(candidate.charSetMode, fallback.charSetMode),
+    charSetMode: normalizeCharSetMode(candidate['charSetMode'], fallback.charSetMode),
     digitsLevel: normalizedDigits,
-    customSet: normalizeCustomSet(candidate.customSet, fallback.customSet),
+    customSet: normalizeCustomSet(candidate['customSet'], fallback.customSet),
     autoAdjustKoch:
-      typeof candidate.autoAdjustKoch === 'boolean'
-        ? candidate.autoAdjustKoch
+      typeof candidate['autoAdjustKoch'] === 'boolean'
+        ? candidate['autoAdjustKoch']
         : fallback.autoAdjustKoch,
     linkSpeeds:
-      typeof candidate.linkSpeeds === 'boolean' ? candidate.linkSpeeds : fallback.linkSpeeds,
+      typeof candidate['linkSpeeds'] === 'boolean' ? candidate['linkSpeeds'] : fallback.linkSpeeds,
   };
 
   const parseResult = trainingSettingsSchema.safeParse(merged);

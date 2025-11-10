@@ -53,48 +53,58 @@ const normalizeIcrSettings = (raw: unknown, fallback: IcrSettings): IcrSettings 
   }
 
   const next: IcrSettings = {
-    trialsPerSession: toNumber(raw.trialsPerSession, fallback.trialsPerSession, {
+    trialsPerSession: toNumber(raw['trialsPerSession'], fallback.trialsPerSession, {
       min: 1,
       max: 500,
       integer: true,
     }),
-    trialDelayMs: toNumber(raw.trialDelayMs, fallback.trialDelayMs, {
+    trialDelayMs: toNumber(raw['trialDelayMs'], fallback.trialDelayMs, {
       min: 0,
       max: 10_000,
       integer: true,
     }),
-    vadEnabled: toBoolean(raw.vadEnabled, fallback.vadEnabled),
-    vadThreshold: toNumber(raw.vadThreshold, fallback.vadThreshold, {
+    vadEnabled: toBoolean(raw['vadEnabled'], fallback.vadEnabled),
+    vadThreshold: toNumber(raw['vadThreshold'], fallback.vadThreshold, {
       min: 0,
       max: 1,
     }),
-    vadHoldMs: toNumber(raw.vadHoldMs, fallback.vadHoldMs, {
+    vadHoldMs: toNumber(raw['vadHoldMs'], fallback.vadHoldMs, {
       min: 0,
       max: 2_000,
       integer: true,
     }),
-    bucketGreenMaxMs: toNumber(raw.bucketGreenMaxMs, fallback.bucketGreenMaxMs, {
+    bucketGreenMaxMs: toNumber(raw['bucketGreenMaxMs'], fallback.bucketGreenMaxMs, {
       min: 1,
       max: 10_000,
       integer: true,
     }),
-    bucketYellowMaxMs: toNumber(raw.bucketYellowMaxMs, fallback.bucketYellowMaxMs, {
+    bucketYellowMaxMs: toNumber(raw['bucketYellowMaxMs'], fallback.bucketYellowMaxMs, {
       min: 1,
       max: 20_000,
       integer: true,
     }),
-    micDeviceId: toStringOrUndefined(raw.micDeviceId),
+  };
+  
+  const micDeviceIdValue = toStringOrUndefined(raw['micDeviceId']);
+  let bucketYellowMaxMs = next.bucketYellowMaxMs;
+  let vadHoldMs = next.vadHoldMs;
+  
+  if (bucketYellowMaxMs < next.bucketGreenMaxMs) {
+    bucketYellowMaxMs = next.bucketGreenMaxMs;
+  }
+
+  if (vadHoldMs < 20) {
+    vadHoldMs = 20;
+  }
+
+  const result: IcrSettings = {
+    ...next,
+    bucketYellowMaxMs,
+    vadHoldMs,
+    ...(micDeviceIdValue !== undefined ? { micDeviceId: micDeviceIdValue } : {}),
   };
 
-  if (next.bucketYellowMaxMs < next.bucketGreenMaxMs) {
-    next.bucketYellowMaxMs = next.bucketGreenMaxMs;
-  }
-
-  if (next.vadHoldMs < 20) {
-    next.vadHoldMs = 20;
-  }
-
-  return next;
+  return result;
 };
 
 export interface UseIcrSettingsResult {

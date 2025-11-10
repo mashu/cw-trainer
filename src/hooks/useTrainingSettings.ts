@@ -18,8 +18,8 @@ export const useTrainingSettingsState = (): UseTrainingSettingsStateResult =>
   useAppStore((state) => ({
     trainingSettings: state.trainingSettings,
     trainingSettingsStatus: state.trainingSettingsStatus,
-    trainingSettingsError: state.trainingSettingsError,
     trainingSettingsSaving: state.trainingSettingsSaving,
+    ...(state.trainingSettingsError !== undefined ? { trainingSettingsError: state.trainingSettingsError } : {}),
   }));
 
 export const useTrainingSettingsActions = (): {

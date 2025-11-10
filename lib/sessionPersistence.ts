@@ -1,6 +1,6 @@
 import { collection, deleteDoc, doc, getDocs, orderBy, query, setDoc } from 'firebase/firestore';
 import * as Firestore from 'firebase/firestore';
-import type { SessionResult } from '@/types/session';
+import type { SessionResult } from '@/src/types/domain';
 import { getDailyStats, getLetterStats } from '@/lib/stats';
 import { calculateAlphabetSize, calculateEffectiveAlphabetSize, calculateTotalChars, computeAverageResponseMs, computeSessionScore, derivePublicIdFromUid } from '@/lib/score';
 import { calculateGroupLetterAccuracy } from '@/lib/groupAlignment';
@@ -96,7 +96,23 @@ export const normalizeSession = (raw: any, opts?: { docId?: string }): SessionRe
   const score = (typeof raw?.score === 'number' && isFinite(raw.score) && raw.score > 0)
     ? Math.round(raw.score * 100) / 100
     : computeSessionScore({ effectiveAlphabetSize, alphabetSize, accuracy: safeAccuracy, avgResponseMs, totalChars });
-  return { date, timestamp: ts, startedAt, finishedAt, groups, groupTimings, accuracy: safeAccuracy, letterAccuracy, alphabetSize, avgResponseMs, totalChars, effectiveAlphabetSize, score, firestoreId: opts?.docId };
+  const result: SessionResult = { 
+    date, 
+    timestamp: ts, 
+    startedAt, 
+    finishedAt, 
+    groups, 
+    groupTimings, 
+    accuracy: safeAccuracy, 
+    letterAccuracy, 
+    alphabetSize, 
+    avgResponseMs, 
+    totalChars, 
+    effectiveAlphabetSize, 
+    score,
+    ...(opts?.docId !== undefined ? { firestoreId: opts.docId } : {})
+  };
+  return result;
 };
 
 async function ensurePublicId(services: FirebaseServicesLite, user: { uid: string } | null): Promise<number | null> {

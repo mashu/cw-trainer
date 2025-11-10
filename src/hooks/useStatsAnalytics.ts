@@ -104,16 +104,24 @@ export function useStatsAnalytics(sessions: SessionResult[]): UseStatsAnalyticsR
       if (times.length === 0) {
         return;
       }
-      if (!daily[session.date]) {
-        daily[session.date] = [];
+      const date = session.date;
+      if (!date) return;
+      if (!daily[date]) {
+        daily[date] = [];
       }
-      daily[session.date].push(...times);
+      const arr = daily[date];
+      if (arr) {
+        arr.push(...times);
+      }
     });
 
     return Object.keys(daily)
       .sort()
       .map((date, index) => {
         const arr = daily[date];
+        if (!arr || arr.length === 0) {
+          return { date, dayIndex: index, averageMs: 0, count: 0 };
+        }
         const avg = arr.reduce((sum, value) => sum + value, 0) / Math.max(1, arr.length);
         return {
           date,

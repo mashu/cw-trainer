@@ -19,9 +19,9 @@ export const useSessionsState = (): UseSessionsStateResult =>
   useAppStore((state) => ({
     sessions: state.sessions,
     sessionsStatus: state.sessionsStatus,
-    sessionsError: state.sessionsError,
     sessionsSyncing: state.sessionsSyncing,
-    lastSessionsUpdatedAt: state.lastSessionsUpdatedAt,
+    ...(state.sessionsError !== undefined ? { sessionsError: state.sessionsError } : {}),
+    ...(state.lastSessionsUpdatedAt !== undefined ? { lastSessionsUpdatedAt: state.lastSessionsUpdatedAt } : {}),
   }));
 
 export const useSessionsActions = (): {

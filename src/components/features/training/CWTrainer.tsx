@@ -177,7 +177,12 @@ export function CWTrainer(): JSX.Element {
 
   useEffect(() => {
     if (!hasInitializedSettingsRef.current && trainingSettingsStatus === 'ready') {
-      lastSavedSettingsRef.current = serializeSettings(settings);
+      const { customSet, ...restSettings } = settings;
+      const settingsToSerialize: Parameters<typeof serializeSettings>[0] = {
+        ...restSettings,
+        ...(customSet && customSet.length > 0 ? { customSet: [...customSet] } : {}),
+      };
+      lastSavedSettingsRef.current = serializeSettings(settingsToSerialize);
       hasInitializedSettingsRef.current = true;
     }
   }, [serializeSettings, settings, trainingSettingsStatus]);
@@ -226,8 +231,18 @@ export function CWTrainer(): JSX.Element {
       } catch {}
 
       try {
-        const saved = await saveTrainingSettings(settings);
-        lastSavedSettingsRef.current = tsSerialize(saved);
+        const { customSet, ...restSettings } = settings;
+        const settingsToSave: Parameters<typeof saveTrainingSettings>[0] = {
+          ...restSettings,
+          customSet: customSet && customSet.length > 0 ? [...customSet] : [],
+        };
+        const saved = await saveTrainingSettings(settingsToSave);
+        const { customSet: savedCustomSet, ...restSaved } = saved;
+        const savedToSerialize: Parameters<typeof tsSerialize>[0] = {
+          ...restSaved,
+          ...(savedCustomSet && savedCustomSet.length > 0 ? { customSet: [...savedCustomSet] } : {}),
+        };
+        lastSavedSettingsRef.current = tsSerialize(savedToSerialize);
 
         const hasCloudContext = Boolean(firebaseServices && firebaseUser?.uid);
         const source = opts?.source ?? 'manual';
@@ -249,7 +264,12 @@ export function CWTrainer(): JSX.Element {
 
   // Debounced auto-save of settings changes
   useEffect(() => {
-    const serialized = serializeSettings(settings);
+    const { customSet, ...restSettings } = settings;
+    const settingsToSerialize: Parameters<typeof serializeSettings>[0] = {
+      ...restSettings,
+      ...(customSet && customSet.length > 0 ? { customSet: [...customSet] } : {}),
+    };
+    const serialized = serializeSettings(settingsToSerialize);
     if (serialized === lastSavedSettingsRef.current) return;
     try {
       if (settingsDebounceTimerRef.current) {
@@ -308,15 +328,17 @@ export function CWTrainer(): JSX.Element {
     }
   }, [firebaseReady, firebaseServices, setToast, switchAccount]);
 
-  const generateGroup = (): string =>
-    externalGenerateGroup({
-      kochLevel: settings.kochLevel,
-      minGroupSize: settings.minGroupSize,
-      maxGroupSize: settings.maxGroupSize,
-      charSetMode: settings.charSetMode,
-      digitsLevel: settings.digitsLevel,
-      customSet: settings.customSet,
+  const generateGroup = (): string => {
+    const { customSet, ...restSettings } = settings;
+    return externalGenerateGroup({
+      kochLevel: restSettings.kochLevel,
+      minGroupSize: restSettings.minGroupSize,
+      maxGroupSize: restSettings.maxGroupSize,
+      ...(restSettings.charSetMode !== undefined ? { charSetMode: restSettings.charSetMode } : {}),
+      ...(restSettings.digitsLevel !== undefined ? { digitsLevel: restSettings.digitsLevel } : {}),
+      ...(customSet && customSet.length > 0 ? { customSet: [...customSet] } : {}),
     });
+  };
 
   const pickToneHz = (): number => {
     const min = Math.max(100, settings.sideToneMin);
@@ -419,7 +441,9 @@ export function CWTrainer(): JSX.Element {
       }
       const startTs = Date.now();
       groupStartAtRef.current[i] = startTs;
-      const duration = await playMorseCode(groups[i], mySession);
+      const group = groups[i];
+      if (!group) continue;
+      const duration = await playMorseCode(group, mySession);
       const endTs = startTs + Math.max(0, Math.round((duration || 0) * 1000));
       groupEndAtRef.current[i] = endTs;
       if (trainingAbortRef.current || sessionIdRef.current !== mySession) break;
@@ -576,7 +600,10 @@ export function CWTrainer(): JSX.Element {
 
     const allAnswered =
       nextAnswers.length === sentGroups.length &&
-      nextAnswers.every((a, i) => a && a.length === sentGroups[i].length);
+      nextAnswers.every((a, i) => {
+        const sentGroup = sentGroups[i];
+        return a && sentGroup && a.length === sentGroup.length;
+      });
     if (allAnswered) {
       submitAnswer();
     }
@@ -675,13 +702,15 @@ export function CWTrainer(): JSX.Element {
       totalChars,
     });
 
+    const dateStr = new Date().toISOString().split('T')[0];
+    if (!dateStr) throw new Error('Failed to generate date string');
     const result: SessionResult = {
-      date: new Date().toISOString().split('T')[0],
+      date: dateStr,
       timestamp: Date.now(),
       startedAt: startedAtRef.current || Date.now(),
       finishedAt: Date.now(),
-      groups,
-      groupTimings,
+      groups: groups.map(g => ({ ...g })),
+      groupTimings: groupTimings.map(t => ({ ...t })),
       accuracy,
       letterAccuracy,
       alphabetSize,
@@ -692,7 +721,15 @@ export function CWTrainer(): JSX.Element {
     };
 
     try {
-      await saveSession(result);
+      const sessionToSave: Parameters<typeof saveSession>[0] = {
+        ...result,
+        groups: result.groups.map(g => ({ sent: g.sent, received: g.received, correct: g.correct })),
+        groupTimings: result.groupTimings.map(t => ({ 
+          timeToCompleteMs: t.timeToCompleteMs,
+          ...(t.perCharMs !== undefined ? { perCharMs: t.perCharMs } : {}),
+        })),
+      };
+      await saveSession(sessionToSave);
     } catch (error) {
       const appError = ensureAppError(error);
       setToast({ message: appError.message, type: 'error' });
@@ -757,8 +794,23 @@ export function CWTrainer(): JSX.Element {
         onLogout={handleLogout}
         onSwitchAccount={handleSwitchAccount}
         authInProgress={authInProgress}
-        settings={settings}
-        setSettings={(next) => setTrainingSettingsState(next)}
+        settings={{
+          ...settings,
+          customSet: settings.customSet ? [...settings.customSet] : [],
+        }}
+        setSettings={(next) => {
+          const currentSettings = {
+            ...settings,
+            customSet: settings.customSet ? [...settings.customSet] : [],
+          };
+          const nextValue = typeof next === 'function' ? next(currentSettings) : next;
+          const { customSet: nextCustomSet, ...restNext } = nextValue;
+          const convertedSettings = {
+            ...restNext,
+            customSet: nextCustomSet && nextCustomSet.length > 0 ? [...nextCustomSet] : [],
+          } as Parameters<typeof setTrainingSettingsState>[0];
+          setTrainingSettingsState(convertedSettings);
+        }}
         onSaveSettings={() => {
           void saveSettings({ source: 'manual' });
         }}
@@ -828,9 +880,12 @@ export function CWTrainer(): JSX.Element {
                     Last Accuracy
                   </p>
                   <p className="text-3xl font-extrabold text-emerald-800 mt-1">
-                    {Number.isFinite(sessions[sessions.length - 1].accuracy)
-                      ? Math.round(sessions[sessions.length - 1].accuracy * 100)
-                      : 0}
+                    {(() => {
+                      const lastSession = sessions[sessions.length - 1];
+                      return lastSession && Number.isFinite(lastSession.accuracy)
+                        ? Math.round(lastSession.accuracy * 100)
+                        : 0;
+                    })()}
                     %
                   </p>
                   <p className="text-xs text-emerald-700/70 mt-1">from your last session</p>
@@ -980,9 +1035,9 @@ export function CWTrainer(): JSX.Element {
             <ICRTrainer
               sharedAudio={{
                 kochLevel: settings.kochLevel,
-                charSetMode: settings.charSetMode,
-                digitsLevel: settings.digitsLevel,
-                customSet: settings.customSet,
+                ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
+                ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
+                ...(settings.customSet && settings.customSet.length > 0 ? { customSet: [...settings.customSet] } : {}),
                 charWpm: Math.max(1, settings.charWpm),
                 effectiveWpm: Math.max(1, settings.effectiveWpm),
                 sideToneMin: settings.sideToneMin,
@@ -995,7 +1050,10 @@ export function CWTrainer(): JSX.Element {
           </SwipeContainer>
         ) : activeMode === 'player' ? (
           <div className="space-y-6">
-            <TextPlayer settings={settings} />
+            <TextPlayer settings={{
+              ...settings,
+              customSet: settings.customSet ? [...settings.customSet] : [],
+            }} />
           </div>
         ) : null}
       </div>

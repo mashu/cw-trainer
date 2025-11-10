@@ -40,21 +40,41 @@ export function alignGroup(sent: string, received: string): GroupAlignmentPair[]
   
   // Initialize base cases
   for (let i = 0; i <= m; i++) {
-    dp[i][0] = i; // cost to delete i chars from sent
+    const row = dp[i];
+    if (row) {
+      row[0] = i; // cost to delete i chars from sent
+    }
   }
-  for (let j = 0; j <= n; j++) {
-    dp[0][j] = j; // cost to insert j chars into received
+  const firstRow = dp[0];
+  if (firstRow) {
+    for (let j = 0; j <= n; j++) {
+      firstRow[j] = j; // cost to insert j chars into received
+    }
   }
   
   // Fill DP table
   for (let i = 1; i <= m; i++) {
+    const row = dp[i];
+    const prevRow = dp[i - 1];
+    if (!row || !prevRow) continue;
     for (let j = 1; j <= n; j++) {
-      const matchCost = s[i - 1] === r[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,           // deletion
-        dp[i][j - 1] + 1,           // insertion
-        dp[i - 1][j - 1] + matchCost // substitution/match
-      );
+      const sentChar = s[i - 1];
+      const receivedChar = r[j - 1];
+      if (sentChar === undefined || receivedChar === undefined) continue;
+      const matchCost = sentChar === receivedChar ? 0 : 1;
+      const prevCol = prevRow[j];
+      const currCol = row[j - 1];
+      const prevDiag = prevRow[j - 1];
+      if (typeof prevCol === 'number' && typeof currCol === 'number' && typeof prevDiag === 'number') {
+        const col = row[j];
+        if (col !== undefined) {
+          row[j] = Math.min(
+            prevCol + 1,           // deletion
+            currCol + 1,           // insertion
+            prevDiag + matchCost   // substitution/match
+          );
+        }
+      }
     }
   }
   
@@ -65,25 +85,32 @@ export function alignGroup(sent: string, received: string): GroupAlignmentPair[]
   
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0) {
-      const matchCost = s[i - 1] === r[j - 1] ? 0 : 1;
-      const current = dp[i][j];
-      const substitution = dp[i - 1][j - 1] + matchCost;
-      const deletion = dp[i - 1][j] + 1;
-      const insertion = dp[i][j - 1] + 1;
+      const row = dp[i];
+      const prevRow = dp[i - 1];
+      if (!row || !prevRow) break;
+      const sentChar = s[i - 1];
+      const receivedChar = r[j - 1];
+      if (sentChar === undefined || receivedChar === undefined) break;
+      const matchCost = sentChar === receivedChar ? 0 : 1;
+      const current = row[j];
+      if (current === undefined) break;
+      const substitution = (prevRow[j - 1] ?? 0) + matchCost;
+      const deletion = (prevRow[j] ?? 0) + 1;
+      const insertion = (row[j - 1] ?? 0) + 1;
       
       if (current === substitution) {
         // Match or substitution
         alignment.unshift({
-          sentChar: s[i - 1],
-          receivedChar: r[j - 1],
-          match: s[i - 1] === r[j - 1]
+          sentChar,
+          receivedChar,
+          match: sentChar === receivedChar
         });
         i--;
         j--;
       } else if (current === deletion) {
         // Deletion: sent char not in received
         alignment.unshift({
-          sentChar: s[i - 1],
+          sentChar,
           receivedChar: null,
           match: false
         });
@@ -92,26 +119,32 @@ export function alignGroup(sent: string, received: string): GroupAlignmentPair[]
         // Insertion: extra received char
         alignment.unshift({
           sentChar: null,
-          receivedChar: r[j - 1],
+          receivedChar,
           match: false
         });
         j--;
       }
     } else if (i > 0) {
       // Remaining sent chars (deletions)
-      alignment.unshift({
-        sentChar: s[i - 1],
-        receivedChar: null,
-        match: false
-      });
+      const sentChar = s[i - 1];
+      if (sentChar !== undefined) {
+        alignment.unshift({
+          sentChar,
+          receivedChar: null,
+          match: false
+        });
+      }
       i--;
     } else {
       // Remaining received chars (insertions)
-      alignment.unshift({
-        sentChar: null,
-        receivedChar: r[j - 1],
-        match: false
-      });
+      const receivedChar = r[j - 1];
+      if (receivedChar !== undefined) {
+        alignment.unshift({
+          sentChar: null,
+          receivedChar,
+          match: false
+        });
+      }
       j--;
     }
   }
@@ -127,7 +160,7 @@ export function alignGroup(sent: string, received: string): GroupAlignmentPair[]
  * @returns Record mapping each letter to { correct: number, total: number }
  */
 export function calculateGroupLetterAccuracy(
-  groups: Array<{ sent: string; received: string }>
+  groups: ReadonlyArray<{ readonly sent: string; readonly received: string }>
 ): Record<string, { correct: number; total: number }> {
   const letterAccuracy: Record<string, { correct: number; total: number }> = {};
   
@@ -181,7 +214,7 @@ export function createGroupDisplayAlignment(
  * @returns Accuracy score (0..1) and detailed per-group results
  */
 export function calculateGroupAccuracy(
-  groups: Array<{ sent: string; received: string }>
+  groups: ReadonlyArray<{ readonly sent: string; readonly received: string }>
 ): {
   accuracy: number;
   groups: Array<{ sent: string; received: string; correct: boolean; alignment: GroupAlignmentPair[] }>;

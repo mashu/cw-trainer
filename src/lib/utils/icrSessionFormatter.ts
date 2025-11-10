@@ -49,33 +49,39 @@ const normalizeTrial = (trial: RawIcrTrial): IcrTrialResult => {
   return {
     target,
     heardAt,
-    stopAt,
-    reactionMs,
-    typed: typedRaw,
-    correct,
+    ...(stopAt !== undefined ? { stopAt } : {}),
+    ...(reactionMs !== undefined ? { reactionMs } : {}),
+    ...(typedRaw !== undefined ? { typed: typedRaw } : {}),
+    ...(correct !== undefined ? { correct } : {}),
   };
 };
 
-const normalizeSharedAudio = (snapshot: SharedAudioSnapshot): IcrAudioSnapshot => ({
-  kochLevel: clampNumber(Math.round(snapshot.kochLevel || 0), 0, 100),
-  charSetMode: snapshot.charSetMode,
-  digitsLevel: typeof snapshot.digitsLevel === 'number' ? clampNumber(Math.round(snapshot.digitsLevel), 0, 10) : undefined,
-  customSet: Array.isArray(snapshot.customSet)
-    ? snapshot.customSet
-        .map((entry) => (typeof entry === 'string' ? entry.trim().toUpperCase() : ''))
-        .filter((entry) => entry.length > 0)
-    : undefined,
-  charWpm: clampNumber(Math.round(snapshot.charWpm || 0), 1, 200),
-  effectiveWpm: typeof snapshot.effectiveWpm === 'number'
-    ? clampNumber(Math.round(snapshot.effectiveWpm), 1, 200)
-    : undefined,
-  sideToneMin: clampNumber(Math.round(snapshot.sideToneMin || 0), 0, 10_000),
-  sideToneMax: clampNumber(Math.round(snapshot.sideToneMax || 0), 0, 10_000),
-  steepness: Number.isFinite(snapshot.steepness) ? snapshot.steepness : 0,
-  envelopeSmoothing: Number.isFinite(snapshot.envelopeSmoothing)
-    ? snapshot.envelopeSmoothing
-    : undefined,
-});
+const normalizeSharedAudio = (snapshot: SharedAudioSnapshot): IcrAudioSnapshot => {
+  return {
+    kochLevel: clampNumber(Math.round(snapshot.kochLevel || 0), 0, 100),
+    charWpm: clampNumber(Math.round(snapshot.charWpm || 0), 1, 200),
+    sideToneMin: clampNumber(Math.round(snapshot.sideToneMin || 0), 0, 10_000),
+    sideToneMax: clampNumber(Math.round(snapshot.sideToneMax || 0), 0, 10_000),
+    steepness: Number.isFinite(snapshot.steepness) ? snapshot.steepness : 0,
+    ...(snapshot.charSetMode !== undefined ? { charSetMode: snapshot.charSetMode } : {}),
+    ...(typeof snapshot.digitsLevel === 'number' 
+      ? { digitsLevel: clampNumber(Math.round(snapshot.digitsLevel), 0, 10) } 
+      : {}),
+    ...(Array.isArray(snapshot.customSet) && snapshot.customSet.length > 0
+      ? { 
+          customSet: snapshot.customSet
+            .map((entry) => (typeof entry === 'string' ? entry.trim().toUpperCase() : ''))
+            .filter((entry) => entry.length > 0)
+        } 
+      : {}),
+    ...(typeof snapshot.effectiveWpm === 'number'
+      ? { effectiveWpm: clampNumber(Math.round(snapshot.effectiveWpm), 1, 200) }
+      : {}),
+    ...(Number.isFinite(snapshot.envelopeSmoothing)
+      ? { envelopeSmoothing: snapshot.envelopeSmoothing }
+      : {}),
+  };
+};
 
 export const formatSession = ({
   trials,
@@ -97,7 +103,9 @@ export const formatSession = ({
   const timestampValue = typeof timestamp === 'number' && Number.isFinite(timestamp)
     ? Math.round(timestamp)
     : Date.now();
-  const date = new Date(timestampValue).toISOString().split('T')[0] ?? new Date().toISOString().split('T')[0];
+  const dateStr = new Date(timestampValue).toISOString().split('T')[0];
+  const date = dateStr || new Date().toISOString().split('T')[0] || '';
+  if (!date) throw new Error('Failed to generate date string');
 
   const reactionSamples = answeredTrials
     .map((trial) => trial.reactionMs)

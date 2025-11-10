@@ -24,6 +24,7 @@ import { KOCH_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
 import { formatSession } from '@/lib/utils/icrSessionFormatter';
 import type { IcrSettings } from '@/types';
+import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 
 type ICRTrial = {
   id: string; // unique ID for event-driven identification
@@ -43,14 +44,17 @@ const pickRandomChar = (opts: {
   digitsLevel?: number;
   customSet?: string[];
 }): string => {
-  const pool = computeCharPool({
+  const poolSettings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'customSet'> = {
     kochLevel: opts.kochLevel,
-    charSetMode: opts.charSetMode ?? 'koch',
-    digitsLevel: opts.digitsLevel,
-    customSet: opts.customSet,
-  });
+    ...(opts.charSetMode !== undefined ? { charSetMode: opts.charSetMode } : { charSetMode: 'koch' }),
+    ...(opts.digitsLevel !== undefined ? { digitsLevel: opts.digitsLevel } : {}),
+    ...(opts.customSet !== undefined ? { customSet: opts.customSet } : {}),
+  };
+  const pool = computeCharPool(poolSettings);
+  if (pool.length === 0) return 'E'; // fallback
   const idx = Math.floor(Math.random() * pool.length);
-  return pool[idx];
+  const char = pool[idx];
+  return char ?? 'E'; // fallback if undefined
 };
 
 type LetterChartPayload = {
@@ -215,7 +219,9 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
     // Compute normalized peak deviation around midline (128)
     let peak = 0;
     for (let i = 0; i < buffer.length; i++) {
-      const v = Math.abs(buffer[i] - 128) / 128; // 0..1
+      const sample = buffer[i];
+      if (sample === undefined) continue;
+      const v = Math.abs(sample - 128) / 128; // 0..1
       if (v > peak) peak = v;
     }
     return peak;
@@ -260,7 +266,9 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
             const waitingTrialIds = Object.keys(stopEventResolversRef.current);
             if (waitingTrialIds.length > 0) {
               // Get the most recent trial ID (last one in the array, or find by timestamp in ID)
-              const trialId = waitingTrialIds[waitingTrialIds.length - 1];
+              const lastIdx = waitingTrialIds.length - 1;
+              const trialId = waitingTrialIds[lastIdx];
+              if (trialId === undefined) return;
               const resolver = stopEventResolversRef.current[trialId];
               if (resolver) {
                 try {
@@ -348,17 +356,12 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         } catch {}
       });
       for (let i = 0; i < icrSettings.trialsPerSession; i++) {
-        // Clear previous session's trials only when we're about to start the first trial
-        // This preserves the previous session's data for analysis until the new session actually begins
-        if (i === 0) {
-          setTrials([]);
-        }
         if (!sessionActiveRef.current) break;
         const target = pickRandomChar({
           kochLevel: sharedAudio.kochLevel,
-          charSetMode: sharedAudio.charSetMode,
-          digitsLevel: sharedAudio.digitsLevel,
-          customSet: sharedAudio.customSet,
+          ...(sharedAudio.charSetMode !== undefined ? { charSetMode: sharedAudio.charSetMode } : {}),
+          ...(sharedAudio.digitsLevel !== undefined ? { digitsLevel: sharedAudio.digitsLevel } : {}),
+          ...(sharedAudio.customSet !== undefined ? { customSet: sharedAudio.customSet } : {}),
         });
         // Reset per-trial gates
         stopRef.current = false;
@@ -367,6 +370,14 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         // Set audioEndAt to a future time initially to prevent VAD from triggering during playback
         // We'll update it with the precise time after audio starts
         audioEndAtRef.current = Date.now() + 10000; // Set to far future initially
+        
+        // Clear previous session's trials only when we're about to add the first trial of the new session
+        // This preserves the previous session's data for analysis until the new session actually begins
+        // We clear right before adding the first trial, ensuring stats remain visible until then
+        if (i === 0) {
+          setTrials([]);
+        }
+        
         // Add trial placeholder with unique ID; will set heardAt to audio end timestamp
         const trialId = `${sessionTokenRef.current}-${i}-${Date.now()}`;
         setTrials((prev) => [...prev, { id: trialId, target, heardAt: 0 }]);
@@ -476,7 +487,10 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
             const copy = prev.slice();
             const idx = copy.findIndex(t => t.id === trialId);
             if (idx >= 0) {
-              copy[idx] = { ...copy[idx], stopAt, reactionMs };
+              const existing = copy[idx];
+              if (existing) {
+                copy[idx] = { ...existing, stopAt, reactionMs };
+              }
             }
             return copy;
           });
@@ -594,7 +608,9 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         const waitingTrialIds = Object.keys(stopEventResolversRef.current);
         if (waitingTrialIds.length > 0) {
           // Get the most recent trial ID (last one in the array)
-          const trialId = waitingTrialIds[waitingTrialIds.length - 1];
+          const lastIdx = waitingTrialIds.length - 1;
+          const trialId = waitingTrialIds[lastIdx];
+          if (trialId === undefined) return;
           const resolver = stopEventResolversRef.current[trialId];
           if (resolver) {
             try {
@@ -660,31 +676,41 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
     );
     // compute averages
     letters.forEach((l) => {
-      const s = agg[l].samples.map((s) => s.reaction);
+      const stat = agg[l];
+      if (!stat) return;
+      const s = stat.samples.map((s) => s.reaction);
       const base = s.length ? s.reduce((a, b) => a + b, 0) / s.length : 0;
-      const acc = agg[l].total > 0 ? agg[l].correct / agg[l].total : 0;
+      const acc = stat.total > 0 ? stat.correct / stat.total : 0;
       const adjusted = base * (1 + penaltyFactor * (1 - acc));
-      agg[l].avg = base;
-      agg[l].acc = acc;
-      agg[l].adjAvg = adjusted;
+      stat.avg = base;
+      stat.acc = acc;
+      stat.adjAvg = adjusted;
     });
     // bars data
-    const bars: LetterBarPoint[] = letters.map((l, i) => ({
-      letter: l,
-      index: i,
-      adjAvg: Math.round(agg[l].adjAvg),
-      avg: Math.round(agg[l].avg),
-      acc: agg[l].acc,
-      total: agg[l].total,
-    }));
+    const bars: LetterBarPoint[] = letters.map((l, i) => {
+      const stat = agg[l];
+      if (!stat) return { letter: l, index: i, adjAvg: 0, avg: 0, acc: 0, total: 0 };
+      return {
+        letter: l,
+        index: i,
+        adjAvg: Math.round(stat.adjAvg),
+        avg: Math.round(stat.avg),
+        acc: stat.acc,
+        total: stat.total,
+      };
+    });
     // category-aligned dots for simplicity/robustness
     const dotsCorrectCat: ReactionScatterPoint[] = [];
     const dotsWrongCat: ReactionScatterPoint[] = [];
     letters.forEach((l) => {
-      const samples = agg[l].samples;
+      const stat = agg[l];
+      if (!stat) return;
+      const samples = stat.samples;
       for (let j = 0; j < samples.length; j++) {
-        const targetArr = samples[j].correct ? dotsCorrectCat : dotsWrongCat;
-        targetArr.push({ letter: l, reaction: samples[j].reaction });
+        const sample = samples[j];
+        if (!sample) continue;
+        const targetArr = sample.correct ? dotsCorrectCat : dotsWrongCat;
+        targetArr.push({ letter: l, reaction: sample.reaction });
       }
     });
     return { bars, dotsCorrectCat, dotsWrongCat };
@@ -800,15 +826,15 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
                     const base = activeTrial.heardAt || 0;
                     
                     // Calculate reaction time if not already set
-                    let reactionMs: number | undefined = activeTrial.reactionMs;
-                    if (!reactionMs && base > 0) {
+                    let reactionMs: number = activeTrial.reactionMs ?? 0;
+                    if (reactionMs === 0 && base > 0) {
                       reactionMs = Math.max(0, Math.round(typedAt - base));
                     }
                     
                     // Apply penalty for incorrect letters
                     // Use bucketYellowMaxMs as a penalty timeout, or multiply by penalty factor
                     const penaltyFactor = 2.0; // Double the time for incorrect answers
-                    if (!correct && reactionMs !== undefined) {
+                    if (!correct && reactionMs > 0) {
                       // For incorrect letters, use max of actual time or penalty timeout
                       const penaltyTimeout = icrSettings.bucketYellowMaxMs || 800;
                       reactionMs = Math.max(reactionMs * penaltyFactor, penaltyTimeout);
@@ -818,21 +844,25 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
                       const copy = prev.slice();
                       const idx = copy.findIndex(t => t.id === activeTrial.id);
                       if (idx >= 0) {
-                        copy[idx] = { 
-                          ...copy[idx], 
-                          typed: letter, 
-                          correct,
-                          stopAt: typedAt,
-                          reactionMs,
-                        };
+                        const existing = copy[idx];
+                        if (existing) {
+                          copy[idx] = { 
+                            ...existing, 
+                            typed: letter, 
+                            correct,
+                            stopAt: typedAt,
+                            ...(reactionMs > 0 ? { reactionMs } : {}),
+                          };
+                        }
                       }
                       return copy;
                     });
                     
                     // Resolve input event promise if waiting - use trial ID
-                    if (inputEventResolversRef.current[activeTrial.id]) {
+                    const inputResolver = inputEventResolversRef.current[activeTrial.id];
+                    if (inputResolver) {
                       try {
-                        inputEventResolversRef.current[activeTrial.id]();
+                        inputResolver();
                       } catch {}
                     }
                     

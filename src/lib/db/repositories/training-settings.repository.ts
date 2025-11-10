@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, type Firestore } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 import type { FirebaseServicesLite } from '@/lib/sessionPersistence';
 import {
@@ -81,12 +81,12 @@ const toFirebaseUser = (
   };
 };
 
-const resolveFirestore = (services?: FirebaseServicesLite): Firestore | null => {
+const resolveFirestore = (services?: FirebaseServicesLite): any => {
   if (!services?.db) {
     return null;
   }
 
-  return services.db as Firestore;
+  return services.db;
 };
 
 export class FirebaseTrainingSettingsRepository implements TrainingSettingsRepository {

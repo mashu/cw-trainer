@@ -38,11 +38,10 @@ export const createTrainingSettingsSlice = ({
 }: CreateTrainingSettingsSliceParams): TrainingSettingsSlice => ({
   trainingSettings: DEFAULT_TRAINING_SETTINGS,
   trainingSettingsStatus: 'idle',
-  trainingSettingsError: undefined,
   trainingSettingsSaving: false,
 
   loadTrainingSettings: async (): Promise<TrainingSettings> => {
-    set({ trainingSettingsStatus: 'loading', trainingSettingsError: undefined });
+    set({ trainingSettingsStatus: 'loading' });
 
     try {
       const context = getContext();
@@ -50,7 +49,6 @@ export const createTrainingSettingsSlice = ({
       set({
         trainingSettings: settings,
         trainingSettingsStatus: 'ready',
-        trainingSettingsError: undefined,
       });
       return settings;
     } catch (error) {
@@ -64,7 +62,7 @@ export const createTrainingSettingsSlice = ({
   },
 
   saveTrainingSettings: async (input: TrainingSettingsInput): Promise<TrainingSettings> => {
-    set({ trainingSettingsSaving: true, trainingSettingsError: undefined });
+    set({ trainingSettingsSaving: true });
 
     try {
       const context = getContext();
@@ -86,7 +84,7 @@ export const createTrainingSettingsSlice = ({
   },
 
   patchTrainingSettings: async (patch: Partial<TrainingSettings>): Promise<TrainingSettings> => {
-    set({ trainingSettingsSaving: true, trainingSettingsError: undefined });
+    set({ trainingSettingsSaving: true });
 
     try {
       const context = getContext();
@@ -108,7 +106,7 @@ export const createTrainingSettingsSlice = ({
   },
 
   resetTrainingSettings: async (): Promise<TrainingSettings> => {
-    set({ trainingSettingsSaving: true, trainingSettingsError: undefined });
+    set({ trainingSettingsSaving: true });
 
     try {
       const context = getContext();

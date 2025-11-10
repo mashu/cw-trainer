@@ -85,7 +85,9 @@ export function ICRSettingsForm({
         analyser.getByteTimeDomainData(buffer);
         let peak = 0;
         for (let i = 0; i < buffer.length; i++) {
-          const v = Math.abs(buffer[i] - 128) / 128;
+          const sample = buffer[i];
+          if (sample === undefined) continue;
+          const v = Math.abs(sample - 128) / 128;
           if (v > peak) peak = v;
         }
         setMicLevel(peak);
@@ -277,7 +279,7 @@ export function ICRSettingsForm({
             onChange={(event) =>
               setSettings({
                 ...settings,
-                micDeviceId: event.target.value || undefined,
+                ...(event.target.value ? { micDeviceId: event.target.value } : {}),
               })
             }
           >

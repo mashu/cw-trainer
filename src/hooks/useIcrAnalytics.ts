@@ -71,16 +71,17 @@ export function useIcrAnalytics(): IcrAnalyticsSummary {
       .sort((a, b) => b.accuracyPercent - a.accuracyPercent);
 
     const bestLetter = sortedLetters[0];
-    const needsWorkLetter = sortedLetters[sortedLetters.length - 1];
+    const needsWorkLetterIdx = sortedLetters.length > 0 ? sortedLetters.length - 1 : -1;
+    const needsWorkLetter = needsWorkLetterIdx >= 0 ? sortedLetters[needsWorkLetterIdx] : undefined;
 
     return {
       totalSessions,
       totalTrials,
       averageReactionMs: Math.round(sumReaction / totalSessions),
       averageAccuracyPercent: Math.round(sumAccuracy / totalSessions),
-      bestLetter,
-      needsWorkLetter,
-      lastSessionAt,
+      ...(bestLetter ? { bestLetter } : {}),
+      ...(needsWorkLetter ? { needsWorkLetter } : {}),
+      ...(lastSessionAt !== undefined ? { lastSessionAt } : {}),
     };
   }, [icrSessions]);
 }

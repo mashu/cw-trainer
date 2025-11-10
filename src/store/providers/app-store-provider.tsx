@@ -88,8 +88,12 @@ export function AppStoreProvider({
   const storeRef = useRef<AppStoreApi>();
 
   if (!storeRef.current) {
+    const context: StoreContextValue = {
+      user,
+      ...(firebase !== undefined ? { firebase } : {}),
+    };
     storeRef.current = createAppStore({
-      context: { firebase, user },
+      context,
       sessionService: servicesRef.current.sessionService,
       trainingSettingsService: servicesRef.current.trainingSettingsService,
       icrSessionService: servicesRef.current.icrSessionService,
@@ -102,7 +106,11 @@ export function AppStoreProvider({
       return;
     }
 
-    store.setState({ context: { firebase, user } });
+    const context: StoreContextValue = {
+      user,
+      ...(firebase !== undefined ? { firebase } : {}),
+    };
+    store.setState({ context });
 
     void store
       .getState()

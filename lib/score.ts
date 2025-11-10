@@ -20,20 +20,20 @@ function clampNumber(value: number, min: number, max: number): number {
 }
 
 // Count unique characters used in the sent groups (case-insensitive A–Z, 0–9)
-export function calculateAlphabetSize(groups: Array<{ sent: string }>): number {
+export function calculateAlphabetSize(groups: ReadonlyArray<{ readonly sent: string }>): number {
   const uniqueChars = new Set<string>();
   groups.forEach((g) => {
     const s = (g?.sent || '').toUpperCase();
     for (let i = 0; i < s.length; i++) {
       const ch = s[i];
-      if (/^[A-Z0-9]$/.test(ch)) uniqueChars.add(ch);
+      if (ch !== undefined && /^[A-Z0-9]$/.test(ch)) uniqueChars.add(ch);
     }
   });
   return Math.max(1, uniqueChars.size);
 }
 
 // Count total characters sent across all groups
-export function calculateTotalChars(groups: Array<{ sent: string }>): number {
+export function calculateTotalChars(groups: ReadonlyArray<{ readonly sent: string }>): number {
   let total = 0;
   groups.forEach((g) => {
     const s = (g?.sent || '').toUpperCase();
@@ -44,14 +44,14 @@ export function calculateTotalChars(groups: Array<{ sent: string }>): number {
 
 // Shannon entropy (natural log) of character distribution over A–Z, 0–9
 // Returns { entropy: H, effectiveAlphabetSize: exp(H), samples: N, support: K }
-export function calculateEffectiveAlphabetSize(groups: Array<{ sent: string }>, opts?: { applyMillerMadow?: boolean }): number {
+export function calculateEffectiveAlphabetSize(groups: ReadonlyArray<{ readonly sent: string }>, opts?: { applyMillerMadow?: boolean }): number {
   const counts: Record<string, number> = {};
   let total = 0;
   (groups || []).forEach((g) => {
     const s = (g?.sent || '').toUpperCase();
     for (let i = 0; i < s.length; i++) {
       const ch = s[i];
-      if (/^[A-Z0-9]$/.test(ch)) {
+      if (ch !== undefined && /^[A-Z0-9]$/.test(ch)) {
         counts[ch] = (counts[ch] || 0) + 1;
         total += 1;
       }
@@ -74,7 +74,7 @@ export function calculateEffectiveAlphabetSize(groups: Array<{ sent: string }>, 
   return N_eff;
 }
 
-export function computeAverageResponseMs(timings: Array<{ timeToCompleteMs?: number }>): number {
+export function computeAverageResponseMs(timings: ReadonlyArray<{ readonly timeToCompleteMs?: number }>): number {
   const samples: number[] = [];
   (timings || []).forEach((t) => {
     const v = typeof t?.timeToCompleteMs === 'number' ? t.timeToCompleteMs : 0;

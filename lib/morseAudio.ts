@@ -94,6 +94,7 @@ export async function playMorseCodeControlled(
   for (let i = 0; i < text.length; i++) {
     if (stopped || shouldStop()) break;
     const rawChar = text[i];
+    if (rawChar === undefined) continue;
     if (rawChar === ' ') {
       const additional = Math.max(0, wordSpace - charSpace);
       currentTime += additional;
@@ -212,7 +213,9 @@ function writePcm16Wav(samples: Float32Array, sampleRate: number): Blob {
   // PCM samples
   let idx = 44;
   for (let i = 0; i < samples.length; i++) {
-    const clamped = Math.max(-1, Math.min(1, samples[i]));
+    const sample = samples[i];
+    if (sample === undefined) continue;
+    const clamped = Math.max(-1, Math.min(1, sample));
     const pcm = clamped < 0 
       ? Math.round(clamped * -PCM_INT16_MIN) 
       : Math.round(clamped * PCM_INT16_MAX);
@@ -243,6 +246,7 @@ export function renderMorseToWavBlob(text: string, options: RenderWavOptions): B
   let totalSec = 0;
   for (let i = 0; i < text.length; i++) {
     const rawChar = text[i];
+    if (rawChar === undefined) continue;
     if (rawChar === ' ') {
       totalSec += Math.max(0, wordSpace - charSpace);
       continue;
@@ -302,7 +306,10 @@ export function renderMorseToWavBlob(text: string, options: RenderWavOptions): B
       }
       const idx = startSample + n;
       if (idx < output.length) {
-        output[idx] += Math.sin(phase) * env;
+        const current = output[idx];
+        if (typeof current === 'number') {
+          output[idx] = current + Math.sin(phase) * env;
+        }
       }
     }
     return segmentSamples;
@@ -313,6 +320,7 @@ export function renderMorseToWavBlob(text: string, options: RenderWavOptions): B
   const spaceToSamples = (sec: number) => Math.floor(sec * sampleRate);
   for (let i = 0; i < text.length; i++) {
     const rawChar = text[i];
+    if (rawChar === undefined) continue;
     if (rawChar === ' ') {
       cursor += spaceToSamples(Math.max(0, wordSpace - charSpace));
       continue;

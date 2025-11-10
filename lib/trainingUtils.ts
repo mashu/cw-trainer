@@ -35,12 +35,13 @@ export function computeCharPool(
 }
 
 export function generateGroup(settings: TrainingSettingsLite): string {
-  const availableChars = computeCharPool({
+  const poolSettings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'customSet'> = {
     kochLevel: settings.kochLevel,
-    charSetMode: settings.charSetMode,
-    digitsLevel: settings.digitsLevel,
-    customSet: settings.customSet,
-  });
+    ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
+    ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
+    ...(settings.customSet !== undefined ? { customSet: settings.customSet } : {}),
+  };
+  const availableChars = computeCharPool(poolSettings);
   const groupSize =
     Math.floor(Math.random() * (settings.maxGroupSize - settings.minGroupSize + 1)) +
     settings.minGroupSize;

@@ -39,7 +39,8 @@ const deriveProvider = (firebaseUser: FirebaseUser): AppUser['provider'] => {
     return 'anonymous';
   }
 
-  const providerId = firebaseUser.providerData.find((entry) => entry?.providerId)?.providerId;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const providerId = firebaseUser.providerData.find((entry: any) => entry?.providerId)?.providerId;
   if (providerId === 'google.com') {
     return 'google';
   }
@@ -95,7 +96,8 @@ export function useAuth(): UseAuthResult {
         console.warn('[Auth] Failed to set persistence', error);
       }
 
-      unsubscribe = onAuthStateChanged(firebaseRef.current.auth, (user) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      unsubscribe = onAuthStateChanged(firebaseRef.current.auth, (user: any) => {
         setFirebaseUser(user);
         setAuthInProgress(false);
       });

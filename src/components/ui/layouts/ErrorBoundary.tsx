@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     // Log error to console (in production, send to error tracking service)
     console.error('[ErrorBoundary] Caught error:', error, errorInfo);
 
@@ -47,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ hasError: false, error: null });
   };
 
-  render(): React.ReactNode {
+  override render(): React.ReactNode {
     if (this.state.hasError) {
       // Custom fallback UI if provided
       if (this.props.fallback) {
@@ -80,7 +80,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </p>
             </div>
 
-            {this.state.error && process.env.NODE_ENV === 'development' && (
+            {this.state.error && process.env['NODE_ENV'] === 'development' && (
               <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
                 <p className="text-xs font-mono text-slate-700 break-words">
                   {this.state.error.toString()}

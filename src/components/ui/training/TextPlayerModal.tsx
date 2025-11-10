@@ -19,7 +19,7 @@ export function TextPlayerModal({
   onClose,
   settings,
   initialText,
-}: TextPlayerModalProps): JSX.Element {
+}: TextPlayerModalProps): JSX.Element | null {
   const [text, setText] = useState<string>(initialText || 'CQ CQ TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [durationSec, setDurationSec] = useState<number>(0);
@@ -38,9 +38,9 @@ export function TextPlayerModal({
   const generateLineOfGroups = (): string => {
     const charPool = computeCharPool({
       kochLevel: settings.kochLevel,
-      charSetMode: settings.charSetMode,
-      digitsLevel: settings.digitsLevel,
-      customSet: settings.customSet,
+      ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
+      ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
+      ...(settings.customSet && settings.customSet.length > 0 ? { customSet: [...settings.customSet] } : {}),
     });
     const safePool =
       Array.isArray(charPool) && charPool.length > 0

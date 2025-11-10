@@ -54,6 +54,13 @@ export class IcrSessionService {
   async clearSessions(): Promise<void> {
     writeSessions([]);
   }
+
+  async deleteSession(timestamp: number): Promise<IcrSessionResult[]> {
+    const sessions = readSessions();
+    const filtered = sessions.filter((s) => s.timestamp !== timestamp);
+    writeSessions(filtered);
+    return filtered;
+  }
 }
 
 

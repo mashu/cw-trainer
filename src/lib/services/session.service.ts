@@ -23,9 +23,18 @@ export class SessionService {
     }
 
     const validated = result.data;
+    const { firestoreId, groupTimings, ...rest } = validated;
+    const normalized: SessionResult = {
+      ...rest,
+      groupTimings: groupTimings.map(t => ({
+        timeToCompleteMs: t.timeToCompleteMs,
+        ...(t.perCharMs !== undefined ? { perCharMs: t.perCharMs } : {}),
+      })),
+      ...(firestoreId !== undefined ? { firestoreId } : {}),
+    };
     const existing = await this.repository.getAll(context);
     const byTimestamp = new Map(existing.map((session) => [session.timestamp, session] as const));
-    byTimestamp.set(validated.timestamp, validated);
+    byTimestamp.set(normalized.timestamp, normalized);
 
     const nextSessions = sortSessions(Array.from(byTimestamp.values()));
     await this.repository.saveAll(context, nextSessions);
@@ -42,7 +51,16 @@ export class SessionService {
       if (!result.success) {
         throw new ValidationError('Invalid session payload', result.error.flatten());
       }
-      return result.data;
+      const validated = result.data;
+      const { firestoreId, groupTimings, ...rest } = validated;
+      return {
+        ...rest,
+        groupTimings: groupTimings.map(t => ({
+          timeToCompleteMs: t.timeToCompleteMs,
+          ...(t.perCharMs !== undefined ? { perCharMs: t.perCharMs } : {}),
+        })),
+        ...(firestoreId !== undefined ? { firestoreId } : {}),
+      } as SessionResult;
     });
 
     const nextSessions = sortSessions(parsed);
