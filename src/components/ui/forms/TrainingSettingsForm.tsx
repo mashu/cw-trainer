@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 import { KOCH_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
@@ -40,6 +40,26 @@ export function TrainingSettingsForm({
   settings,
   setSettings,
 }: TrainingSettingsFormProps): JSX.Element {
+  // Local state for WPM inputs to allow empty/invalid values while typing
+  const [charWpmInput, setCharWpmInput] = useState<string>(String(settings.charWpm));
+  const [effectiveWpmInput, setEffectiveWpmInput] = useState<string>(String(settings.effectiveWpm));
+  
+  // Sync local state when settings change externally
+  useEffect(() => {
+    setCharWpmInput(String(settings.charWpm));
+  }, [settings.charWpm]);
+  
+  useEffect(() => {
+    // Only update effectiveWpmInput if speeds are not linked
+    // (when linked, it's controlled by charWpm changes)
+    if (!settings.linkSpeeds) {
+      setEffectiveWpmInput(String(settings.effectiveWpm));
+    } else {
+      // When linked, sync with charWpm
+      setEffectiveWpmInput(String(settings.charWpm));
+    }
+  }, [settings.effectiveWpm, settings.charWpm, settings.linkSpeeds]);
+  
   const previewCharWpm = Math.max(1, settings.charWpm || settings.effectiveWpm || 20);
   const dotDurationMs: number = (1.2 / previewCharWpm) * 1000;
   const riseMs: number = Math.min(settings.steepness, dotDurationMs / 2);
@@ -296,17 +316,37 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
-                min={0.1}
-                step={0.1}
-                value={settings.charWpm}
+                min={1}
+                step={1}
+                value={charWpmInput}
                 onChange={(event) => {
-                  const numValue = parseFloat(event.target.value);
+                  const inputValue = event.target.value;
+                  // Update local state immediately to allow free typing
+                  setCharWpmInput(inputValue);
+                  // Only update settings if we have a valid number
+                  const numValue = parseFloat(inputValue);
                   if (!isNaN(numValue) && numValue > 0) {
                     setSettings({
                       ...settings,
                       charWpm: numValue,
                       effectiveWpm: settings.linkSpeeds ? numValue : settings.effectiveWpm,
                     });
+                  }
+                }}
+                onBlur={(event) => {
+                  // On blur, ensure we have a valid value
+                  const numValue = parseFloat(event.target.value);
+                  if (isNaN(numValue) || numValue <= 0) {
+                    const validValue = 1;
+                    setCharWpmInput(String(validValue));
+                    setSettings({
+                      ...settings,
+                      charWpm: validValue,
+                      effectiveWpm: settings.linkSpeeds ? validValue : settings.effectiveWpm,
+                    });
+                  } else {
+                    // Ensure local state matches the validated value
+                    setCharWpmInput(String(numValue));
                   }
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
@@ -318,17 +358,36 @@ export function TrainingSettingsForm({
               </label>
               <input
                 type="number"
-                min={0.1}
-                step={0.1}
-                value={settings.effectiveWpm}
+                min={1}
+                step={1}
+                value={effectiveWpmInput}
                 disabled={Boolean(settings.linkSpeeds)}
                 onChange={(event) => {
-                  const numValue = parseFloat(event.target.value);
+                  const inputValue = event.target.value;
+                  // Update local state immediately to allow free typing
+                  setEffectiveWpmInput(inputValue);
+                  // Only update settings if we have a valid number
+                  const numValue = parseFloat(inputValue);
                   if (!isNaN(numValue) && numValue > 0) {
                     setSettings({
                       ...settings,
                       effectiveWpm: numValue,
                     });
+                  }
+                }}
+                onBlur={(event) => {
+                  // On blur, ensure we have a valid value
+                  const numValue = parseFloat(event.target.value);
+                  if (isNaN(numValue) || numValue <= 0) {
+                    const validValue = 1;
+                    setEffectiveWpmInput(String(validValue));
+                    setSettings({
+                      ...settings,
+                      effectiveWpm: validValue,
+                    });
+                  } else {
+                    // Ensure local state matches the validated value
+                    setEffectiveWpmInput(String(numValue));
                   }
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100"
@@ -344,6 +403,10 @@ export function TrainingSettingsForm({
                       linkSpeeds: link,
                       effectiveWpm: link ? settings.charWpm : settings.effectiveWpm,
                     });
+                    // Sync local state when linking speeds
+                    if (link) {
+                      setEffectiveWpmInput(String(settings.charWpm));
+                    }
                   }}
                 />
                 <span>Link speeds (effective = character)</span>
