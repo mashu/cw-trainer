@@ -26,6 +26,7 @@ import { formatSession } from '@/lib/utils/icrSessionFormatter';
 import type { IcrSettings } from '@/types';
 
 type ICRTrial = {
+  id: string; // unique ID for event-driven identification
   target: string;
   heardAt: number; // ms since epoch at end of audio playback (reaction baseline)
   stopAt?: number; // ms since epoch when voice or key stopped timer
@@ -118,13 +119,14 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
   const vadArmedRef = useRef<boolean>(false);
   const vadStartTimeRef = useRef<number | null>(null);
   const trialsRef = useRef<ICRTrial[]>([]);
+  const currentIndexRef = useRef<number>(0);
   const audioEndAtRef = useRef<number | null>(null);
   const stopSourceRef = useRef<'voice' | 'key' | null>(null);
   const sessionTokenRef = useRef(0);
   const lastPersistedTokenRef = useRef<number | null>(null);
-  // Event-driven resolvers for trial completion
-  const stopEventResolversRef = useRef<Record<number, (stopAt: number) => void>>({});
-  const inputEventResolversRef = useRef<Record<number, () => void>>({});
+  // Event-driven resolvers for trial completion - keyed by trial ID, not index
+  const stopEventResolversRef = useRef<Record<string, (stopAt: number) => void>>({});
+  const inputEventResolversRef = useRef<Record<string, () => void>>({});
 
   // Focus input when entering the panel and after mount
   useEffect(() => {
@@ -192,6 +194,10 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
     trialsRef.current = trials;
   }, [trials]);
 
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
   const measureInputLevel = useCallback((): number => {
     const analyser = analyserRef.current;
     if (!analyser) return 0;
@@ -229,11 +235,12 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
             stopRef.current = true;
             const stopAt = Date.now();
             // Resolve pending stop event promise for current trial
-            // Find the most recent trial index that's waiting
-            const waitingTrialIndices = Object.keys(stopEventResolversRef.current).map(Number).sort((a, b) => b - a);
-            if (waitingTrialIndices.length > 0) {
-              const trialIdx = waitingTrialIndices[0]; // Most recent trial
-              const resolver = stopEventResolversRef.current[trialIdx];
+            // Find the most recent trial ID that's waiting (event-driven, no index dependency)
+            const waitingTrialIds = Object.keys(stopEventResolversRef.current);
+            if (waitingTrialIds.length > 0) {
+              // Get the most recent trial ID (last one in the array, or find by timestamp in ID)
+              const trialId = waitingTrialIds[waitingTrialIds.length - 1];
+              const resolver = stopEventResolversRef.current[trialId];
               if (resolver) {
                 try {
                   resolver(stopAt);
@@ -297,6 +304,7 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
     // Don't clear trials here - clear them when we actually start the first trial
     // This preserves the previous session's stats until the new session begins
     setCurrentIndex(0);
+    currentIndexRef.current = 0;
     setIsRunning(true);
     sessionActiveRef.current = true;
     try {
@@ -325,9 +333,11 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         stopSourceRef.current = null;
         vadArmedRef.current = false;
         audioEndAtRef.current = null;
-        // Add trial placeholder; will set heardAt to audio end timestamp
-        setTrials((prev) => [...prev, { target, heardAt: 0 }]);
+        // Add trial placeholder with unique ID; will set heardAt to audio end timestamp
+        const trialId = `${sessionTokenRef.current}-${i}-${Date.now()}`;
+        setTrials((prev) => [...prev, { id: trialId, target, heardAt: 0 }]);
         setCurrentIndex(i);
+        currentIndexRef.current = i;
         // Schedule audio and compute when it will end
         const playStartAt = Date.now();
         const durationSec = await playChar(target);
@@ -336,7 +346,10 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         // Record heardAt as end-of-playback time for reaction baseline
         setTrials((prev) => {
           const copy = prev.slice();
-          copy[i] = { ...copy[i], heardAt: audioEndAt };
+          const trial = copy[i];
+          if (trial && trial.id === trialId) {
+            copy[i] = { ...trial, heardAt: audioEndAt };
+          }
           return copy;
         });
         // Wait until audio has actually finished (approximate via wall clock)
@@ -348,7 +361,6 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         if (icrSettings.vadEnabled) {
           vadArmedRef.current = true;
         }
-        const trialIndex = i;
         
         // Event-driven wait for stop event (VAD or key) or user typing
         const waitForStopOrInput = (): Promise<{ stopAt?: number; typed: boolean }> => {
@@ -359,21 +371,22 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
               resolve({ stopAt, typed: false });
               return;
             }
-            const currentTrial = trialsRef.current[trialIndex];
+            // Find trial by ID (event-driven - no index dependency)
+            const currentTrial = trialsRef.current.find(t => t.id === trialId);
             if (currentTrial?.typed) {
               resolve({ typed: true });
               return;
             }
             
-            // Set up resolver for stop event
-            stopEventResolversRef.current[trialIndex] = (stopAt: number) => {
-              delete stopEventResolversRef.current[trialIndex];
+            // Set up resolver for stop event - keyed by trial ID
+            stopEventResolversRef.current[trialId] = (stopAt: number) => {
+              delete stopEventResolversRef.current[trialId];
               resolve({ stopAt, typed: false });
             };
             
-            // Set up resolver for input event
-            inputEventResolversRef.current[trialIndex] = () => {
-              delete inputEventResolversRef.current[trialIndex];
+            // Set up resolver for input event - keyed by trial ID
+            inputEventResolversRef.current[trialId] = () => {
+              delete inputEventResolversRef.current[trialId];
               resolve({ typed: true });
             };
           });
@@ -384,11 +397,15 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         if (stopResult.stopAt !== undefined) {
           // Stop event occurred (VAD or key)
           const stopAt = stopResult.stopAt;
-          const base = trialsRef.current[trialIndex]?.heardAt || audioEndAt;
+          const currentTrial = trialsRef.current.find(t => t.id === trialId);
+          const base = currentTrial?.heardAt || audioEndAt;
           const reactionMs = Math.max(0, Math.round(stopAt - base));
           setTrials((prev) => {
             const copy = prev.slice();
-            copy[trialIndex] = { ...copy[trialIndex], stopAt, reactionMs };
+            const idx = copy.findIndex(t => t.id === trialId);
+            if (idx >= 0) {
+              copy[idx] = { ...copy[idx], stopAt, reactionMs };
+            }
             return copy;
           });
           stopRef.current = false;
@@ -410,16 +427,16 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         // Event-driven wait for user input if not already provided
         const waitForInput = (): Promise<void> => {
           return new Promise((resolve) => {
-            // Check if already typed
-            const currentTrial = trialsRef.current[trialIndex];
+            // Check if already typed - find by ID
+            const currentTrial = trialsRef.current.find(t => t.id === trialId);
             if (currentTrial?.typed) {
               resolve();
               return;
             }
             
-            // Set up resolver for input event
-            inputEventResolversRef.current[trialIndex] = () => {
-              delete inputEventResolversRef.current[trialIndex];
+            // Set up resolver for input event - keyed by trial ID
+            inputEventResolversRef.current[trialId] = () => {
+              delete inputEventResolversRef.current[trialId];
               resolve();
             };
           });
@@ -430,6 +447,7 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         // Delay before next trial
         await new Promise((resolve) => setTimeout(resolve, Math.max(0, icrSettings.trialDelayMs)));
         setCurrentIndex(i + 1);
+        currentIndexRef.current = i + 1;
         // Focus input field for next trial
         requestAnimationFrame(() => {
           try {
@@ -486,11 +504,12 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
         stopRef.current = true;
         const stopAt = Date.now();
         // Resolve pending stop event promise for current trial
-        // Find the most recent trial index that's waiting
-        const waitingTrialIndices = Object.keys(stopEventResolversRef.current).map(Number).sort((a, b) => b - a);
-        if (waitingTrialIndices.length > 0) {
-          const trialIdx = waitingTrialIndices[0]; // Most recent trial
-          const resolver = stopEventResolversRef.current[trialIdx];
+        // Find the most recent trial ID that's waiting (event-driven, no index dependency)
+        const waitingTrialIds = Object.keys(stopEventResolversRef.current);
+        if (waitingTrialIds.length > 0) {
+          // Get the most recent trial ID (last one in the array)
+          const trialId = waitingTrialIds[waitingTrialIds.length - 1];
+          const resolver = stopEventResolversRef.current[trialId];
           if (resolver) {
             try {
               resolver(stopAt);
@@ -633,6 +652,7 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
                 // Don't clear trials here - let runSession clear them when it actually starts
                 // This preserves the previous session's stats until the new session begins
                 setCurrentIndex(0);
+                currentIndexRef.current = 0;
                 void runSession();
               }
             }}
@@ -685,16 +705,16 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
                 const letter = v.slice(-1);
                 setCurrentInput(letter);
                 if (letter) {
-                  // auto-confirm
-                  const idx = trials.length - 1;
-                  if (idx >= 0 && trials[idx]) {
-                    const correct = letter === trials[idx].target.toUpperCase();
+                  // Event-driven: find the active trial (the one without typed value yet)
+                  // This is truly event-driven - no index tracking needed!
+                  const activeTrial = trials.find(t => !t.typed);
+                  if (activeTrial) {
+                    const correct = letter === activeTrial.target.toUpperCase();
                     const typedAt = Date.now();
-                    const currentTrial = trials[idx];
-                    const base = currentTrial.heardAt || 0;
+                    const base = activeTrial.heardAt || 0;
                     
                     // Calculate reaction time if not already set
-                    let reactionMs: number | undefined = currentTrial.reactionMs;
+                    let reactionMs: number | undefined = activeTrial.reactionMs;
                     if (!reactionMs && base > 0) {
                       reactionMs = Math.max(0, Math.round(typedAt - base));
                     }
@@ -710,20 +730,23 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
                     
                     setTrials((prev) => {
                       const copy = prev.slice();
-                      copy[idx] = { 
-                        ...copy[idx], 
-                        typed: letter, 
-                        correct,
-                        stopAt: typedAt,
-                        reactionMs,
-                      };
+                      const idx = copy.findIndex(t => t.id === activeTrial.id);
+                      if (idx >= 0) {
+                        copy[idx] = { 
+                          ...copy[idx], 
+                          typed: letter, 
+                          correct,
+                          stopAt: typedAt,
+                          reactionMs,
+                        };
+                      }
                       return copy;
                     });
                     
-                    // Resolve input event promise if waiting
-                    if (inputEventResolversRef.current[idx]) {
+                    // Resolve input event promise if waiting - use trial ID
+                    if (inputEventResolversRef.current[activeTrial.id]) {
                       try {
-                        inputEventResolversRef.current[idx]();
+                        inputEventResolversRef.current[activeTrial.id]();
                       } catch {}
                     }
                     
