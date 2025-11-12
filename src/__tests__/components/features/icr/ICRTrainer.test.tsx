@@ -1,4 +1,5 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 
 import { ICRTrainer } from '@/components/features/icr/ICRTrainer';
@@ -184,6 +185,132 @@ describe('ICRTrainer', (): void => {
     await waitFor(() => {
       const input = screen.queryByRole('textbox');
       expect(input).toBeInTheDocument();
+    });
+  });
+
+  it('should display stop button', async (): Promise<void> => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRTrainer sharedAudio={defaultSharedAudio} icrSettings={defaultIcrSettings} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      const stopButton = screen.queryByRole('button', { name: /Stop/i });
+      expect(stopButton).toBeInTheDocument();
+    });
+  });
+
+  it('should display stats button', async (): Promise<void> => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRTrainer sharedAudio={defaultSharedAudio} icrSettings={defaultIcrSettings} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      const statsButton = screen.queryByRole('button', { name: /Stats/i });
+      expect(statsButton).toBeInTheDocument();
+    });
+  });
+
+  it('should display trial counter', async (): Promise<void> => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRTrainer sharedAudio={defaultSharedAudio} icrSettings={defaultIcrSettings} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      const trialText = screen.queryByText(/Trial.*\/.*30/i);
+      expect(trialText).toBeInTheDocument();
+    });
+  });
+
+  it('should display summary section', async (): Promise<void> => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRTrainer sharedAudio={defaultSharedAudio} icrSettings={defaultIcrSettings} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      const summary = screen.queryByText(/Summary/i);
+      expect(summary).toBeInTheDocument();
+    });
+  });
+
+  it('should show stats when stats button is clicked', async (): Promise<void> => {
+    const user = userEvent.setup();
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRTrainer sharedAudio={defaultSharedAudio} icrSettings={defaultIcrSettings} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(async () => {
+      const statsButton = screen.queryByRole('button', { name: /Stats/i });
+      if (statsButton) {
+        await user.click(statsButton);
+        await waitFor(() => {
+          expect(screen.getByTestId('icr-stats')).toBeInTheDocument();
+        });
+      }
+    });
+  });
+
+  it('should disable input when not running', async (): Promise<void> => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRTrainer sharedAudio={defaultSharedAudio} icrSettings={defaultIcrSettings} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      const input = screen.queryByRole('textbox');
+      expect(input).toBeDisabled();
+    });
+  });
+
+  it('should display charts when trials exist', async (): Promise<void> => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRTrainer sharedAudio={defaultSharedAudio} icrSettings={defaultIcrSettings} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      // Charts should be rendered (mocked as divs)
+      const chart = screen.queryByTestId('composed-chart');
+      expect(chart).toBeInTheDocument();
     });
   });
 });

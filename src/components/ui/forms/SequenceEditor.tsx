@@ -105,7 +105,12 @@ export function SequenceEditor({
     const newSequence = [...sequence];
     
     // Remove the dragged item from its original position
-    const [removed] = newSequence.splice(sourceIndex, 1);
+    const removed = newSequence.splice(sourceIndex, 1)[0];
+    if (removed === undefined) {
+      setDraggedItem(null);
+      setDragOverIndex(null);
+      return;
+    }
     
     // Calculate the correct insertion index
     // If dragging to the right, we need to account for the removed item shifting indices

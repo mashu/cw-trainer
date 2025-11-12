@@ -52,11 +52,11 @@ export function ICRStats({ onBack, embedded }: ICRStatsProps): JSX.Element {
   const icrSummary = useIcrAnalytics();
 
   const isIcrLoading = icrSessionsStatus === 'loading';
-  const hasIcrSessions = icrSessions.length > 0;
+  const hasIcrSessions = icrSessions && icrSessions.length > 0;
 
   // Reverse sessions for display (newest first) - default to showing the last (most recent) session
   const sessionsReversed = useMemo(() => {
-    return icrSessions.slice().reverse();
+    return (icrSessions || []).slice().reverse();
   }, [icrSessions]);
 
   // Set default to last session when sessions load
@@ -82,7 +82,7 @@ export function ICRStats({ onBack, embedded }: ICRStatsProps): JSX.Element {
     void clearIcrSessions().catch((error) => {
       console.error('[ICRStats] Failed to clear ICR sessions', error);
     });
-  }, [clearIcrSessions, icrSessions.length]);
+  }, [clearIcrSessions, icrSessions?.length]);
 
   const handleDeleteSession = useCallback(
     (timestamp: number) => {

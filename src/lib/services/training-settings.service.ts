@@ -28,8 +28,17 @@ export class TrainingSettingsService {
     }
 
     const validated = result.data;
-    await this.repository.save(context, validated);
-    return validated;
+    // Convert to domain type, conditionally including customSequence only when it has a value
+    const { customSequence, ...restValidated } = validated;
+    const domainSettings: TrainingSettings = {
+      ...restValidated,
+      customSet: validated.customSet ?? [],
+      ...(customSequence && customSequence.length > 0
+        ? { customSequence: customSequence as readonly string[] }
+        : {}),
+    };
+    await this.repository.save(context, domainSettings);
+    return domainSettings;
   }
 
   async patchSettings(

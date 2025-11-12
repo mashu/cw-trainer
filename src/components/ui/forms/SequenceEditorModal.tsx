@@ -114,7 +114,12 @@ export function SequenceEditorModal({
 
     // Work with the full sequence, not currentSequence slice
     const newSequence = [...sequence];
-    const [removed] = newSequence.splice(sourceIndex, 1);
+    const removed = newSequence.splice(sourceIndex, 1)[0];
+    if (removed === undefined) {
+      setDraggedItem(null);
+      setDragOverIndex(null);
+      return;
+    }
     let insertIndex = dropIndex;
     if (sourceIndex < dropIndex) {
       insertIndex = dropIndex - 1;
@@ -371,7 +376,7 @@ export function SequenceEditorModal({
           <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
             <p className="text-xs font-medium text-slate-700 mb-1">Preview:</p>
             <p className="text-xs text-slate-600 break-words font-mono">
-              {currentSequence.length > 0 ? currentSequence.map(getDisplayText).join(' ') : '—'}
+              {currentSequence.length > 0 ? currentSequence.join(' ') : '—'}
             </p>
           </div>
 

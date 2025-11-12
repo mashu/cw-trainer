@@ -6,6 +6,7 @@ import { ICRTrainer } from '@/components/features/icr/ICRTrainer';
 import { Sidebar } from '@/components/features/sidebar/Sidebar';
 import { GroupTrainingStats } from '@/components/features/stats/GroupTrainingStats';
 import { ActivityHeatmap } from '@/components/ui/charts/ActivityHeatmap';
+import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { GroupsList } from '@/components/ui/training/GroupsList';
 import { ProgressHeader } from '@/components/ui/training/ProgressHeader';
 import { TextPlayer } from '@/components/ui/training/TextPlayer';
@@ -177,10 +178,11 @@ export function CWTrainer(): JSX.Element {
 
   useEffect(() => {
     if (!hasInitializedSettingsRef.current && trainingSettingsStatus === 'ready') {
-      const { customSet, ...restSettings } = settings;
+      const { customSet, customSequence, ...restSettings } = settings;
       const settingsToSerialize: Parameters<typeof serializeSettings>[0] = {
         ...restSettings,
         ...(customSet && customSet.length > 0 ? { customSet: [...customSet] } : {}),
+        ...(customSequence && customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
       };
       lastSavedSettingsRef.current = serializeSettings(settingsToSerialize);
       hasInitializedSettingsRef.current = true;
@@ -266,10 +268,11 @@ export function CWTrainer(): JSX.Element {
 
   // Debounced auto-save of settings changes
   useEffect(() => {
-    const { customSet, ...restSettings } = settings;
+    const { customSet, customSequence, ...restSettings } = settings;
     const settingsToSerialize: Parameters<typeof serializeSettings>[0] = {
       ...restSettings,
       ...(customSet && customSet.length > 0 ? { customSet: [...customSet] } : {}),
+      ...(customSequence && customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
     };
     const serialized = serializeSettings(settingsToSerialize);
     if (serialized === lastSavedSettingsRef.current) return;
@@ -797,20 +800,27 @@ export function CWTrainer(): JSX.Element {
         onLogout={handleLogout}
         onSwitchAccount={handleSwitchAccount}
         authInProgress={authInProgress}
-        settings={{
-          ...settings,
-          customSet: settings.customSet ? [...settings.customSet] : [],
-        }}
+        settings={((): TrainingSettings => {
+          const { customSet, customSequence, ...restSettings } = settings;
+          return {
+            ...restSettings,
+            customSet: customSet ? [...customSet] : [],
+            ...(customSequence && customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
+          };
+        })()}
         setSettings={(next) => {
+          const { customSet, customSequence, ...restSettings } = settings;
           const currentSettings = {
-            ...settings,
-            customSet: settings.customSet ? [...settings.customSet] : [],
+            ...restSettings,
+            customSet: customSet ? [...customSet] : [],
+            ...(customSequence && customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
           };
           const nextValue = typeof next === 'function' ? next(currentSettings) : next;
-          const { customSet: nextCustomSet, ...restNext } = nextValue;
+          const { customSet: nextCustomSet, customSequence: nextCustomSequence, ...restNext } = nextValue;
           const convertedSettings = {
             ...restNext,
             customSet: nextCustomSet && nextCustomSet.length > 0 ? [...nextCustomSet] : [],
+            ...(nextCustomSequence && nextCustomSequence.length > 0 ? { customSequence: [...nextCustomSequence] } : {}),
           } as Parameters<typeof setTrainingSettingsState>[0];
           setTrainingSettingsState(convertedSettings);
         }}
@@ -1054,10 +1064,14 @@ export function CWTrainer(): JSX.Element {
           </SwipeContainer>
         ) : activeMode === 'player' ? (
           <div className="space-y-6">
-            <TextPlayer settings={{
-              ...settings,
-              customSet: settings.customSet ? [...settings.customSet] : [],
-            }} />
+            <TextPlayer settings={((): TrainingSettings => {
+              const { customSet, customSequence, ...restSettings } = settings;
+              return {
+                ...restSettings,
+                customSet: customSet ? [...customSet] : [],
+                ...(customSequence && customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
+              };
+            })()} />
           </div>
         ) : null}
       </div>

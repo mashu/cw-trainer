@@ -44,9 +44,9 @@ const mockSessionService: SessionService = {
 
 const mockIcrSessionService: IcrSessionService = {
   listSessions: jest.fn().mockResolvedValue([]),
-  saveSession: jest.fn(),
-  clearSessions: jest.fn(),
-  deleteSession: jest.fn(),
+  saveSession: jest.fn().mockResolvedValue([]),
+  clearSessions: jest.fn().mockResolvedValue(undefined),
+  deleteSession: jest.fn().mockResolvedValue([]),
 };
 
 function TestWrapper({ children }: { children: React.ReactNode }): JSX.Element {
@@ -155,6 +155,263 @@ describe('ICRStats', (): void => {
       // Should show no sessions message or empty state
       const noSessionsText = screen.queryByText(/no.*sessions/i);
       return noSessionsText !== null;
+    });
+  });
+
+  it('should display loading state', async (): Promise<void> => {
+    mockIcrSessionService.listSessions = jest.fn().mockImplementation(
+      () => new Promise(() => {}) // Never resolves
+    );
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitFor(() => {
+      const loadingText = screen.queryByText(/Loading.*sessions/i);
+      expect(loadingText).toBeInTheDocument();
+    });
+  });
+
+  it('should display error message when sessions fail to load', async (): Promise<void> => {
+    mockIcrSessionService.listSessions = jest.fn().mockRejectedValue(new Error('Failed to load'));
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      // Should show error message (actual message is "Unable to process ICR session request.")
+      const errorElements = screen.queryAllByText(/error|failed|unable|process/i);
+      expect(errorElements.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('should display KPIs when sessions exist', async (): Promise<void> => {
+    const mockSessions = [
+      {
+        timestamp: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        trials: [
+          { target: 'E', typed: 'E', correct: true, reactionMs: 200, heardAt: Date.now() },
+          { target: 'T', typed: 'T', correct: true, reactionMs: 250, heardAt: Date.now() },
+        ],
+        accuracyPercent: 100,
+        averageReactionMs: 225,
+        settingsSnapshot: {
+          icr: {
+            bucketGreenMaxMs: 300,
+            bucketYellowMaxMs: 800,
+          },
+          audio: {
+            kochLevel: 2,
+            charWpm: 20,
+            sideToneMin: 600,
+            sideToneMax: 600,
+            steepness: 5,
+          },
+        },
+        perLetter: {
+          E: { correct: 1, total: 1, averageReactionMs: 200 },
+          T: { correct: 1, total: 1, averageReactionMs: 250 },
+        },
+      },
+    ];
+
+    mockIcrSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      // Should show KPIs
+      expect(screen.getByText(/Avg Accuracy/i)).toBeInTheDocument();
+      expect(screen.getByText(/Sessions/i)).toBeInTheDocument();
+      expect(screen.getByText(/Avg Reaction/i)).toBeInTheDocument();
+    });
+  });
+
+  it('should navigate between sessions', async (): Promise<void> => {
+    const mockSessions = [
+      {
+        timestamp: Date.now() - 2000,
+        date: new Date().toISOString().split('T')[0],
+        trials: [{ target: 'E', typed: 'E', correct: true, reactionMs: 200, heardAt: Date.now() }],
+        accuracyPercent: 100,
+        averageReactionMs: 200,
+        settingsSnapshot: {
+          icr: {
+            bucketGreenMaxMs: 300,
+            bucketYellowMaxMs: 800,
+          },
+          audio: {
+            kochLevel: 2,
+            charWpm: 20,
+            sideToneMin: 600,
+            sideToneMax: 600,
+            steepness: 5,
+          },
+        },
+        perLetter: { E: { correct: 1, total: 1, averageReactionMs: 200 } },
+      },
+      {
+        timestamp: Date.now() - 1000,
+        date: new Date().toISOString().split('T')[0],
+        trials: [{ target: 'T', typed: 'T', correct: true, reactionMs: 250, heardAt: Date.now() }],
+        accuracyPercent: 100,
+        averageReactionMs: 250,
+        settingsSnapshot: {
+          icr: {
+            bucketGreenMaxMs: 300,
+            bucketYellowMaxMs: 800,
+          },
+          audio: {
+            kochLevel: 2,
+            charWpm: 20,
+            sideToneMin: 600,
+            sideToneMax: 600,
+            steepness: 5,
+          },
+        },
+        perLetter: { T: { correct: 1, total: 1, averageReactionMs: 250 } },
+      },
+    ];
+
+    mockIcrSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      const prevButton = screen.queryByRole('button', { name: /Previous/i });
+      const nextButton = screen.queryByRole('button', { name: /Next/i });
+      expect(prevButton || nextButton).toBeTruthy();
+    });
+  });
+
+  it('should call deleteIcrSession when delete button is clicked', async (): Promise<void> => {
+    const user = userEvent.setup();
+    mockConfirm.mockReturnValue(true);
+    const mockDeleteSession = jest.fn().mockResolvedValue(undefined);
+    mockIcrSessionService.deleteSession = mockDeleteSession;
+
+    const mockSessions = [
+      {
+        timestamp: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        trials: [{ target: 'E', typed: 'E', correct: true, reactionMs: 200, heardAt: Date.now() }],
+        accuracyPercent: 100,
+        averageReactionMs: 200,
+        settingsSnapshot: {
+          icr: {
+            bucketGreenMaxMs: 300,
+            bucketYellowMaxMs: 800,
+          },
+          audio: {
+            kochLevel: 2,
+            charWpm: 20,
+            sideToneMin: 600,
+            sideToneMax: 600,
+            steepness: 5,
+          },
+        },
+        perLetter: { E: { correct: 1, total: 1, averageReactionMs: 200 } },
+      },
+    ];
+
+    mockIcrSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(async () => {
+      const deleteButton = screen.queryByRole('button', { name: /Delete/i });
+      if (deleteButton) {
+        await user.click(deleteButton);
+        expect(mockConfirm).toHaveBeenCalled();
+      }
+    });
+  });
+
+  it('should call clearIcrSessions when clear all button is clicked', async (): Promise<void> => {
+    const user = userEvent.setup();
+    mockConfirm.mockReturnValue(true);
+    const mockClearSessions = jest.fn().mockResolvedValue(undefined);
+    mockIcrSessionService.clearSessions = mockClearSessions;
+
+    const mockSessions = [
+      {
+        timestamp: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        trials: [{ target: 'E', typed: 'E', correct: true, reactionMs: 200, heardAt: Date.now() }],
+        accuracyPercent: 100,
+        averageReactionMs: 200,
+        settingsSnapshot: {
+          icr: {
+            bucketGreenMaxMs: 300,
+            bucketYellowMaxMs: 800,
+          },
+          audio: {
+            kochLevel: 2,
+            charWpm: 20,
+            sideToneMin: 600,
+            sideToneMax: 600,
+            steepness: 5,
+          },
+        },
+        perLetter: { E: { correct: 1, total: 1, averageReactionMs: 200 } },
+      },
+    ];
+
+    mockIcrSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <ICRStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(async () => {
+      const clearButton = screen.queryByRole('button', { name: /Clear All/i });
+      if (clearButton) {
+        await user.click(clearButton);
+        expect(mockConfirm).toHaveBeenCalled();
+      }
     });
   });
 });

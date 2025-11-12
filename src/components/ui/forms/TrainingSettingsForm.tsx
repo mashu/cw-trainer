@@ -229,7 +229,6 @@ export function TrainingSettingsForm({
                             const preset = SEQUENCE_PRESETS.find(p => p.id === presetId);
                             if (preset) {
                               setSettings({ ...settings, customSequence: preset.sequence });
-                              setOriginalPresetId(presetId);
                             }
                           }}
                           className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none"
@@ -830,7 +829,12 @@ function CustomAlphabetEditor({
     const newSet = [...customSet];
     
     // Remove the dragged item
-    const [removed] = newSet.splice(sourceIndex, 1);
+    const removed = newSet.splice(sourceIndex, 1)[0];
+    if (removed === undefined) {
+      setDraggedItem(null);
+      setDragOverIndex(null);
+      return;
+    }
     
     // Calculate the correct insertion index
     // If dragging to the right, we need to account for the removed item

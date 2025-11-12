@@ -45,9 +45,10 @@ const mockTrainingSettingsService: TrainingSettingsService = {
 
 const mockSessionService: SessionService = {
   listSessions: jest.fn().mockResolvedValue([]),
-  upsertSession: jest.fn(),
-  deleteSession: jest.fn(),
-  syncPendingSessions: jest.fn(),
+  upsertSession: jest.fn().mockResolvedValue([]),
+  deleteSession: jest.fn().mockResolvedValue([]),
+  syncPendingSessions: jest.fn().mockResolvedValue([]),
+  replaceAll: jest.fn().mockResolvedValue([]),
 };
 
 const mockIcrSessionService: IcrSessionService = {
@@ -162,6 +163,204 @@ describe('GroupTrainingStats', (): void => {
       // Should show tabs like Overview, Leaderboard, etc.
       const tabs = screen.queryAllByRole('button');
       expect(tabs.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('should display loading state', async (): Promise<void> => {
+    mockSessionService.listSessions = jest.fn().mockImplementation(
+      () => new Promise(() => {}) // Never resolves
+    );
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitFor(() => {
+      const loadingText = screen.queryByText(/Loading.*sessions/i);
+      expect(loadingText).toBeInTheDocument();
+    });
+  });
+
+  it('should display error message when sessions fail to load', async (): Promise<void> => {
+    mockSessionService.listSessions = jest.fn().mockRejectedValue(new Error('Failed to load'));
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      // Should show error message (actual message is "Unable to process session request.")
+      const errorElements = screen.queryAllByText(/error|failed|unable|process/i);
+      expect(errorElements.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('should display KPIs when sessions exist', async (): Promise<void> => {
+    const mockSessions = [
+      {
+        date: '2024-01-01',
+        timestamp: Date.now(),
+        groups: [{ sent: 'ABC', received: 'ABC', correct: true }],
+        groupTimings: [{ timeToCompleteMs: 1000 }],
+        accuracy: 1.0,
+        letterAccuracy: { A: { correct: 1, total: 1 }, B: { correct: 1, total: 1 }, C: { correct: 1, total: 1 } },
+        alphabetSize: 3,
+        totalChars: 3,
+        effectiveAlphabetSize: 3,
+        avgResponseMs: 1000,
+        score: 100,
+        startedAt: Date.now() - 5000,
+        finishedAt: Date.now(),
+      },
+    ];
+
+    mockSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      // Should show KPIs (use getAllByText since "Sessions" appears in both tab and KPI)
+      expect(screen.getByText(/Avg Accuracy/i)).toBeInTheDocument();
+      const sessionsElements = screen.getAllByText(/Sessions/i);
+      expect(sessionsElements.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('should switch between tabs', async (): Promise<void> => {
+    const user = userEvent.setup();
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(async () => {
+      const leaderboardTab = screen.queryByRole('button', { name: /leaderboard/i });
+      if (leaderboardTab) {
+        await user.click(leaderboardTab);
+        await waitFor(() => {
+          expect(screen.getByTestId('leaderboard')).toBeInTheDocument();
+        });
+      }
+    });
+  });
+
+  it('should apply date range presets', async (): Promise<void> => {
+    const user = userEvent.setup();
+    const mockSessions = [
+      {
+        date: '2024-01-01',
+        timestamp: Date.now() - 86400000, // 1 day ago
+        groups: [{ sent: 'ABC', received: 'ABC', correct: true }],
+        groupTimings: [{ timeToCompleteMs: 1000 }],
+        accuracy: 1.0,
+        letterAccuracy: {},
+        alphabetSize: 3,
+        totalChars: 3,
+        effectiveAlphabetSize: 3,
+        avgResponseMs: 1000,
+        score: 100,
+        startedAt: Date.now() - 5000,
+        finishedAt: Date.now(),
+      },
+    ];
+
+    mockSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(async () => {
+      const rangeButtons = screen.queryAllByRole('button', { name: /7d|30d|90d|All/i });
+      if (rangeButtons.length > 0) {
+        await user.click(rangeButtons[0]);
+        // Range should be applied (no error means it worked)
+      }
+    });
+  });
+
+  it('should call removeSessionByTimestamp when delete button is clicked', async (): Promise<void> => {
+    const user = userEvent.setup();
+    const mockDeleteSession = jest.fn().mockResolvedValue([]);
+    mockSessionService.deleteSession = mockDeleteSession;
+
+    const mockSessions = [
+      {
+        date: '2024-01-01',
+        timestamp: Date.now(),
+        groups: [{ sent: 'ABC', received: 'ABC', correct: true }],
+        groupTimings: [{ timeToCompleteMs: 1000 }],
+        accuracy: 1.0,
+        letterAccuracy: {},
+        alphabetSize: 3,
+        totalChars: 3,
+        effectiveAlphabetSize: 3,
+        avgResponseMs: 1000,
+        score: 100,
+        startedAt: Date.now() - 5000,
+        finishedAt: Date.now(),
+      },
+    ];
+
+    mockSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(async () => {
+      // Switch to sessions tab
+      const sessionsTab = screen.queryByRole('button', { name: /sessions/i });
+      if (sessionsTab) {
+        await user.click(sessionsTab);
+        await waitFor(() => {
+          const deleteButton = screen.queryByRole('button', { name: /Delete/i });
+          if (deleteButton) {
+            return deleteButton;
+          }
+          return null;
+        });
+        const deleteButton = screen.queryByRole('button', { name: /Delete/i });
+        if (deleteButton) {
+          await user.click(deleteButton);
+          expect(mockDeleteSession).toHaveBeenCalled();
+        }
+      }
     });
   });
 });

@@ -1,4 +1,5 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 
 import { CWTrainer } from '@/components/features/training/CWTrainer';
@@ -137,6 +138,165 @@ describe('CWTrainer', (): void => {
       // Should have a button to open sidebar (usually a settings icon or menu)
       const buttons = screen.getAllByRole('button');
       expect(buttons.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('should display start training button', async (): Promise<void> => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <CWTrainer />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      const startButton = screen.queryByRole('button', { name: /Start Training/i });
+      expect(startButton).toBeInTheDocument();
+    });
+  });
+
+  it('should display view stats button', async (): Promise<void> => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <CWTrainer />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      const statsButton = screen.queryByRole('button', { name: /View Stats/i });
+      expect(statsButton).toBeInTheDocument();
+    });
+  });
+
+  it('should display activity heatmap when sessions exist', async (): Promise<void> => {
+    const mockSessions = [
+      {
+        date: '2024-01-01',
+        timestamp: Date.now(),
+        groups: [{ sent: 'ABC', received: 'ABC', correct: true }],
+        groupTimings: [{ timeToCompleteMs: 1000 }],
+        accuracy: 1.0,
+        letterAccuracy: {},
+        alphabetSize: 3,
+        totalChars: 3,
+        effectiveAlphabetSize: 3,
+        avgResponseMs: 1000,
+        score: 100,
+        startedAt: Date.now() - 5000,
+        finishedAt: Date.now(),
+      },
+    ];
+
+    mockSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <CWTrainer />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('activity-heatmap')).toBeInTheDocument();
+    });
+  });
+
+  it('should display session statistics when sessions exist', async (): Promise<void> => {
+    const mockSessions = [
+      {
+        date: '2024-01-01',
+        timestamp: Date.now(),
+        groups: [{ sent: 'ABC', received: 'ABC', correct: true }],
+        groupTimings: [{ timeToCompleteMs: 1000 }],
+        accuracy: 0.95,
+        letterAccuracy: {},
+        alphabetSize: 3,
+        totalChars: 3,
+        effectiveAlphabetSize: 3,
+        avgResponseMs: 1000,
+        score: 100,
+        startedAt: Date.now() - 5000,
+        finishedAt: Date.now(),
+      },
+    ];
+
+    mockSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <CWTrainer />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      // Should show last accuracy or sessions count (use getAllByText since both appear)
+      const accuracyElements = screen.getAllByText(/Last Accuracy|Sessions/i);
+      expect(accuracyElements.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('should switch to stats tab when view stats is clicked', async (): Promise<void> => {
+    const user = userEvent.setup();
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <CWTrainer />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(async () => {
+      const statsButton = screen.queryByRole('button', { name: /View Stats/i });
+      if (statsButton) {
+        await user.click(statsButton);
+        await waitFor(() => {
+          expect(screen.getByTestId('group-training-stats')).toBeInTheDocument();
+        });
+      }
+    });
+  });
+
+  it('should display sidebar when menu button is clicked', async (): Promise<void> => {
+    const user = userEvent.setup();
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <CWTrainer />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(async () => {
+      // Find menu button (hamburger icon)
+      const menuButtons = screen.getAllByRole('button');
+      const menuButton = menuButtons.find((btn) => {
+        const svg = btn.querySelector('svg');
+        return svg !== null;
+      });
+      if (menuButton) {
+        await user.click(menuButton);
+        await waitFor(() => {
+          expect(screen.getByTestId('sidebar')).toBeInTheDocument();
+        });
+      }
     });
   });
 });

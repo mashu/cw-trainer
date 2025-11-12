@@ -72,7 +72,16 @@ export const normalizeTrainingSettings = (
 
   const parseResult = trainingSettingsSchema.safeParse(merged);
   if (parseResult.success) {
-    return parseResult.data;
+    const parsed = parseResult.data;
+    // Convert to domain type, conditionally including customSequence only when it has a value
+    const { customSequence, ...restParsed } = parsed;
+    return {
+      ...restParsed,
+      customSet: parsed.customSet ?? [],
+      ...(customSequence && customSequence.length > 0
+        ? { customSequence: customSequence as readonly string[] }
+        : {}),
+    } as TrainingSettings;
   }
 
   return fallback;

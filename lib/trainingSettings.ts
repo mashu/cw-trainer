@@ -85,6 +85,8 @@ export const normalizeSettings = (raw: unknown, fallback: TrainingSettings): Tra
     ? candidate.customSequence.map((c) => (typeof c === 'string' ? c : String(c ?? '')).trim()).filter((c) => c.length > 0)
     : undefined;
 
+  const finalCustomSequence = normalizedCustomSequence ?? fallback.customSequence;
+
   return {
     kochLevel: typeof candidate.kochLevel === 'number' ? candidate.kochLevel : fallback.kochLevel,
     charSetMode:
@@ -103,7 +105,7 @@ export const normalizeSettings = (raw: unknown, fallback: TrainingSettings): Tra
         : Array.isArray(fallback.customSet)
           ? fallback.customSet
           : [],
-    customSequence: normalizedCustomSequence ?? fallback.customSequence,
+    ...(finalCustomSequence ? { customSequence: finalCustomSequence } : {}),
     sideToneMin,
     sideToneMax,
     steepness: typeof candidate.steepness === 'number' ? candidate.steepness : fallback.steepness,

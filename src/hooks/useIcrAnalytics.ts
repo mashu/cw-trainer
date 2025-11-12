@@ -30,6 +30,7 @@ const aggregateLetters = (
   const aggregate = new Map<string, { correct: number; total: number }>();
 
   sessions.forEach((session) => {
+    if (!session.perLetter) return;
     Object.entries(session.perLetter).forEach(([letter, stats]) => {
       const current = aggregate.get(letter) ?? { correct: 0, total: 0 };
       current.correct += stats.correct;
@@ -45,7 +46,7 @@ export function useIcrAnalytics(): IcrAnalyticsSummary {
   const { icrSessions } = useIcrSessionsState();
 
   return useMemo<IcrAnalyticsSummary>(() => {
-    if (!icrSessions.length) {
+    if (!icrSessions || !icrSessions.length) {
       return {
         totalSessions: 0,
         totalTrials: 0,
