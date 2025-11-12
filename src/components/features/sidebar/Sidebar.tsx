@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, type Dispatch, type SetStateAction } from 'react';
+import React, { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { ICRSettingsForm } from '@/components/ui/forms/ICRSettingsForm';
 import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
@@ -50,6 +50,29 @@ export function Sidebar({
 }: SidebarProps): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [showModeHelp, setShowModeHelp] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    // Add event listener with a small delay to avoid immediate trigger
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open, onClose]);
 
   return (
     <>
@@ -57,6 +80,7 @@ export function Sidebar({
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={onClose} />
       )}
       <div
+        ref={sidebarRef}
         className={`fixed top-0 right-0 h-full w-96 max-w-full bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-50 ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
