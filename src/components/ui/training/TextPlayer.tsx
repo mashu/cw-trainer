@@ -36,6 +36,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
       ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
       ...(settings.customSet && settings.customSet.length > 0 ? { customSet: [...settings.customSet] } : {}),
+      ...(settings.customSequence && settings.customSequence.length > 0 ? { customSequence: [...settings.customSequence] } : {}),
     });
     const safePool =
       Array.isArray(charPool) && charPool.length > 0

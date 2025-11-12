@@ -1,15 +1,20 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 import { KOCH_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
+import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
+import { getDisplayText, isProsign } from '@/lib/prosignUtils';
+
+import { SequenceEditorModal } from './SequenceEditorModal';
 
 export interface TrainingSettings {
   kochLevel: number;
   charSetMode?: 'koch' | 'digits' | 'custom';
   digitsLevel?: number;
   customSet?: string[];
+  customSequence?: string[]; // Custom sequence order for Koch mode
   sideToneMin: number;
   sideToneMax: number;
   steepness: number;
@@ -97,16 +102,50 @@ export function TrainingSettingsForm({
       const set = Array.isArray(settings.customSet) ? settings.customSet : [];
       return Array.from(new Set(set.map((entry) => (entry || '').toUpperCase()).filter(Boolean)));
     }
-    return KOCH_SEQUENCE.slice(
+    // Use custom sequence if available, otherwise fall back to KOCH_SEQUENCE
+    const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+      ? settings.customSequence
+      : KOCH_SEQUENCE;
+    return sequence.slice(
       0,
-      Math.max(1, Math.min(KOCH_SEQUENCE.length, settings.kochLevel || 1)),
+      Math.max(1, Math.min(sequence.length, settings.kochLevel || 1)),
     );
   };
 
   const currentPreviewChars = resolvePreviewChars();
+  
+  // Get current sequence for level calculation
+  const currentSequence = useMemo(() => {
+    if (charMode === 'koch') {
+      return Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+        ? settings.customSequence
+        : KOCH_SEQUENCE;
+    }
+    return [];
+  }, [charMode, settings.customSequence]);
 
   const [showSessionHelp, setShowSessionHelp] = useState(false);
   const [showToneHelp, setShowToneHelp] = useState(false);
+  const [showSequenceEditor, setShowSequenceEditor] = useState(false);
+  const [originalPresetId, setOriginalPresetId] = useState<string>('koch');
+
+  // Detect which preset matches the current sequence
+  const currentPresetId = useMemo(() => {
+    // If no customSequence is set, use KOCH_SEQUENCE
+    const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+      ? settings.customSequence
+      : KOCH_SEQUENCE;
+    const sequenceStr = sequence.join(',');
+    const matchingPreset = SEQUENCE_PRESETS.find(
+      (preset) => preset.sequence.join(',') === sequenceStr
+    );
+    // If no customSequence was set and it matches KOCH, return 'koch'
+    // Otherwise return the matching preset or 'custom'
+    if (!Array.isArray(settings.customSequence) || settings.customSequence.length === 0) {
+      return matchingPreset?.id || 'koch';
+    }
+    return matchingPreset?.id || 'custom';
+  }, [settings.customSequence]);
 
   return (
     <>
@@ -155,7 +194,7 @@ export function TrainingSettingsForm({
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Character Set</label>
               <div className="flex gap-2 mb-3">
-                {(['koch', 'digits', 'custom'] as const).map((mode) => (
+                {(['koch', 'digits'] as const).map((mode) => (
                   <button
                     key={mode}
                     type="button"
@@ -166,35 +205,112 @@ export function TrainingSettingsForm({
                         : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'
                     }`}
                   >
-                    {mode === 'koch' ? 'Koch' : mode === 'digits' ? 'Digits' : 'Custom'}
+                    {mode === 'koch' ? 'Koch' : 'Digits'}
                   </button>
                 ))}
               </div>
               {charMode === 'koch' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Preset Sequence
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={currentPresetId}
+                          onChange={(e) => {
+                            const presetId = e.target.value;
+                            if (presetId === 'custom') {
+                              // Keep current custom sequence, do nothing
+                              return;
+                            }
+                            const preset = SEQUENCE_PRESETS.find(p => p.id === presetId);
+                            if (preset) {
+                              setSettings({ ...settings, customSequence: preset.sequence });
+                              setOriginalPresetId(presetId);
+                            }
+                          }}
+                          className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none"
+                        >
+                          {SEQUENCE_PRESETS.map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              {preset.name}
+                            </option>
+                          ))}
+                          {currentPresetId === 'custom' && (
+                            <option value="custom">✨ Custom Sequence</option>
+                          )}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-6">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Store the original preset when opening editor
+                          // If custom, try to find which preset it was based on, otherwise use koch
+                          const detectedPreset = currentPresetId === 'custom' 
+                            ? 'koch' 
+                            : currentPresetId;
+                          setOriginalPresetId(detectedPreset);
+                          setShowSequenceEditor(true);
+                        }}
+                        className="px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+                        title="Customize sequence order"
+                      >
+                        ✏️ Customize
+                      </button>
+                    </div>
+                  </div>
                   <div>
-                    <label className="block text-sm font-medium min-h-[2.5rem] text-gray-700 mb-1">
-                      Koch Level (1-{KOCH_SEQUENCE.length})
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Koch Level (1-{currentSequence.length})
                     </label>
                     <input
                       type="number"
                       min="1"
-                      max={KOCH_SEQUENCE.length}
+                      max={currentSequence.length}
                       value={settings.kochLevel}
                       onChange={(event) => {
                         const numValue = parseInt(event.target.value, 10);
-                        if (!isNaN(numValue) && numValue >= 1 && numValue <= KOCH_SEQUENCE.length) {
+                        if (!isNaN(numValue) && numValue >= 1 && numValue <= currentSequence.length) {
                           setSettings({ ...settings, kochLevel: numValue });
                         }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded"
                     />
                   </div>
-                  <div className="sm:col-span-2">
-                    <p className="text-xs text-gray-500 mt-1 whitespace-normal break-words">
+                  <div>
+                    <p className="text-xs text-gray-500">
                       Characters: {currentPreviewChars.join(' ')}
                     </p>
                   </div>
+                  <SequenceEditorModal
+                    open={showSequenceEditor}
+                    onClose={() => setShowSequenceEditor(false)}
+                    sequence={
+                      Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+                        ? settings.customSequence
+                        : KOCH_SEQUENCE
+                    }
+                    onChange={(newSequence) => {
+                      setSettings({ ...settings, customSequence: newSequence });
+                    }}
+                    maxLevel={settings.kochLevel}
+                    onLevelChange={(level) => {
+                      const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+                        ? settings.customSequence
+                        : KOCH_SEQUENCE;
+                      const maxLevel = Math.max(1, Math.min(sequence.length, level));
+                      setSettings({ ...settings, kochLevel: maxLevel });
+                    }}
+                  />
                 </div>
               )}
               {charMode === 'digits' && (
@@ -226,71 +342,15 @@ export function TrainingSettingsForm({
                 </div>
               )}
               {charMode === 'custom' && (
-                <div className="space-y-2">
-                  <div className="flex gap-2 flex-wrap text-xs">
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border border-gray-300"
-                      onClick={() => setSettings({ ...settings, customSet: letters })}
-                    >
-                      Letters
-                    </button>
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border border-gray-300"
-                      onClick={() => setSettings({ ...settings, customSet: digitsAsc })}
-                    >
-                      Digits
-                    </button>
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border border-gray-300"
-                      onClick={() => setSettings({ ...settings, customSet: allChars })}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border border-gray-300"
-                      onClick={() => setSettings({ ...settings, customSet: [] })}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-8 sm:grid-cols-12 gap-1">
-                    {allChars.map((character) => {
-                      const enabled = (settings.customSet || []).includes(character);
-                      return (
-                        <button
-                          key={character}
-                          type="button"
-                          onClick={() => {
-                            const set = new Set(
-                              (settings.customSet || []).map((entry) => entry.toUpperCase()),
-                            );
-                            if (set.has(character)) {
-                              set.delete(character);
-                            } else {
-                              set.add(character);
-                            }
-                            setSettings({ ...settings, customSet: Array.from(set) });
-                          }}
-                          className={`flex w-full items-center justify-center h-8 text-sm leading-none rounded border select-none ${
-                            enabled
-                              ? 'bg-emerald-600 text-white border-emerald-600'
-                              : 'bg-white text-slate-700 border-gray-300 hover:bg-gray-50'
-                          }`}
-                          title={character}
-                        >
-                          {character}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Selected: {currentPreviewChars.join(' ') || '—'}
-                  </p>
-                </div>
+                <CustomAlphabetEditor
+                  customSet={settings.customSet || []}
+                  onCustomSetChange={(newSet) => {
+                    setSettings({ ...settings, customSet: newSet });
+                  }}
+                  allChars={allChars}
+                  letters={letters}
+                  digitsAsc={digitsAsc}
+                />
               )}
             </div>
             <div>
@@ -691,5 +751,273 @@ export function TrainingSettingsForm({
         </div>
       </div>
     </>
+  );
+}
+
+interface CustomAlphabetEditorProps {
+  customSet: string[];
+  onCustomSetChange: (newSet: string[]) => void;
+  allChars: string[];
+  letters: string[];
+  digitsAsc: string[];
+}
+
+function CustomAlphabetEditor({
+  customSet,
+  onCustomSetChange,
+  allChars,
+  letters,
+  digitsAsc,
+}: CustomAlphabetEditorProps): JSX.Element {
+  const [draggedItem, setDraggedItem] = useState<{ char: string; index: number } | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = useCallback((char: string, index: number) => {
+    setDraggedItem({ char, index });
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!draggedItem) return;
+    
+    e.dataTransfer.dropEffect = 'move';
+    
+    if (draggedItem.index !== index) {
+      setDragOverIndex(index);
+    } else {
+      setDragOverIndex(null);
+    }
+  }, [draggedItem]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if we're actually leaving the element (not just moving to a child)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverIndex(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!draggedItem) {
+      setDragOverIndex(null);
+      return;
+    }
+    
+    const sourceIndex = draggedItem.index;
+    if (sourceIndex === dropIndex) {
+      setDraggedItem(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newSet = [...customSet];
+    
+    // Remove the dragged item
+    const [removed] = newSet.splice(sourceIndex, 1);
+    
+    // Calculate the correct insertion index
+    // If dragging to the right, we need to account for the removed item
+    const insertIndex = sourceIndex < dropIndex ? dropIndex - 1 : dropIndex;
+    
+    // Insert at the new position
+    newSet.splice(insertIndex, 0, removed);
+    
+    // Update the set
+    onCustomSetChange(newSet);
+    
+    // Clean up
+    setDraggedItem(null);
+    setDragOverIndex(null);
+  }, [draggedItem, customSet, onCustomSetChange]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedItem(null);
+    setDragOverIndex(null);
+  }, []);
+
+  const handleToggleChar = useCallback((character: string) => {
+    const set = new Set(customSet.map((entry) => entry.toUpperCase()));
+    if (set.has(character)) {
+      set.delete(character);
+    } else {
+      set.add(character);
+    }
+    onCustomSetChange(Array.from(set));
+  }, [customSet, onCustomSetChange]);
+
+  const availableChars = useMemo(() => {
+    return allChars.filter((char) => !customSet.includes(char));
+  }, [allChars, customSet]);
+
+  return (
+    <div className="space-y-4">
+      {/* Quick Actions */}
+      <div className="flex gap-2 flex-wrap text-xs">
+        <button
+          type="button"
+          className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
+          onClick={() => onCustomSetChange(letters)}
+        >
+          Letters
+        </button>
+        <button
+          type="button"
+          className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
+          onClick={() => onCustomSetChange(digitsAsc)}
+        >
+          Digits
+        </button>
+        <button
+          type="button"
+          className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
+          onClick={() => onCustomSetChange(allChars)}
+        >
+          All
+        </button>
+        <button
+          type="button"
+          className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
+          onClick={() => onCustomSetChange([])}
+        >
+          Clear
+        </button>
+      </div>
+
+      {/* Enabled Characters - Draggable */}
+      {customSet.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Selected Characters ({customSet.length}) - Drag to reorder
+          </label>
+          <div className="min-h-[100px] p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
+            <div 
+              className="grid grid-cols-5 gap-2"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (draggedItem) {
+                  setDraggedItem(null);
+                  setDragOverIndex(null);
+                }
+              }}
+            >
+              {customSet.map((character, index) => {
+                const isDragging = draggedItem?.index === index;
+                const isDragOver = dragOverIndex === index;
+                const displayChar = getDisplayText(character);
+                const isProsignChar = isProsign(character);
+                const morse = MORSE_CODE[character] || MORSE_CODE[displayChar] || '';
+
+                return (
+                  <div
+                    key={`${character}-${index}`}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = 'move';
+                      handleDragStart(character, index);
+                    }}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onDragEnd={handleDragEnd}
+                    className={`
+                      group relative flex items-center justify-center
+                      h-10 rounded-lg border-2 font-semibold text-xs
+                      cursor-move transition-all duration-200
+                      ${isDragging
+                        ? 'opacity-50 scale-95 bg-slate-300 border-slate-400 shadow-lg z-50'
+                        : isDragOver
+                        ? 'scale-110 bg-indigo-100 border-indigo-400 shadow-md ring-2 ring-indigo-300'
+                        : isProsignChar
+                        ? 'bg-purple-100 hover:bg-purple-200 border-purple-400 hover:border-purple-500 hover:shadow-md'
+                        : 'bg-white hover:bg-indigo-50 border-slate-300 hover:border-indigo-400 hover:shadow-md'
+                      }
+                    `}
+                    title={`${displayChar}${isProsignChar ? ' (Prosign)' : ''} (${morse}) - Drag to reorder`}
+                  >
+                    <span className={`text-slate-800 ${isProsignChar ? 'font-bold' : ''}`}>
+                      {displayChar}
+                    </span>
+                    {!isDragging && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleChar(character);
+                        }}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-red-600"
+                        title="Remove character"
+                      >
+                        ×
+                      </button>
+                    )}
+                    {isDragOver && (
+                      <div className="absolute inset-0 border-2 border-dashed border-indigo-500 rounded-lg" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            💡 Drag characters to reorder • Click × to remove
+          </p>
+        </div>
+      )}
+
+      {/* Available Characters to Add */}
+      {availableChars.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Add Characters ({availableChars.length} available)
+          </label>
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="grid grid-cols-5 gap-2">
+              {availableChars.map((character) => {
+                const displayChar = getDisplayText(character);
+                const isProsignChar = isProsign(character);
+                const morse = MORSE_CODE[character] || MORSE_CODE[displayChar] || '';
+                // Check if prosign is already in sequence (in any format)
+                const prosignAlreadyInSequence = isProsignChar && customSet.some(s => {
+                  const sDisplay = getDisplayText(s);
+                  return sDisplay === displayChar || s === character;
+                });
+                if (prosignAlreadyInSequence) return null;
+                
+                return (
+                  <button
+                    key={character}
+                    type="button"
+                    onClick={() => handleToggleChar(character)}
+                    className={`h-10 rounded border border-gray-300 bg-white text-slate-700 hover:bg-indigo-50 hover:border-indigo-400 text-xs font-medium transition-all hover:shadow-sm flex items-center justify-center ${isProsignChar ? 'font-bold bg-purple-50 hover:bg-purple-100 border-purple-300' : ''}`}
+                    title={`${displayChar}${isProsignChar ? ' (Prosign)' : ''} (${morse})`}
+                  >
+                    {displayChar}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview */}
+      <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-medium text-slate-700 mb-1">Preview:</p>
+        <p className="text-xs text-slate-600 break-words font-mono">
+          {customSet.length > 0 ? customSet.join(' ') : '—'}
+        </p>
+      </div>
+    </div>
   );
 }

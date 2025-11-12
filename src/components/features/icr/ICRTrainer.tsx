@@ -43,12 +43,14 @@ const pickRandomChar = (opts: {
   charSetMode?: 'koch' | 'digits' | 'custom';
   digitsLevel?: number;
   customSet?: string[];
+  customSequence?: string[];
 }): string => {
-  const poolSettings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'customSet'> = {
+  const poolSettings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'customSet' | 'customSequence'> = {
     kochLevel: opts.kochLevel,
     ...(opts.charSetMode !== undefined ? { charSetMode: opts.charSetMode } : { charSetMode: 'koch' }),
     ...(opts.digitsLevel !== undefined ? { digitsLevel: opts.digitsLevel } : {}),
     ...(opts.customSet !== undefined ? { customSet: opts.customSet } : {}),
+    ...(opts.customSequence !== undefined ? { customSequence: opts.customSequence } : {}),
   };
   const pool = computeCharPool(poolSettings);
   if (pool.length === 0) return 'E'; // fallback
@@ -96,6 +98,7 @@ interface ICRTrainerProps {
     charSetMode?: 'koch' | 'digits' | 'custom';
     digitsLevel?: number;
     customSet?: string[];
+    customSequence?: string[];
     charWpm: number;
     effectiveWpm?: number;
     sideToneMin: number;
@@ -362,6 +365,7 @@ export function ICRTrainer({ sharedAudio, icrSettings }: ICRTrainerProps): JSX.E
           ...(sharedAudio.charSetMode !== undefined ? { charSetMode: sharedAudio.charSetMode } : {}),
           ...(sharedAudio.digitsLevel !== undefined ? { digitsLevel: sharedAudio.digitsLevel } : {}),
           ...(sharedAudio.customSet !== undefined ? { customSet: sharedAudio.customSet } : {}),
+          ...(sharedAudio.customSequence !== undefined ? { customSequence: sharedAudio.customSequence } : {}),
         });
         // Reset per-trial gates
         stopRef.current = false;

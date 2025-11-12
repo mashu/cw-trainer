@@ -10,12 +10,13 @@ export interface TrainingSettingsLite {
   charSetMode?: 'koch' | 'digits' | 'custom';
   digitsLevel?: number; // 1..10
   customSet?: string[]; // explicit pool when in custom mode
+  customSequence?: string[]; // custom sequence order for Koch mode
 }
 
 const DIGITS_ASC: string[] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 export function computeCharPool(
-  settings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'customSet'>,
+  settings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'customSet' | 'customSequence'>,
 ): string[] {
   const mode = settings.charSetMode || 'koch';
   if (mode === 'digits') {
@@ -30,16 +31,21 @@ export function computeCharPool(
     if (pool.length > 0) return pool;
     // Fallback to Koch if empty custom set
   }
-  const level = Math.max(1, Math.min(KOCH_SEQUENCE.length, settings.kochLevel || 1));
-  return KOCH_SEQUENCE.slice(0, level);
+  // Use custom sequence if available, otherwise fall back to KOCH_SEQUENCE
+  const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+    ? settings.customSequence
+    : KOCH_SEQUENCE;
+  const level = Math.max(1, Math.min(sequence.length, settings.kochLevel || 1));
+  return sequence.slice(0, level);
 }
 
 export function generateGroup(settings: TrainingSettingsLite): string {
-  const poolSettings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'customSet'> = {
+  const poolSettings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'customSet' | 'customSequence'> = {
     kochLevel: settings.kochLevel,
     ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
     ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
     ...(settings.customSet !== undefined ? { customSet: settings.customSet } : {}),
+    ...(settings.customSequence !== undefined ? { customSequence: settings.customSequence } : {}),
   };
   const availableChars = computeCharPool(poolSettings);
   const groupSize =
@@ -49,7 +55,9 @@ export function generateGroup(settings: TrainingSettingsLite): string {
   const safePool =
     Array.isArray(availableChars) && availableChars.length > 0
       ? availableChars
-      : KOCH_SEQUENCE.slice(0, Math.max(1, settings.kochLevel || 1));
+      : (Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+          ? settings.customSequence
+          : KOCH_SEQUENCE).slice(0, Math.max(1, settings.kochLevel || 1));
   for (let i = 0; i < groupSize; i++) {
     group += safePool[Math.floor(Math.random() * safePool.length)];
   }

@@ -60,6 +60,7 @@ export function Sidebar({
         className={`fixed top-0 right-0 h-full w-96 max-w-full bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-50 ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 h-full overflow-y-auto">
           <div className="flex items-center justify-between mb-6">

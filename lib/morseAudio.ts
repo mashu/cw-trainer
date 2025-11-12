@@ -8,6 +8,7 @@ import {
   PCM_INT16_MAX,
 } from './constants';
 import { MORSE_CODE } from './morseConstants';
+import { normalizeProsign } from './prosignUtils';
 
 export interface AudioSettings {
   // Farnsworth support
@@ -104,8 +105,27 @@ export async function playMorseCodeControlled(
       currentTime += additional;
       continue;
     }
-    const char = rawChar.toUpperCase();
-    const morse = MORSE_CODE[char];
+    // Handle prosigns - check if current position starts a prosign
+    // Prosigns in text are stored as "<AR>" format, so check for that
+    let char = rawChar.toUpperCase();
+    let morse = MORSE_CODE[char];
+    
+    // If not found and it's '<', try to read a prosign
+    if (!morse && rawChar === '<') {
+      // Look ahead for prosign pattern like "<AR>"
+      const remaining = text.slice(i);
+      const prosignMatch = remaining.match(/^<[A-Z]{2}>/);
+      if (prosignMatch) {
+        const prosign = prosignMatch[0];
+        morse = MORSE_CODE[prosign];
+        if (morse) {
+          char = prosign;
+          // Skip the rest of the prosign characters
+          i += prosign.length - 1;
+        }
+      }
+    }
+    
     if (!morse) continue;
     for (let j = 0; j < morse.length; j++) {
       if (stopped || shouldStop()) { break; }

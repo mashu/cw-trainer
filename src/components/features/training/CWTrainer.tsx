@@ -1038,6 +1038,7 @@ export function CWTrainer(): JSX.Element {
                 ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
                 ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
                 ...(settings.customSet && settings.customSet.length > 0 ? { customSet: [...settings.customSet] } : {}),
+                ...(settings.customSequence && settings.customSequence.length > 0 ? { customSequence: [...settings.customSequence] } : {}),
                 charWpm: Math.max(1, settings.charWpm),
                 effectiveWpm: Math.max(1, settings.effectiveWpm),
                 sideToneMin: settings.sideToneMin,

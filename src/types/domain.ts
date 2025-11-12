@@ -97,6 +97,7 @@ export interface TrainingSettings {
   readonly charSetMode: CharacterSetMode;
   readonly digitsLevel: number;
   readonly customSet: readonly string[];
+  readonly customSequence?: readonly string[]; // Custom sequence order for Koch mode
   readonly sideToneMin: number;
   readonly sideToneMax: number;
   readonly steepness: number;
