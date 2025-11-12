@@ -16,7 +16,7 @@ jest.mock('recharts', () => ({
 
 describe('TrainingSettingsForm', () => {
   const defaultSettings: TrainingSettings = {
-    kochLevel: 2,
+    kochLevel: 1, // Level 1 = 2 characters
     charSetMode: 'koch',
     digitsLevel: 10,
     customSet: [],
@@ -43,7 +43,7 @@ describe('TrainingSettingsForm', () => {
     const setSettings = jest.fn();
     render(<TrainingSettingsForm settings={defaultSettings} setSettings={setSettings} />);
 
-    expect(screen.getAllByText(/Koch Level/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Sequence Level/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Number of Groups/i)).toBeInTheDocument();
     expect(screen.getByText(/Character Speed/i)).toBeInTheDocument();
   });
@@ -62,8 +62,8 @@ describe('TrainingSettingsForm', () => {
     const setSettings = jest.fn();
     render(<TrainingSettingsForm settings={defaultSettings} setSettings={setSettings} />);
 
-    // Find the koch level input by finding the label and then the input
-    const kochLevelLabel = screen.getAllByText(/Koch Level/i)[0];
+    // Find the sequence level input by finding the label and then the input
+    const kochLevelLabel = screen.getAllByText(/Sequence Level/i)[0];
     const kochLevelInput = kochLevelLabel.parentElement?.querySelector('input[type="number"]') as HTMLInputElement;
     expect(kochLevelInput).toBeInTheDocument();
     
@@ -89,11 +89,11 @@ describe('TrainingSettingsForm', () => {
     expect(setSettings).toHaveBeenCalled();
   });
 
-  it('should display preview characters based on koch level', () => {
+  it('should display preview characters based on sequence level', () => {
     const setSettings = jest.fn();
     render(<TrainingSettingsForm settings={defaultSettings} setSettings={setSettings} />);
 
-    // Should show preview characters for koch level 2 (K and M)
+    // Should show preview characters for level 1 (2 characters: K and M)
     expect(screen.getByText(/Characters:/i)).toBeInTheDocument();
   });
 
@@ -119,7 +119,9 @@ describe('TrainingSettingsForm', () => {
     };
     render(<TrainingSettingsForm settings={customSettings} setSettings={setSettings} />);
 
-    expect(screen.getByText(/Selected:/i)).toBeInTheDocument();
+    // Updated to match new UI text
+    expect(screen.getByText(/Selected Characters/i)).toBeInTheDocument();
+    expect(screen.getByText(/Preview:/i)).toBeInTheDocument();
   });
 
   it('should display envelope preview chart', () => {

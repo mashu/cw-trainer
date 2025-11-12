@@ -13,6 +13,9 @@ export const serializeSettings = (s: TrainingSettings): string => {
           ),
         )
       : undefined,
+    customSequence: Array.isArray(s.customSequence) && s.customSequence.length > 0
+      ? [...s.customSequence]
+      : undefined,
     sideToneMin: s.sideToneMin,
     sideToneMax: s.sideToneMax,
     steepness: s.steepness,
@@ -78,6 +81,9 @@ export const normalizeSettings = (raw: unknown, fallback: TrainingSettings): Tra
       : (legacySideTone ?? fallback.sideToneMax);
 
   const normalizedCustomSet = toStringArray(candidate.customSet);
+  const normalizedCustomSequence = Array.isArray(candidate.customSequence) && candidate.customSequence.length > 0
+    ? candidate.customSequence.map((c) => (typeof c === 'string' ? c : String(c ?? '')).trim()).filter((c) => c.length > 0)
+    : undefined;
 
   return {
     kochLevel: typeof candidate.kochLevel === 'number' ? candidate.kochLevel : fallback.kochLevel,
@@ -97,6 +103,7 @@ export const normalizeSettings = (raw: unknown, fallback: TrainingSettings): Tra
         : Array.isArray(fallback.customSet)
           ? fallback.customSet
           : [],
+    customSequence: normalizedCustomSequence ?? fallback.customSequence,
     sideToneMin,
     sideToneMax,
     steepness: typeof candidate.steepness === 'number' ? candidate.steepness : fallback.steepness,

@@ -29,6 +29,18 @@ const normalizeCustomSet = (customSet: unknown, fallback: readonly string[]): re
   return Array.from(unique.values());
 };
 
+const normalizeCustomSequence = (customSequence: unknown, fallback: readonly string[] | undefined): readonly string[] | undefined => {
+  if (!Array.isArray(customSequence) || customSequence.length === 0) {
+    return fallback;
+  }
+
+  const normalized = customSequence
+    .map((value) => (typeof value === 'string' ? value.trim() : String(value ?? '').trim()))
+    .filter((value) => value.length > 0);
+  
+  return normalized.length > 0 ? normalized : fallback;
+};
+
 export const normalizeTrainingSettings = (
   raw: unknown,
   fallback: TrainingSettings,
@@ -49,6 +61,7 @@ export const normalizeTrainingSettings = (
     charSetMode: normalizeCharSetMode(candidate['charSetMode'], fallback.charSetMode),
     digitsLevel: normalizedDigits,
     customSet: normalizeCustomSet(candidate['customSet'], fallback.customSet),
+    customSequence: normalizeCustomSequence(candidate['customSequence'], fallback.customSequence),
     autoAdjustKoch:
       typeof candidate['autoAdjustKoch'] === 'boolean'
         ? candidate['autoAdjustKoch']

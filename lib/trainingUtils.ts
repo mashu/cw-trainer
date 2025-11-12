@@ -35,8 +35,10 @@ export function computeCharPool(
   const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
     ? settings.customSequence
     : KOCH_SEQUENCE;
-  const level = Math.max(1, Math.min(sequence.length, settings.kochLevel || 1));
-  return sequence.slice(0, level);
+  // Level 1 = 2 characters, Level 2 = 3 characters, etc. (characters = level + 1)
+  const level = settings.kochLevel || 1;
+  const charCount = Math.min(level + 1, sequence.length);
+  return sequence.slice(0, Math.max(2, charCount));
 }
 
 export function generateGroup(settings: TrainingSettingsLite): string {
@@ -52,12 +54,15 @@ export function generateGroup(settings: TrainingSettingsLite): string {
     Math.floor(Math.random() * (settings.maxGroupSize - settings.minGroupSize + 1)) +
     settings.minGroupSize;
   let group = '';
+  const fallbackSequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+    ? settings.customSequence
+    : KOCH_SEQUENCE;
+  // Level 1 = 2 characters, Level 2 = 3 characters, etc. (characters = level + 1)
+  const charCount = Math.min((settings.kochLevel || 1) + 1, fallbackSequence.length);
   const safePool =
     Array.isArray(availableChars) && availableChars.length > 0
       ? availableChars
-      : (Array.isArray(settings.customSequence) && settings.customSequence.length > 0
-          ? settings.customSequence
-          : KOCH_SEQUENCE).slice(0, Math.max(1, settings.kochLevel || 1));
+      : fallbackSequence.slice(0, charCount);
   for (let i = 0; i < groupSize; i++) {
     group += safePool[Math.floor(Math.random() * safePool.length)];
   }

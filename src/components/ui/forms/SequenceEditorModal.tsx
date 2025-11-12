@@ -2,17 +2,14 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 
-import { getPresetById, SEQUENCE_PRESETS, type SequencePreset } from '@/lib/sequencePresets';
 import { MORSE_CODE } from '@/lib/morseConstants';
-import { getDisplayText, isProsign } from '@/lib/prosignUtils';
+import { getPresetById, SEQUENCE_PRESETS } from '@/lib/sequencePresets';
 
 interface SequenceEditorModalProps {
   open: boolean;
   onClose: () => void;
   sequence: string[];
   onChange: (sequence: string[]) => void;
-  maxLevel?: number;
-  onLevelChange?: (level: number) => void;
 }
 
 interface DraggedItem {
@@ -25,8 +22,6 @@ export function SequenceEditorModal({
   onClose,
   sequence,
   onChange,
-  maxLevel,
-  onLevelChange,
 }: SequenceEditorModalProps): JSX.Element | null {
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -34,9 +29,16 @@ export function SequenceEditorModal({
   const [isCustom, setIsCustom] = useState(false);
   const [originalPresetId, setOriginalPresetId] = useState<string>('koch');
 
-  const allChars = useMemo(() => Object.keys(MORSE_CODE), []);
+  // Filter out prosigns (characters with < > format) - only single characters allowed
+  const allChars = useMemo(() => {
+    return Object.keys(MORSE_CODE).filter(char => {
+      // Exclude prosigns (format like <AR>, <BT>, etc.)
+      return !(char.startsWith('<') && char.endsWith('>'));
+    });
+  }, []);
 
   // Detect if current sequence matches a preset and store original when modal opens
+  // Only update when sequence actually changes (by reference or content), not on every render
   useEffect(() => {
     const sequenceStr = sequence.join(',');
     const matchingPreset = SEQUENCE_PRESETS.find(
@@ -48,6 +50,7 @@ export function SequenceEditorModal({
     } else if (sequence.length > 0) {
       setIsCustom(true);
     }
+    // Don't call onChange here - just update local state
   }, [sequence]);
 
   // Store original preset when modal opens
@@ -61,12 +64,10 @@ export function SequenceEditorModal({
     }
   }, [open, sequence]);
 
+  // Always show the full sequence in the editor
   const currentSequence = useMemo(() => {
-    if (maxLevel && maxLevel > 0) {
-      return sequence.slice(0, maxLevel);
-    }
     return sequence;
-  }, [sequence, maxLevel]);
+  }, [sequence]);
 
   const handleDragStart = useCallback((char: string, index: number) => {
     setDraggedItem({ char, index });
@@ -111,6 +112,7 @@ export function SequenceEditorModal({
       return;
     }
 
+    // Work with the full sequence, not currentSequence slice
     const newSequence = [...sequence];
     const [removed] = newSequence.splice(sourceIndex, 1);
     let insertIndex = dropIndex;
@@ -169,21 +171,11 @@ export function SequenceEditorModal({
     }
   }, [originalPresetId, onChange]);
 
-  // Filter out prosigns that are already in the sequence
+  // Filter out characters that are already in the sequence
   const availableChars = useMemo(() => {
     return allChars.filter((char) => {
       // Don't show characters already in sequence
-      if (sequence.includes(char)) return false;
-      // Don't show prosigns that are already in sequence (check both formats)
-      const displayChar = getDisplayText(char);
-      if (isProsign(char)) {
-        const prosignInSequence = sequence.some(s => {
-          const sDisplay = getDisplayText(s);
-          return sDisplay === displayChar || s === char;
-        });
-        return !prosignInSequence;
-      }
-      return true;
+      return !sequence.includes(char);
     });
   }, [allChars, sequence]);
 
@@ -253,29 +245,11 @@ export function SequenceEditorModal({
             )}
           </div>
 
-          {/* Level Slider */}
-          {maxLevel && onLevelChange && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Level: {maxLevel} / {sequence.length}
-              </label>
-              <input
-                type="range"
-                min={1}
-                max={sequence.length}
-                step={1}
-                value={maxLevel}
-                onChange={(e) => onLevelChange(parseInt(e.target.value, 10))}
-                className="w-full"
-              />
-            </div>
-          )}
-
           {/* Sequence Display - 5 per row */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">
-                Character Sequence ({currentSequence.length} characters)
+                Character Sequence ({sequence.length} characters) - Drag to reorder
               </label>
               <button
                 type="button"
@@ -287,13 +261,27 @@ export function SequenceEditorModal({
               </button>
             </div>
             <div className="min-h-[120px] p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
-              <div className="grid grid-cols-5 gap-2">
+              <div 
+                className="grid grid-cols-5 gap-2"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (draggedItem) {
+                    setDraggedItem(null);
+                    setDragOverIndex(null);
+                  }
+                }}
+              >
                 {currentSequence.map((char, index) => {
+                  if (!char) return null;
                   const isDragging = draggedItem?.index === index;
                   const isDragOver = dragOverIndex === index;
-                  const displayChar = getDisplayText(char);
-                  const isProsignChar = isProsign(char);
-                  const morse = MORSE_CODE[char] || MORSE_CODE[displayChar] || '';
+                  const displayChar = char || '';
+                  const morse = MORSE_CODE[char] || '';
 
                   return (
                     <div
@@ -315,14 +303,12 @@ export function SequenceEditorModal({
                           ? 'opacity-50 scale-95 bg-slate-300 border-slate-400 shadow-lg z-50'
                           : isDragOver
                           ? 'scale-110 bg-indigo-100 border-indigo-400 shadow-md ring-2 ring-indigo-300'
-                          : isProsignChar
-                          ? 'bg-purple-100 hover:bg-purple-200 border-purple-400 hover:border-purple-500 hover:shadow-md'
                           : 'bg-white hover:bg-indigo-50 border-slate-300 hover:border-indigo-400 hover:shadow-md'
                         }
                       `}
-                      title={`${displayChar}${isProsignChar ? ' (Prosign)' : ''} (${morse})`}
+                      title={`${displayChar} (${morse})`}
                     >
-                      <span className={`text-slate-800 ${isProsignChar ? 'font-bold' : ''}`}>
+                      <span className="text-slate-800">
                         {displayChar}
                       </span>
                       {!isDragging && (
@@ -362,16 +348,15 @@ export function SequenceEditorModal({
               <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="grid grid-cols-5 gap-2">
                   {availableChars.map((char) => {
-                    const displayChar = getDisplayText(char);
-                    const isProsignChar = isProsign(char);
-                    const morse = MORSE_CODE[char] || MORSE_CODE[displayChar] || '';
+                    const displayChar = char || '';
+                    const morse = MORSE_CODE[char] || '';
                     return (
                       <button
                         key={char}
                         type="button"
                         onClick={() => handleAddChar(char)}
-                        className={`h-10 rounded border border-gray-300 bg-white hover:bg-indigo-50 hover:border-indigo-400 text-slate-700 text-xs font-medium transition-all hover:shadow-sm flex items-center justify-center ${isProsignChar ? 'font-bold bg-purple-50 hover:bg-purple-100 border-purple-300' : ''}`}
-                        title={`${displayChar}${isProsignChar ? ' (Prosign)' : ''} (${morse})`}
+                        className="h-10 rounded border border-gray-300 bg-white hover:bg-indigo-50 hover:border-indigo-400 text-slate-700 text-xs font-medium transition-all hover:shadow-sm flex items-center justify-center"
+                        title={`${displayChar} (${morse})`}
                       >
                         {displayChar}
                       </button>

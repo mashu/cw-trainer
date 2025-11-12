@@ -5,7 +5,6 @@ import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis } fro
 
 import { KOCH_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
 import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
-import { getDisplayText, isProsign } from '@/lib/prosignUtils';
 
 import { SequenceEditorModal } from './SequenceEditorModal';
 
@@ -90,7 +89,11 @@ export function TrainingSettingsForm({
 
   const charMode = settings.charSetMode || 'koch';
   const digitsAsc = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-  const allChars = Object.keys(MORSE_CODE);
+  // Filter out prosigns (characters with < > format) - only single characters allowed
+  const allChars = Object.keys(MORSE_CODE).filter(char => {
+    // Exclude prosigns (format like <AR>, <BT>, etc.)
+    return !(char.startsWith('<') && char.endsWith('>'));
+  });
   const letters = allChars.filter((character) => /[A-Z]/.test(character));
 
   const resolvePreviewChars = (): string[] => {
@@ -106,10 +109,9 @@ export function TrainingSettingsForm({
     const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
       ? settings.customSequence
       : KOCH_SEQUENCE;
-    return sequence.slice(
-      0,
-      Math.max(1, Math.min(sequence.length, settings.kochLevel || 1)),
-    );
+    // Level 1 = 2 characters, Level 2 = 3 characters, etc. (characters = level + 1)
+    const charCount = Math.min((settings.kochLevel || 1) + 1, sequence.length);
+    return sequence.slice(0, Math.max(2, charCount));
   };
 
   const currentPreviewChars = resolvePreviewChars();
@@ -127,7 +129,6 @@ export function TrainingSettingsForm({
   const [showSessionHelp, setShowSessionHelp] = useState(false);
   const [showToneHelp, setShowToneHelp] = useState(false);
   const [showSequenceEditor, setShowSequenceEditor] = useState(false);
-  const [originalPresetId, setOriginalPresetId] = useState<string>('koch');
 
   // Detect which preset matches the current sequence
   const currentPresetId = useMemo(() => {
@@ -253,38 +254,48 @@ export function TrainingSettingsForm({
                       <button
                         type="button"
                         onClick={() => {
-                          // Store the original preset when opening editor
-                          // If custom, try to find which preset it was based on, otherwise use koch
-                          const detectedPreset = currentPresetId === 'custom' 
-                            ? 'koch' 
-                            : currentPresetId;
-                          setOriginalPresetId(detectedPreset);
                           setShowSequenceEditor(true);
                         }}
-                        className="px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
-                        title="Customize sequence order"
+                        className="p-2 text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors flex items-center justify-center"
+                        title="Edit sequence order"
                       >
-                        ✏️ Customize
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
                       </button>
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Koch Level (1-{currentSequence.length})
+                      Sequence Level (1-{Math.max(1, currentSequence.length - 1)})
                     </label>
                     <input
                       type="number"
                       min="1"
-                      max={currentSequence.length}
+                      max={Math.max(1, currentSequence.length - 1)}
                       value={settings.kochLevel}
                       onChange={(event) => {
                         const numValue = parseInt(event.target.value, 10);
-                        if (!isNaN(numValue) && numValue >= 1 && numValue <= currentSequence.length) {
+                        const maxLevel = Math.max(1, currentSequence.length - 1);
+                        if (!isNaN(numValue) && numValue >= 1 && numValue <= maxLevel) {
                           setSettings({ ...settings, kochLevel: numValue });
                         }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Level {settings.kochLevel} = {Math.min(settings.kochLevel + 1, currentSequence.length)} characters
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">
@@ -301,14 +312,6 @@ export function TrainingSettingsForm({
                     }
                     onChange={(newSequence) => {
                       setSettings({ ...settings, customSequence: newSequence });
-                    }}
-                    maxLevel={settings.kochLevel}
-                    onLevelChange={(level) => {
-                      const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
-                        ? settings.customSequence
-                        : KOCH_SEQUENCE;
-                      const maxLevel = Math.max(1, Math.min(sequence.length, level));
-                      setSettings({ ...settings, kochLevel: maxLevel });
                     }}
                   />
                 </div>
@@ -561,7 +564,7 @@ export function TrainingSettingsForm({
           </div>
           <div className="mt-4 pt-4 border-t border-gray-200">
             <h5 className="text-sm font-semibold text-slate-700 mb-2">
-              Auto Koch Level Adjustment
+              Auto Sequence Level Adjustment
             </h5>
             <div className="flex items-center gap-2">
               <input
@@ -574,7 +577,7 @@ export function TrainingSettingsForm({
                 className="w-4 h-4"
               />
               <label htmlFor="autoAdjustKoch" className="text-sm font-medium text-gray-700">
-                Automatically adjust Koch level based on session accuracy
+                Automatically adjust sequence level based on session accuracy
               </label>
             </div>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -771,6 +774,14 @@ function CustomAlphabetEditor({
 }: CustomAlphabetEditorProps): JSX.Element {
   const [draggedItem, setDraggedItem] = useState<{ char: string; index: number } | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [originalSet, setOriginalSet] = useState<string[]>([]);
+
+  // Store original set when component mounts or set changes significantly
+  useEffect(() => {
+    if (customSet.length > 0 && originalSet.length === 0) {
+      setOriginalSet([...customSet]);
+    }
+  }, [customSet, originalSet]);
 
   const handleDragStart = useCallback((char: string, index: number) => {
     setDraggedItem({ char, index });
@@ -858,35 +869,57 @@ function CustomAlphabetEditor({
   return (
     <div className="space-y-4">
       {/* Quick Actions */}
-      <div className="flex gap-2 flex-wrap text-xs">
+      <div className="flex gap-2 flex-wrap text-xs items-center">
         <button
           type="button"
           className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
-          onClick={() => onCustomSetChange(letters)}
+          onClick={() => {
+            onCustomSetChange(letters);
+            setOriginalSet([...letters]);
+          }}
         >
           Letters
         </button>
         <button
           type="button"
           className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
-          onClick={() => onCustomSetChange(digitsAsc)}
+          onClick={() => {
+            onCustomSetChange(digitsAsc);
+            setOriginalSet([...digitsAsc]);
+          }}
         >
           Digits
         </button>
         <button
           type="button"
           className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
-          onClick={() => onCustomSetChange(allChars)}
+          onClick={() => {
+            onCustomSetChange(allChars);
+            setOriginalSet([...allChars]);
+          }}
         >
           All
         </button>
         <button
           type="button"
           className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
-          onClick={() => onCustomSetChange([])}
+          onClick={() => {
+            onCustomSetChange([]);
+            setOriginalSet([]);
+          }}
         >
           Clear
         </button>
+        {originalSet.length > 0 && (
+          <button
+            type="button"
+            className="px-2 py-1 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700"
+            onClick={() => onCustomSetChange([...originalSet])}
+            title="Reset to original order"
+          >
+            ↺ Reset
+          </button>
+        )}
       </div>
 
       {/* Enabled Characters - Draggable */}
@@ -914,9 +947,8 @@ function CustomAlphabetEditor({
               {customSet.map((character, index) => {
                 const isDragging = draggedItem?.index === index;
                 const isDragOver = dragOverIndex === index;
-                const displayChar = getDisplayText(character);
-                const isProsignChar = isProsign(character);
-                const morse = MORSE_CODE[character] || MORSE_CODE[displayChar] || '';
+                const displayChar = character || '';
+                const morse = MORSE_CODE[character] || '';
 
                 return (
                   <div
@@ -938,14 +970,12 @@ function CustomAlphabetEditor({
                         ? 'opacity-50 scale-95 bg-slate-300 border-slate-400 shadow-lg z-50'
                         : isDragOver
                         ? 'scale-110 bg-indigo-100 border-indigo-400 shadow-md ring-2 ring-indigo-300'
-                        : isProsignChar
-                        ? 'bg-purple-100 hover:bg-purple-200 border-purple-400 hover:border-purple-500 hover:shadow-md'
                         : 'bg-white hover:bg-indigo-50 border-slate-300 hover:border-indigo-400 hover:shadow-md'
                       }
                     `}
-                    title={`${displayChar}${isProsignChar ? ' (Prosign)' : ''} (${morse}) - Drag to reorder`}
+                    title={`${displayChar} (${morse}) - Drag to reorder`}
                   >
-                    <span className={`text-slate-800 ${isProsignChar ? 'font-bold' : ''}`}>
+                    <span className="text-slate-800">
                       {displayChar}
                     </span>
                     {!isDragging && (
@@ -984,23 +1014,16 @@ function CustomAlphabetEditor({
           <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
             <div className="grid grid-cols-5 gap-2">
               {availableChars.map((character) => {
-                const displayChar = getDisplayText(character);
-                const isProsignChar = isProsign(character);
-                const morse = MORSE_CODE[character] || MORSE_CODE[displayChar] || '';
-                // Check if prosign is already in sequence (in any format)
-                const prosignAlreadyInSequence = isProsignChar && customSet.some(s => {
-                  const sDisplay = getDisplayText(s);
-                  return sDisplay === displayChar || s === character;
-                });
-                if (prosignAlreadyInSequence) return null;
+                const displayChar = character || '';
+                const morse = MORSE_CODE[character] || '';
                 
                 return (
                   <button
                     key={character}
                     type="button"
                     onClick={() => handleToggleChar(character)}
-                    className={`h-10 rounded border border-gray-300 bg-white text-slate-700 hover:bg-indigo-50 hover:border-indigo-400 text-xs font-medium transition-all hover:shadow-sm flex items-center justify-center ${isProsignChar ? 'font-bold bg-purple-50 hover:bg-purple-100 border-purple-300' : ''}`}
-                    title={`${displayChar}${isProsignChar ? ' (Prosign)' : ''} (${morse})`}
+                    className="h-10 rounded border border-gray-300 bg-white text-slate-700 hover:bg-indigo-50 hover:border-indigo-400 text-xs font-medium transition-all hover:shadow-sm flex items-center justify-center"
+                    title={`${displayChar} (${morse})`}
                   >
                     {displayChar}
                   </button>

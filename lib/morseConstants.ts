@@ -12,16 +12,6 @@ export const MORSE_CODE: Record<string, string> = {
   '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...',
   '8': '---..', '9': '----.', '/': '-..-.', '=': '-...-', '+': '.-.-.',
   '?': '..--..', ',': '--..--', '.': '.-.-.-',
-  // Prosigns (special control characters) - stored in <AR> format
-  '<AR>': '.-.-.', // End of message
-  '<BT>': '-...-', // Break
-  '<BK>': '-...-.-', // Break
-  '<SK>': '...-.-', // End of work
-  // Also support display format for lookup convenience
-  'AR': '.-.-.',
-  'BT': '-...-',
-  'BK': '-...-.-',
-  'SK': '...-.-',
 };
 
 

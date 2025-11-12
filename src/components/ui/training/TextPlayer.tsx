@@ -41,7 +41,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     const safePool =
       Array.isArray(charPool) && charPool.length > 0
         ? charPool
-        : KOCH_SEQUENCE.slice(0, Math.max(1, settings.kochLevel || 1));
+        : KOCH_SEQUENCE.slice(0, Math.min((settings.kochLevel || 1) + 1, KOCH_SEQUENCE.length));
 
     const numGroups = Math.max(1, settings.numGroups || 5);
     const groups: string[] = [];

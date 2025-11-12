@@ -3,12 +3,12 @@ import { KOCH_SEQUENCE } from './morseConstants';
 /**
  * CWops sequence - optimized for amateur radio operators
  * Based on the CW Operators' Club learning method
- * Official sequence: A E N T I O S 1 4 D H L R 2 5 C U M W 3 6 ? F Y , G P Q 7 9 / B V <AR> J K 0 8 <BT> X Z . <BK> <SK>
+ * Note: Prosigns removed - only single characters are supported
  */
 export const CWOPS_SEQUENCE: string[] = [
   'A', 'E', 'N', 'T', 'I', 'O', 'S', '1', '4', 'D', 'H', 'L', 'R', '2', '5',
   'C', 'U', 'M', 'W', '3', '6', '?', 'F', 'Y', ',', 'G', 'P', 'Q', '7', '9',
-  '/', 'B', 'V', '<AR>', 'J', 'K', '0', '8', '<BT>', 'X', 'Z', '.', '<BK>', '<SK>'
+  '/', 'B', 'V', 'J', 'K', '0', '8', 'X', 'Z', '.'
 ];
 
 /**
@@ -51,7 +51,7 @@ export interface SequencePreset {
 export const SEQUENCE_PRESETS: SequencePreset[] = [
   {
     id: 'koch',
-    name: 'Koch Method',
+    name: 'Koch',
     description: 'Classic Koch method sequence',
     sequence: KOCH_SEQUENCE,
   },

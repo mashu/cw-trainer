@@ -2,9 +2,8 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 
-import { getPresetById, SEQUENCE_PRESETS, type SequencePreset } from '@/lib/sequencePresets';
 import { MORSE_CODE } from '@/lib/morseConstants';
-import { getDisplayText, isProsign } from '@/lib/prosignUtils';
+import { getPresetById, SEQUENCE_PRESETS } from '@/lib/sequencePresets';
 
 interface SequenceEditorProps {
   sequence: string[];
@@ -29,7 +28,13 @@ export function SequenceEditor({
   const [selectedPreset, setSelectedPreset] = useState<string>('koch');
   const [isCustom, setIsCustom] = useState(false);
 
-  const allChars = useMemo(() => Object.keys(MORSE_CODE), []);
+  // Filter out prosigns (characters with < > format) - only single characters allowed
+  const allChars = useMemo(() => {
+    return Object.keys(MORSE_CODE).filter(char => {
+      // Exclude prosigns (format like <AR>, <BT>, etc.)
+      return !(char.startsWith('<') && char.endsWith('>'));
+    });
+  }, []);
 
   // Detect if current sequence matches a preset
   useEffect(() => {
@@ -281,9 +286,8 @@ export function SequenceEditor({
             {currentSequence.map((char, index) => {
               const isDragging = draggedItem?.index === index;
               const isDragOver = dragOverIndex === index;
-              const displayChar = getDisplayText(char);
-              const isProsignChar = isProsign(char);
-              const morse = MORSE_CODE[char] || MORSE_CODE[displayChar] || '';
+              const displayChar = char || '';
+              const morse = MORSE_CODE[char] || '';
 
               return (
                 <div
@@ -299,20 +303,18 @@ export function SequenceEditor({
                   onDragEnd={handleDragEnd}
                   className={`
                     group relative flex items-center justify-center
-                    ${isProsignChar ? 'w-14' : 'w-12'} h-12 rounded-lg border-2 font-semibold text-sm
+                    w-12 h-12 rounded-lg border-2 font-semibold text-sm
                     cursor-move transition-all duration-200
                     ${isDragging
                       ? 'opacity-50 scale-95 bg-slate-300 border-slate-400 shadow-lg z-50'
                       : isDragOver
                       ? 'scale-110 bg-indigo-100 border-indigo-400 shadow-md ring-2 ring-indigo-300'
-                      : isProsignChar
-                      ? 'bg-purple-100 hover:bg-purple-200 border-purple-400 hover:border-purple-500 hover:shadow-md'
                       : 'bg-white hover:bg-indigo-50 border-slate-300 hover:border-indigo-400 hover:shadow-md'
                     }
                   `}
-                  title={`${displayChar}${isProsignChar ? ' (Prosign)' : ''} (${morse})`}
+                  title={`${displayChar} (${morse})`}
                 >
-                  <span className={`text-slate-800 ${isProsignChar ? 'font-bold' : ''}`}>
+                  <span className="text-slate-800">
                     {displayChar}
                   </span>
                   {!isDragging && (
@@ -351,22 +353,21 @@ export function SequenceEditor({
           </label>
           <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
             <div className="flex flex-wrap gap-1.5">
-              {availableChars.map((char) => {
-                const displayChar = getDisplayText(char);
-                const isProsignChar = isProsign(char);
-                const morse = MORSE_CODE[char] || MORSE_CODE[displayChar] || '';
-                return (
-                  <button
-                    key={char}
-                    type="button"
-                    onClick={() => handleAddChar(char)}
-                    className={`${isProsignChar ? 'w-12' : 'w-10'} h-10 rounded border border-gray-300 bg-white hover:bg-indigo-50 hover:border-indigo-400 text-slate-700 text-sm font-medium transition-all hover:shadow-sm ${isProsignChar ? 'font-bold bg-purple-50 hover:bg-purple-100 border-purple-300' : ''}`}
-                    title={`${displayChar}${isProsignChar ? ' (Prosign)' : ''} (${morse})`}
-                  >
-                    {displayChar}
-                  </button>
-                );
-              })}
+                  {availableChars.map((char) => {
+                    const displayChar = char || '';
+                    const morse = MORSE_CODE[char] || '';
+                    return (
+                      <button
+                        key={char}
+                        type="button"
+                        onClick={() => handleAddChar(char)}
+                        className="w-10 h-10 rounded border border-gray-300 bg-white hover:bg-indigo-50 hover:border-indigo-400 text-slate-700 text-sm font-medium transition-all hover:shadow-sm"
+                        title={`${displayChar} (${morse})`}
+                      >
+                        {displayChar}
+                      </button>
+                    );
+                  })}
             </div>
           </div>
         </div>

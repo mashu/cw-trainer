@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import type { CharacterSetMode } from '@/types';
 
-const KOCH_LEVEL_MIN = 1;
+const KOCH_LEVEL_MIN = 1; // Level 1 = 2 characters, Level 2 = 3 characters, etc.
 const KOCH_LEVEL_MAX = 40;
 const DIGITS_LEVEL_MIN = 1;
 const DIGITS_LEVEL_MAX = 10;
@@ -28,6 +28,7 @@ export const trainingSettingsSchema = z
     charSetMode: characterSetModeSchema as z.ZodType<CharacterSetMode>,
     digitsLevel: z.number().int().min(DIGITS_LEVEL_MIN).max(DIGITS_LEVEL_MAX),
     customSet: z.array(z.string().min(1)).max(64).optional().default([]),
+    customSequence: z.array(z.string().min(1)).optional(),
     sideToneMin: z.number().int().min(TONE_MIN).max(TONE_MAX),
     sideToneMax: z.number().int().min(TONE_MIN).max(TONE_MAX),
     steepness: z.number().int().min(STEEPNESS_MIN).max(STEEPNESS_MAX),

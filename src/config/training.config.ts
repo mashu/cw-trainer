@@ -1,7 +1,7 @@
 import type { IcrSettings, TrainingSettings } from '@/types';
 
 export const DEFAULT_TRAINING_SETTINGS: TrainingSettings = {
-  kochLevel: 2,
+  kochLevel: 1, // Level 1 = 2 characters, Level 2 = 3 characters, etc.
   charSetMode: 'koch',
   digitsLevel: 10,
   customSet: [],

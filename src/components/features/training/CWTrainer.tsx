@@ -231,16 +231,18 @@ export function CWTrainer(): JSX.Element {
       } catch {}
 
       try {
-        const { customSet, ...restSettings } = settings;
+        const { customSet, customSequence, ...restSettings } = settings;
         const settingsToSave: Parameters<typeof saveTrainingSettings>[0] = {
           ...restSettings,
           customSet: customSet && customSet.length > 0 ? [...customSet] : [],
+          ...(customSequence && customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
         };
         const saved = await saveTrainingSettings(settingsToSave);
-        const { customSet: savedCustomSet, ...restSaved } = saved;
+        const { customSet: savedCustomSet, customSequence: savedCustomSequence, ...restSaved } = saved;
         const savedToSerialize: Parameters<typeof tsSerialize>[0] = {
           ...restSaved,
           ...(savedCustomSet && savedCustomSet.length > 0 ? { customSet: [...savedCustomSet] } : {}),
+          ...(savedCustomSequence && savedCustomSequence.length > 0 ? { customSequence: [...savedCustomSequence] } : {}),
         };
         lastSavedSettingsRef.current = tsSerialize(savedToSerialize);
 
@@ -329,7 +331,7 @@ export function CWTrainer(): JSX.Element {
   }, [firebaseReady, firebaseServices, setToast, switchAccount]);
 
   const generateGroup = (): string => {
-    const { customSet, ...restSettings } = settings;
+    const { customSet, customSequence, ...restSettings } = settings;
     return externalGenerateGroup({
       kochLevel: restSettings.kochLevel,
       minGroupSize: restSettings.minGroupSize,
@@ -337,6 +339,7 @@ export function CWTrainer(): JSX.Element {
       ...(restSettings.charSetMode !== undefined ? { charSetMode: restSettings.charSetMode } : {}),
       ...(restSettings.digitsLevel !== undefined ? { digitsLevel: restSettings.digitsLevel } : {}),
       ...(customSet && customSet.length > 0 ? { customSet: [...customSet] } : {}),
+      ...(customSequence && customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
     });
   };
 

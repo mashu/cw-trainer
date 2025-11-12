@@ -68,7 +68,7 @@ export function Sidebar({
       document.addEventListener('mousedown', handleClickOutside);
     }, 0);
 
-    return () => {
+    return (): void => {
       clearTimeout(timeoutId);
       document.removeEventListener('mousedown', handleClickOutside);
     };
