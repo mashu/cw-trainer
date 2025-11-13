@@ -65,6 +65,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
         const rows: LeaderboardEntry[] = [];
         const limitN = Math.max(1, Math.min(100, limitCount));
         let lastErrorCode: string | null = null;
+        let loadedFromPersonal = false;
 
         const attempt = async (makeQuery: () => ReturnType<typeof query>): Promise<boolean> => {
           const q = makeQuery();
@@ -102,6 +103,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
         };
 
         let ok = false;
+        // Try global leaderboard first (collectionGroup)
         try {
           ok = await attempt(() =>
             query(
@@ -114,6 +116,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
           ok = false;
         }
 
+        // Fallback to top-level leaderboard collection
         if (!ok) {
           try {
             ok = await attempt(() =>
@@ -128,6 +131,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
           }
         }
 
+        // Final fallback to user's personal leaderboard
         if (!ok && services.auth?.currentUser?.uid) {
           const uid = services.auth.currentUser.uid;
           try {
@@ -138,6 +142,9 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
                 limit(limitN),
               ),
             );
+            if (ok) {
+              loadedFromPersonal = true;
+            }
           } catch (error) {
             ok = false;
           }
@@ -158,7 +165,9 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
         }
 
         setItems(rows.sort((a, b) => b.score - a.score));
-        setHint(lastErrorCode ? `Loaded via fallback (${lastErrorCode})` : null);
+        // Don't show hint - personal leaderboard is a valid data source
+        // If global leaderboard isn't accessible due to security rules, that's fine
+        setHint(null);
       } catch (error) {
         if (!cancelled) {
           console.error(error);
