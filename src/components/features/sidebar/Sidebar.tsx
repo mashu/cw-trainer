@@ -6,6 +6,9 @@ import { ICRSettingsForm } from '@/components/ui/forms/ICRSettingsForm';
 import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingSettingsForm } from '@/components/ui/forms/TrainingSettingsForm';
 import type { AuthUserSummary } from '@/hooks/useAuth';
+import { useSessionsActions } from '@/hooks/useSessions';
+import { initFirebase } from '@/lib/firebaseClient';
+import { getUserCallSign, setUserCallSign } from '@/lib/sessionPersistence';
 import type { IcrSettings } from '@/types';
 
 interface SidebarProps {
@@ -50,7 +53,99 @@ export function Sidebar({
 }: SidebarProps): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [showModeHelp, setShowModeHelp] = useState(false);
+  const [callSign, setCallSign] = useState<string>('');
+  const [callSignSaving, setCallSignSaving] = useState(false);
+  const callSignDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const { loadSessions } = useSessionsActions();
+
+  // Load call-sign when user is available
+  useEffect(() => {
+    if (!user?.uid || !firebaseReady) {
+      setCallSign('');
+      return;
+    }
+    const loadCallSign = async (): Promise<void> => {
+      try {
+        const services = initFirebase();
+        if (!services) return;
+        const firebaseLite = { db: services.db, auth: services.auth };
+        const loaded = await getUserCallSign(firebaseLite, { uid: user.uid });
+        setCallSign(loaded || '');
+      } catch (e) {
+        console.warn('Failed to load call-sign', e);
+      }
+    };
+    void loadCallSign();
+  }, [user?.uid, firebaseReady]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return (): void => {
+      if (callSignDebounceRef.current) {
+        clearTimeout(callSignDebounceRef.current);
+      }
+    };
+  }, []);
+
+  const saveCallSign = async (value: string): Promise<void> => {
+    if (!user?.uid || !firebaseReady) return;
+    setCallSignSaving(true);
+    try {
+      const services = initFirebase();
+      if (!services) return;
+      const firebaseLite = { db: services.db, auth: services.auth };
+      await setUserCallSign(firebaseLite, { uid: user.uid }, value || null);
+      
+      // Reload sessions to trigger leaderboard update with new call-sign
+      // This will backfill call-sign to existing leaderboard entries
+      try {
+        await loadSessions();
+      } catch (e) {
+        // Ignore errors from session reload - call-sign is already saved
+        console.warn('Failed to reload sessions after call-sign update', e);
+      }
+    } catch (e) {
+      console.warn('Failed to save call-sign', e);
+      // Revert on error
+      try {
+        const services = initFirebase();
+        if (!services) return;
+        const firebaseLite = { db: services.db, auth: services.auth };
+        const loaded = await getUserCallSign(firebaseLite, { uid: user.uid });
+        setCallSign(loaded || '');
+      } catch {}
+    } finally {
+      setCallSignSaving(false);
+    }
+  };
+
+  const handleCallSignInputChange = (value: string): void => {
+    // Update local state immediately for responsive UI
+    setCallSign(value);
+    
+    // Clear existing debounce timer
+    if (callSignDebounceRef.current) {
+      clearTimeout(callSignDebounceRef.current);
+    }
+    
+    // Debounce save: wait 1 second after user stops typing
+    callSignDebounceRef.current = setTimeout(() => {
+      void saveCallSign(value);
+    }, 1000);
+  };
+
+  const handleCallSignKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // Clear debounce and save immediately on Enter
+      if (callSignDebounceRef.current) {
+        clearTimeout(callSignDebounceRef.current);
+        callSignDebounceRef.current = null;
+      }
+      void saveCallSign(callSign);
+    }
+  };
 
   useEffect(() => {
     if (!open) {
@@ -230,6 +325,29 @@ export function Sidebar({
                   <p className="text-sm text-slate-600">{user.email}</p>
                 </div>
               </div>
+              {firebaseReady && (
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Call Sign (for leaderboard)
+                  </label>
+                  <input
+                    type="text"
+                    value={callSign}
+                    onChange={(e) => {
+                      const value = e.target.value.toUpperCase().replace(/[^A-Z0-9/]/g, '');
+                      handleCallSignInputChange(value);
+                    }}
+                    onKeyDown={handleCallSignKeyDown}
+                    placeholder="e.g., W1ABC"
+                    maxLength={20}
+                    disabled={callSignSaving}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:text-slate-500"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    {callSignSaving ? 'Saving...' : 'Optional: Your call sign will appear on the leaderboard instead of your ID. Press Enter to save immediately.'}
+                  </p>
+                </div>
+              )}
               <div className="flex flex-col gap-2">
                 <button
                   onClick={onLogout}

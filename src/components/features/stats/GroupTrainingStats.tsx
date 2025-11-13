@@ -132,9 +132,17 @@ export function GroupTrainingStats({
   const rangeFilteredSessions = useMemo<typeof sessionsSorted>(() => {
     if (!range) return sessionsSorted;
     const start = Math.max(0, range.startIndex || 0);
-    const end = Math.min(chartData.length - 1, range.endIndex || chartData.length - 1);
+    const end = Math.min(sessionsSorted.length - 1, range.endIndex || sessionsSorted.length - 1);
     return sessionsSorted.slice(start, end + 1);
-  }, [range, sessionsSorted, chartData.length]);
+  }, [range, sessionsSorted]);
+
+  // Filter chartData by range so threshold line aligns correctly
+  const rangeFilteredChartData = useMemo(() => {
+    if (!range) return chartData;
+    const start = Math.max(0, range.startIndex || 0);
+    const end = Math.min(chartData.length - 1, range.endIndex || chartData.length - 1);
+    return chartData.slice(start, end + 1);
+  }, [range, chartData]);
 
   const rangeLetterStats = useMemo<LetterStatsPoint[]>(
     () => aggregateLetterStats(rangeFilteredSessions),
@@ -267,7 +275,8 @@ export function GroupTrainingStats({
       setRange(null);
       return;
     }
-    setRange({ startIndex: firstIdx, endIndex: chartData.length - 1 });
+    // Use sessionsSorted.length since range indices are based on sessionsSorted
+    setRange({ startIndex: firstIdx, endIndex: sessionsSorted.length - 1 });
   };
 
   return (
@@ -488,7 +497,7 @@ export function GroupTrainingStats({
               <div className="w-full h-[260px] sm:h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
-                    data={chartData}
+                    data={rangeFilteredChartData}
                     onClick={(event) => {
                       const payload = extractChartPoint(event);
                       if (payload?.timestamp) {

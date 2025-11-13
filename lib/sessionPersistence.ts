@@ -141,21 +141,77 @@ async function ensurePublicId(services: FirebaseServicesLite, user: { uid: strin
   }
 }
 
+export async function getUserCallSign(services: FirebaseServicesLite, user: { uid: string } | null): Promise<string | null> {
+  if (!(services && user && user.uid)) return null;
+  try {
+    const profileDocRef = doc(services.db, 'users', user.uid, 'meta', 'profile');
+    const snap = await getDoc(profileDocRef);
+    if (!snap.exists()) return null;
+    const data = snap.data() as any;
+    const callSign = typeof data?.callSign === 'string' ? data.callSign.trim() : null;
+    return callSign && callSign.length > 0 ? callSign : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setUserCallSign(services: FirebaseServicesLite, user: { uid: string } | null, callSign: string | null): Promise<void> {
+  if (!(services && user && user.uid)) return;
+  try {
+    const profileDocRef = doc(services.db, 'users', user.uid, 'meta', 'profile');
+    const cleaned = callSign ? callSign.trim().toUpperCase() : null;
+    const update: any = { updatedAt: Date.now() };
+    if (cleaned && cleaned.length > 0) {
+      update.callSign = cleaned;
+    } else {
+      // Remove callSign if empty
+      update.callSign = null;
+    }
+    await setDoc(profileDocRef, update, { merge: true });
+    // Note: Leaderboard now looks up call-signs dynamically from profiles,
+    // so we don't need to update existing entries. The profile is the source of truth.
+  } catch (e) {
+    console.warn('Failed to update call-sign', e);
+    throw e;
+  }
+}
+
 async function writeLeaderboardForSessions(
   services: FirebaseServicesLite,
   user: { uid: string } | null,
   results: SessionResult[]
 ): Promise<void> {
   if (!(services && user && user.uid)) return;
-      const publicId = user?.uid ? await ensurePublicId(services, { uid: user.uid }) : null;
+  const publicId = user?.uid ? await ensurePublicId(services, { uid: user.uid }) : null;
+  const callSign = await getUserCallSign(services, { uid: user.uid });
   const now = Date.now();
   await Promise.all(results.map(async (r) => {
     // Nest under user scope for rules friendliness; one doc per session timestamp
     const ref = doc(services.db, 'users', user.uid, 'leaderboard', String(r.timestamp));
     try {
       const ex = await getDoc(ref as any);
-      if (ex.exists()) return; // immutable: do not overwrite
+      if (ex.exists()) {
+        // Entry exists - only update callSign if it's missing or changed (keep rest immutable)
+        const existingData = ex.data() as any;
+        const existingCallSign = typeof existingData?.callSign === 'string' && existingData.callSign.length > 0 ? existingData.callSign : null;
+        const newCallSign = callSign && callSign.length > 0 ? callSign : null;
+        if (newCallSign !== existingCallSign) {
+          // Update only the callSign field using merge
+          const updatePayload: any = {};
+          if (newCallSign) {
+            updatePayload.callSign = newCallSign;
+          } else {
+            // Explicitly set to null to remove the field if call-sign was cleared
+            updatePayload.callSign = null;
+          }
+          await setDoc(ref, updatePayload, { merge: true });
+          // eslint-disable-next-line no-console
+          console.log('[Leaderboard] Updated callSign for entry:', r.timestamp, 'from', existingCallSign, 'to', newCallSign);
+        }
+        return; // Don't overwrite the rest of the entry
+      }
     } catch {}
+    // New entry - create it with all data
     const alphabetSize = (typeof r.alphabetSize === 'number' && r.alphabetSize > 0) ? r.alphabetSize : calculateAlphabetSize(r.groups || []);
     const effectiveAlphabetSize = (typeof r.effectiveAlphabetSize === 'number' && r.effectiveAlphabetSize > 0)
       ? r.effectiveAlphabetSize
@@ -170,6 +226,7 @@ async function writeLeaderboardForSessions(
     const payload: any = {
       uid: user.uid,
       publicId: publicId,
+      ...(callSign ? { callSign } : {}),
       timestamp: r.timestamp,
       date: r.date,
       score,
@@ -321,7 +378,7 @@ export async function deleteSessionPersisted(services: FirebaseServicesLite, use
       const ops = readPendingOps(user);
       ops.deletions = [...(ops.deletions || []), timestamp];
       try {
-        let toDelete = currentResults.find(r => r.timestamp === timestamp);
+        const toDelete = currentResults.find(r => r.timestamp === timestamp);
         let docId = (toDelete as any)?.firestoreId || String(timestamp);
         
         // If session not found in memory, try to query Firebase for the docId

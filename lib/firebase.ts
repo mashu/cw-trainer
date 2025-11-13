@@ -10,7 +10,7 @@ const cleanAuthDomain = (value: string | undefined) => trim(value).replace(/^htt
 // This file should be in .gitignore
 let localConfig: FirebaseOptions | undefined;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const localModule = require('./firebase.local');
   if (localModule?.firebaseConfig) {
     localConfig = localModule.firebaseConfig;

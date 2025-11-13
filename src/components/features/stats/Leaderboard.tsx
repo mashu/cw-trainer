@@ -3,6 +3,8 @@
 import {
   collection,
   collectionGroup,
+  doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
@@ -17,6 +19,7 @@ import { DEFAULT_SCORE_CONSTANTS } from '@/lib/score';
 
 type LeaderboardEntry = {
   publicId: number;
+  callSign?: string;
   score: number;
   timestamp: number;
   date?: string;
@@ -28,7 +31,9 @@ type LeaderboardEntry = {
 };
 
 type LeaderboardDoc = {
+  uid?: string;
   publicId?: number;
+  callSign?: string;
   score?: number;
   timestamp?: number;
   date?: string;
@@ -47,6 +52,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const services = initFirebase();
@@ -65,13 +71,17 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
         const rows: LeaderboardEntry[] = [];
         const limitN = Math.max(1, Math.min(100, limitCount));
         let lastErrorCode: string | null = null;
-        let loadedFromPersonal = false;
 
         const attempt = async (makeQuery: () => ReturnType<typeof query>): Promise<boolean> => {
           const q = makeQuery();
           try {
             const snap = await getDocs(q);
             rows.length = 0;
+            
+            // Collect all UIDs to look up call-signs in batch
+            const uidSet = new Set<string>();
+            const tempEntries: Array<{ data: LeaderboardDoc; entry: Partial<LeaderboardEntry> }> = [];
+            
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             snap.forEach((document: any) => {
               const data = document.data() as LeaderboardDoc;
@@ -79,8 +89,17 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
                 return;
               }
 
-              const entry: LeaderboardEntry = {
+              // Collect UID for call-sign lookup
+              if (data.uid && typeof data.uid === 'string') {
+                uidSet.add(data.uid);
+              }
+
+              // Use call-sign from entry as fallback (for backwards compatibility)
+              const entryCallSign = typeof data.callSign === 'string' && data.callSign.length > 0 ? data.callSign : undefined;
+
+              const entry: Partial<LeaderboardEntry> = {
                 publicId: data.publicId,
+                ...(entryCallSign ? { callSign: entryCallSign } : {}),
                 score: Math.round(data.score * 100) / 100,
                 timestamp: typeof data.timestamp === 'number' ? data.timestamp : 0,
                 ...(typeof data.date === 'string' ? { date: data.date } : {}),
@@ -92,8 +111,56 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
                   : {}),
                 ...(typeof data.totalChars === 'number' ? { totalChars: data.totalChars } : {}),
               };
-              rows.push(entry);
+              tempEntries.push({ data, entry });
             });
+
+            // Look up call-signs from user profiles (current/latest call-sign)
+            const callSignMap = new Map<string, string | null>();
+            if (uidSet.size > 0 && services.db) {
+              await Promise.all(
+                Array.from(uidSet).map(async (uid) => {
+                  try {
+                    const profileRef = doc(services.db, 'users', uid, 'meta', 'profile');
+                    const profileSnap = await getDoc(profileRef);
+                    if (profileSnap.exists()) {
+                      const profileData = profileSnap.data() as { callSign?: string } | undefined;
+                      const callSign = typeof profileData?.callSign === 'string' && profileData.callSign.length > 0
+                        ? profileData.callSign.trim()
+                        : null;
+                      callSignMap.set(uid, callSign);
+                    } else {
+                      callSignMap.set(uid, null);
+                    }
+                  } catch (e) {
+                    // If we can't read the profile, use null (will fall back to entry's call-sign if available)
+                    callSignMap.set(uid, null);
+                  }
+                })
+              );
+            }
+
+            // Build final entries with call-signs from profiles (preferred) or entries (fallback)
+            tempEntries.forEach(({ data, entry }) => {
+              let finalCallSign: string | undefined = undefined;
+              if (data.uid && typeof data.uid === 'string') {
+                const profileCallSign = callSignMap.get(data.uid);
+                // Prefer call-sign from profile (current), fall back to entry's call-sign (for old entries)
+                finalCallSign = profileCallSign || entry.callSign;
+              } else {
+                // No UID, use entry's call-sign if available
+                finalCallSign = entry.callSign;
+              }
+
+              const finalEntry: LeaderboardEntry = {
+                ...entry,
+                publicId: entry.publicId!,
+                score: entry.score!,
+                timestamp: entry.timestamp!,
+                ...(finalCallSign ? { callSign: finalCallSign } : {}),
+              } as LeaderboardEntry;
+              rows.push(finalEntry);
+            });
+
             return true;
           } catch (error) {
             const typedError = error as { code?: string } | null;
@@ -142,9 +209,6 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
                 limit(limitN),
               ),
             );
-            if (ok) {
-              loadedFromPersonal = true;
-            }
           } catch (error) {
             ok = false;
           }
@@ -185,7 +249,16 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
     return (): void => {
       cancelled = true;
     };
-  }, [limitCount]);
+  }, [limitCount, refreshKey]);
+
+  // Auto-refresh every 30 seconds to pick up call-sign updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshKey((prev) => prev + 1);
+    }, 30000); // Refresh every 30 seconds
+
+    return (): void => clearInterval(interval);
+  }, []);
 
   const top = useMemo(() => items.slice(0, limitCount), [items, limitCount]);
 
@@ -232,6 +305,16 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
             aria-label="Score formula help"
           >
             ?
+          </button>
+          <button
+            type="button"
+            onClick={() => setRefreshKey((prev) => prev + 1)}
+            disabled={loading}
+            className="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 disabled:opacity-50"
+            title="Refresh leaderboard"
+            aria-label="Refresh leaderboard"
+          >
+            ↻
           </button>
         </div>
         <div className="text-xs text-slate-500">Top {limitCount}</div>
@@ -309,7 +392,13 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
               {top.map((row, index) => (
                 <tr key={`${row.publicId}_${row.timestamp}`} className="border-t border-slate-100">
                   <td className="py-2 pr-3 font-medium text-slate-700">{index + 1}</td>
-                  <td className="py-2 pr-3 font-mono">{formatPublicId(row.publicId)}</td>
+                  <td className="py-2 pr-3 font-mono">
+                    {row.callSign ? (
+                      <span className="font-semibold text-blue-600">{row.callSign}</span>
+                    ) : (
+                      formatPublicId(row.publicId)
+                    )}
+                  </td>
                   <td className="py-2 pr-3 font-semibold text-slate-900">{row.score.toFixed(2)}</td>
                   <td className="py-2 pr-3 hidden sm:table-cell">
                     {typeof row.accuracy === 'number' ? `${Math.round(row.accuracy * 100)}%` : '—'}
