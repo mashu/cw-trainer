@@ -126,6 +126,7 @@ export function AppStoreProvider({
       .catch(() => undefined);
   }, [firebase, user]);
 
+
   return <StoreContext.Provider value={storeRef.current}>{children}</StoreContext.Provider>;
 }
 

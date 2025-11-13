@@ -31,7 +31,23 @@ export const createAppStore = ({
     const contextSlice: ContextSlice = {
       context,
       setContext: (nextContext: StoreContextValue) => {
+        const previousContext = get().context;
+        const previousUser = previousContext.user;
+        const nextUser = nextContext.user;
+        
+        // Event-driven: detect user authentication transition
+        const userAuthenticated = !previousUser && nextUser;
+        
         set({ context: nextContext });
+        
+        // Event-driven: load sessions when user authenticates
+        if (userAuthenticated) {
+          // Use setTimeout to avoid calling during state update
+          setTimeout(() => {
+            const state = get();
+            void state.loadSessions().catch(() => undefined);
+          }, 0);
+        }
       },
     };
 

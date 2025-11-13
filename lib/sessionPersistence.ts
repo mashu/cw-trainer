@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { getAuth } from 'firebase/auth';
-import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, setDoc, where } from 'firebase/firestore';
 import type { getFirestore } from 'firebase/firestore';
 
 import { calculateGroupLetterAccuracy } from '@/lib/groupAlignment';
@@ -200,6 +200,7 @@ export async function loadSessions(services: FirebaseServicesLite, user: { uid?:
   if (cloudLoaded) {
     // Merge with any local-only entries
     let merged: SessionResult[] = cloudLoaded;
+    let hasLocalOnlyEntries = false;
     try {
       const savedLocal = localStorage.getItem(localKeyForResults(user));
       if (savedLocal) {
@@ -207,11 +208,35 @@ export async function loadSessions(services: FirebaseServicesLite, user: { uid?:
         const localNorm = Array.isArray(parsed) ? parsed.map((s: any) => normalizeSession(s)) : [];
         const byTs: Record<number, SessionResult> = {};
         merged.forEach(s => { byTs[s.timestamp] = s; });
-        localNorm.forEach(s => { if (!byTs[s.timestamp]) byTs[s.timestamp] = s; });
+        localNorm.forEach(s => { 
+          if (!byTs[s.timestamp]) {
+            byTs[s.timestamp] = s;
+            hasLocalOnlyEntries = true; // Found local-only entry that needs syncing
+          }
+        });
         merged = Object.values(byTs).sort((a, b) => a.timestamp - b.timestamp);
       }
     } catch {}
-    await saveSessions(services, user, merged); // sync both stores
+    
+    // Only save to Firestore if there are local-only entries to sync, or if we need to update localStorage
+    // This avoids unnecessary writes that can hit quota limits
+    if (hasLocalOnlyEntries) {
+      try {
+        await saveSessions(services, user, merged); // sync local-only entries to cloud
+      } catch (e) {
+        // If save fails (e.g., quota exceeded), still update localStorage and continue
+        console.warn('Failed to sync local sessions to Firestore; will retry later.', e);
+        try {
+          localStorage.setItem(localKeyForResults(user), JSON.stringify(merged));
+        } catch {}
+      }
+    } else {
+      // No local-only entries, just ensure localStorage is in sync
+      try {
+        localStorage.setItem(localKeyForResults(user), JSON.stringify(merged));
+      } catch {}
+    }
+    
     await flushPendingOps(services, user, merged);
     return merged;
   }
@@ -247,8 +272,14 @@ export async function saveSessions(services: FirebaseServicesLite, user: { uid?:
       ]);
       // Write immutable leaderboard entries (one per session). Skips existing docs.
       await writeLeaderboardForSessions(services, { uid: user.uid }, results);
-    } catch (e) {
-      console.warn('Failed to write to Firestore; local copy saved.', e);
+    } catch (e: any) {
+      // Handle quota errors gracefully - they're already logged by Firebase
+      const isQuotaError = e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota');
+      if (isQuotaError) {
+        console.warn('Firestore quota exceeded; local copy saved. Will retry later via pending ops.', e);
+      } else {
+        console.warn('Failed to write to Firestore; local copy saved.', e);
+      }
       const ops = readPendingOps(user);
       ops.needsFullSync = true;
       writePendingOps(user, ops);
@@ -261,8 +292,27 @@ export async function deleteSessionPersisted(services: FirebaseServicesLite, use
   try { localStorage.setItem(localKeyForResults(user), JSON.stringify(filtered)); } catch {}
   if (services && user && user.uid) {
     try {
-      const toDelete = currentResults.find(r => r.timestamp === timestamp);
-      const docId = (toDelete as any)?.firestoreId || String(timestamp);
+      let toDelete = currentResults.find(r => r.timestamp === timestamp);
+      let docId = (toDelete as any)?.firestoreId || String(timestamp);
+      
+      // If session not found in memory, query Firebase directly by timestamp
+      if (!toDelete) {
+        try {
+          const sessionsQuery = query(
+            collection(services.db, 'users', user.uid, 'sessions'),
+            where('timestamp', '==', timestamp)
+          );
+          const querySnapshot = await getDocs(sessionsQuery);
+          if (!querySnapshot.empty) {
+            const docSnapshot = querySnapshot.docs[0];
+            docId = docSnapshot.id;
+            toDelete = normalizeSession(docSnapshot.data(), { docId: docSnapshot.id });
+          }
+        } catch (queryError) {
+          console.warn('Failed to query Firebase for session by timestamp', queryError);
+        }
+      }
+      
       await deleteDoc(doc(services.db, 'users', user.uid, 'sessions', docId));
       // Delete matching leaderboard entry for consistency (per-session)
       try { await deleteDoc(doc(services.db, 'users', user.uid, 'leaderboard', String(timestamp))); } catch {}
@@ -271,8 +321,25 @@ export async function deleteSessionPersisted(services: FirebaseServicesLite, use
       const ops = readPendingOps(user);
       ops.deletions = [...(ops.deletions || []), timestamp];
       try {
-        const toDelete = currentResults.find(r => r.timestamp === timestamp);
-        const docId = (toDelete as any)?.firestoreId || String(timestamp);
+        let toDelete = currentResults.find(r => r.timestamp === timestamp);
+        let docId = (toDelete as any)?.firestoreId || String(timestamp);
+        
+        // If session not found in memory, try to query Firebase for the docId
+        if (!toDelete && services && user && user.uid) {
+          try {
+            const sessionsQuery = query(
+              collection(services.db, 'users', user.uid, 'sessions'),
+              where('timestamp', '==', timestamp)
+            );
+            const querySnapshot = await getDocs(sessionsQuery);
+            if (!querySnapshot.empty) {
+              docId = querySnapshot.docs[0].id;
+            }
+          } catch (queryError) {
+            // Ignore query errors, fall back to String(timestamp)
+          }
+        }
+        
         ops.deletionIds = { ...(ops.deletionIds || {}), [String(timestamp)]: docId };
       } catch {}
       writePendingOps(user, ops);
@@ -291,7 +358,10 @@ export async function flushPendingOps(services: FirebaseServicesLite, user: { ui
       await Promise.all(currentResults.map(r => {
         const payload = { ...r } as any;
         try { delete payload.firestoreId; } catch {}
-        return setDoc(doc(services.db, 'users', user.uid, 'sessions', String(r.timestamp)), payload);
+        // Use firestoreId if available, otherwise fall back to String(timestamp)
+        // This matches the logic used in deleteSessionPersisted and ensures consistency
+        const docId = (r as any)?.firestoreId || String(r.timestamp);
+        return setDoc(doc(services.db, 'users', user.uid, 'sessions', docId), payload);
       }));
     }
     if (ops.deletions && ops.deletions.length) {

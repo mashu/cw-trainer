@@ -13,3 +13,5 @@ coverage
 .idea/
 .vscode/
 node_modules/*
+# Local Firebase configuration for testing
+lib/firebase.local.ts

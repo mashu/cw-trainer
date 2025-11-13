@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, type FirebaseOptions } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
@@ -6,7 +6,23 @@ import { getFirestore } from 'firebase/firestore';
 const trim = (value: string | undefined) => (value ?? '').trim();
 const cleanAuthDomain = (value: string | undefined) => trim(value).replace(/^https?:\/\//, '').replace(/\/+$/, '');
 
-const firebaseConfig = {
+// Try to load local Firebase config if present (for local testing)
+// This file should be in .gitignore
+let localConfig: FirebaseOptions | undefined;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const localModule = require('./firebase.local');
+  if (localModule?.firebaseConfig) {
+    localConfig = localModule.firebaseConfig;
+    // eslint-disable-next-line no-console
+    console.log('[Firebase] Using local configuration from firebase.local.ts');
+  }
+} catch {
+  // Local config file doesn't exist, use environment variables instead
+}
+
+// Use local config if available, otherwise fall back to environment variables
+const firebaseConfig: FirebaseOptions = localConfig || {
   apiKey: trim(process.env['NEXT_PUBLIC_FIREBASE_API_KEY']),
   authDomain: cleanAuthDomain(process.env['NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN']),
   projectId: trim(process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID']),
