@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 220" role="img" aria-labelledby="title desc">
+  <title id="title">CW-Trainer Architecture Overview</title>
+  <desc id="desc">Layered flow from Components to lib domain logic and persistence boundaries.</desc>
+  <defs>
+    <style>
+      .label { font: 600 13px Arial, sans-serif; fill: #0f172a; }
+      .small { font: 500 11px Arial, sans-serif; fill: #334155; }
+      .box { rx: 10; ry: 10; stroke-width: 1.5; }
+      .arrow { stroke: #475569; stroke-width: 1.8; marker-end: url(#m); }
+    </style>
+    <marker id="m" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect x="8" y="8" width="904" height="204" fill="#f8fafc" stroke="#cbd5e1" rx="12" ry="12"/>
+
+  <rect class="box" x="30" y="70" width="120" height="80" fill="#e0f2fe" stroke="#0284c7"/>
+  <text class="label" x="90" y="102" text-anchor="middle">Components</text>
+  <text class="small" x="90" y="121" text-anchor="middle">UI rendering</text>
+
+  <rect class="box" x="170" y="70" width="120" height="80" fill="#dcfce7" stroke="#16a34a"/>
+  <text class="label" x="230" y="102" text-anchor="middle">Hooks</text>
+  <text class="small" x="230" y="121" text-anchor="middle">Orchestration</text>
+
+  <rect class="box" x="310" y="70" width="120" height="80" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="label" x="370" y="102" text-anchor="middle">Store</text>
+  <text class="small" x="370" y="121" text-anchor="middle">Zustand slices</text>
+
+  <rect class="box" x="450" y="70" width="120" height="80" fill="#fef3c7" stroke="#d97706"/>
+  <text class="label" x="510" y="102" text-anchor="middle">Services</text>
+  <text class="small" x="510" y="121" text-anchor="middle">Application rules</text>
+
+  <rect class="box" x="590" y="70" width="120" height="80" fill="#ffe4e6" stroke="#e11d48"/>
+  <text class="label" x="650" y="102" text-anchor="middle">Repositories</text>
+  <text class="small" x="650" y="121" text-anchor="middle">I/O adapters</text>
+
+  <rect class="box" x="730" y="28" width="160" height="56" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="label" x="810" y="58" text-anchor="middle">Firestore</text>
+
+  <rect class="box" x="730" y="136" width="160" height="56" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="label" x="810" y="166" text-anchor="middle">localStorage</text>
+
+  <line class="arrow" x1="150" y1="110" x2="168" y2="110"/>
+  <line class="arrow" x1="290" y1="110" x2="308" y2="110"/>
+  <line class="arrow" x1="430" y1="110" x2="448" y2="110"/>
+  <line class="arrow" x1="570" y1="110" x2="588" y2="110"/>
+  <line class="arrow" x1="710" y1="97" x2="728" y2="62"/>
+  <line class="arrow" x1="710" y1="123" x2="728" y2="164"/>
+
+  <text class="small" x="30" y="198">Pure logic stays in src/lib and is reused across layers.</text>
+</svg>
