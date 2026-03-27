@@ -1,0 +1,17 @@
+site_name: CW-Trainer Docs
+site_description: Architecture, structure, and contribution guide for CW-Trainer.
+repo_url: https://github.com/mashu/cw-trainer
+repo_name: mashu/cw-trainer
+docs_dir: docs
+site_dir: site-docs
+exclude_docs: README.md
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Project Structure: project-structure.md
+  - Feature Development: feature-development.md
+  - Contributing: contributing.md
