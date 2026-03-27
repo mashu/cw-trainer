@@ -1,0 +1,12 @@
+# Codecov: avoid failing the status check when coverage is unchanged or patch has untested code.
+# See https://docs.codecov.io/docs/codecov-yaml
+coverage:
+  status:
+    project:
+      default:
+        target: 40%
+        threshold: 1%
+    patch:
+      default:
+        # Show patch coverage but do not fail the check (new code can be tested in follow-ups)
+        informational: true

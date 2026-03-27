@@ -1,0 +1,198 @@
+import { renderHook } from '@testing-library/react';
+
+import { useTrainingSettingsState, useTrainingSettingsActions } from '@/hooks/useTrainingSettings';
+import { AppStoreProvider } from '@/store/providers/app-store-provider';
+import type { TrainingSettings } from '@/types';
+
+import type { IcrSessionService } from '@/lib/services/icr-session.service';
+import type { SessionService } from '@/lib/services/session.service';
+import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
+
+// Mock services
+const mockTrainingSettingsService: TrainingSettingsService = {
+  load: jest.fn(),
+  save: jest.fn(),
+  reset: jest.fn(),
+};
+
+const mockSessionService: SessionService = {
+  listSessions: jest.fn(),
+  upsertSession: jest.fn(),
+  deleteSession: jest.fn(),
+  syncPendingSessions: jest.fn(),
+};
+
+const mockIcrSessionService: IcrSessionService = {
+  listSessions: jest.fn(),
+  saveSession: jest.fn(),
+  clearSessions: jest.fn(),
+  deleteSession: jest.fn(),
+};
+
+const defaultTrainingSettings: TrainingSettings = {
+  kochLevel: 2,
+  charSetMode: 'koch',
+  digitsLevel: 10,
+  customSet: [],
+  sideToneMin: 600,
+  sideToneMax: 600,
+  steepness: 5,
+  sessionDuration: 5,
+  charsPerGroup: 5,
+  numGroups: 5,
+  charWpm: 20,
+  effectiveWpm: 20,
+  linkSpeeds: true,
+  extraWordSpaceMultiplier: 1,
+  groupTimeout: 10,
+  minGroupSize: 2,
+  maxGroupSize: 3,
+  interactiveMode: false,
+  envelopeSmoothing: 0,
+  autoAdjustKoch: false,
+  autoAdjustThreshold: 90,
+};
+
+const createWrapper = () => {
+  return ({ children }: { children: React.ReactNode }) => (
+    <AppStoreProvider
+      user={null}
+      sessionService={mockSessionService}
+      trainingSettingsService={mockTrainingSettingsService}
+      icrSessionService={mockIcrSessionService}
+    >
+      {children}
+    </AppStoreProvider>
+  );
+};
+
+describe('useTrainingSettingsState', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should return training settings state', () => {
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsState(), { wrapper });
+
+    expect(result.current).toHaveProperty('trainingSettings');
+    expect(result.current).toHaveProperty('trainingSettingsStatus');
+    expect(result.current).toHaveProperty('trainingSettingsSaving');
+  });
+
+  it('should return default training settings initially', () => {
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsState(), { wrapper });
+
+    expect(result.current.trainingSettings).toBeDefined();
+    expect(result.current.trainingSettingsStatus).toBeDefined();
+    expect(result.current.trainingSettingsSaving).toBe(false);
+  });
+});
+
+describe('useTrainingSettingsActions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should return all action functions', () => {
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsActions(), { wrapper });
+
+    expect(result.current).toHaveProperty('loadTrainingSettings');
+    expect(result.current).toHaveProperty('saveTrainingSettings');
+    expect(result.current).toHaveProperty('patchTrainingSettings');
+    expect(result.current).toHaveProperty('resetTrainingSettings');
+    expect(result.current).toHaveProperty('setTrainingSettingsState');
+  });
+
+  it('should call loadTrainingSettings', async () => {
+    const mockSettings = defaultTrainingSettings;
+    (mockTrainingSettingsService.load as jest.Mock).mockResolvedValue(mockSettings);
+
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsActions(), { wrapper });
+
+    await result.current.loadTrainingSettings();
+
+    expect(mockTrainingSettingsService.load).toHaveBeenCalled();
+  });
+
+  it('should call saveTrainingSettings', async () => {
+    const mockSettings = defaultTrainingSettings;
+    (mockTrainingSettingsService.save as jest.Mock).mockResolvedValue(mockSettings);
+
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsActions(), { wrapper });
+
+    await result.current.saveTrainingSettings({
+      kochLevel: 3,
+      charSetMode: 'koch',
+      sideToneMin: 600,
+      sideToneMax: 600,
+      steepness: 5,
+      sessionDuration: 5,
+      charsPerGroup: 5,
+      numGroups: 5,
+      charWpm: 20,
+      effectiveWpm: 20,
+      linkSpeeds: true,
+      groupTimeout: 10,
+      minGroupSize: 2,
+      maxGroupSize: 3,
+      interactiveMode: false,
+    });
+
+    expect(mockTrainingSettingsService.save).toHaveBeenCalled();
+  });
+
+  it('should call patchTrainingSettings', async () => {
+    const mockSettings = defaultTrainingSettings;
+    (mockTrainingSettingsService.save as jest.Mock).mockResolvedValue(mockSettings);
+
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsActions(), { wrapper });
+
+    await result.current.patchTrainingSettings({ kochLevel: 4 });
+
+    expect(mockTrainingSettingsService.save).toHaveBeenCalled();
+  });
+
+  it('should call resetTrainingSettings', async () => {
+    const mockSettings = defaultTrainingSettings;
+    (mockTrainingSettingsService.reset as jest.Mock).mockResolvedValue(mockSettings);
+
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsActions(), { wrapper });
+
+    await result.current.resetTrainingSettings();
+
+    expect(mockTrainingSettingsService.reset).toHaveBeenCalled();
+  });
+
+  it('should call setTrainingSettingsState', () => {
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsActions(), { wrapper });
+
+    const newSettings = { ...defaultTrainingSettings, kochLevel: 5 };
+    result.current.setTrainingSettingsState(newSettings);
+
+    // Verify the state was updated by checking the state hook
+    const { result: stateResult } = renderHook(() => useTrainingSettingsState(), { wrapper });
+    expect(stateResult.current.trainingSettings.kochLevel).toBe(5);
+  });
+
+  it('should handle function updates in setTrainingSettingsState', () => {
+    const wrapper = createWrapper();
+    const { result } = renderHook(() => useTrainingSettingsActions(), { wrapper });
+
+    result.current.setTrainingSettingsState((prev) => ({
+      ...prev,
+      kochLevel: prev.kochLevel + 1,
+    }));
+
+    const { result: stateResult } = renderHook(() => useTrainingSettingsState(), { wrapper });
+    expect(stateResult.current.trainingSettings.kochLevel).toBeGreaterThan(2);
+  });
+});
+

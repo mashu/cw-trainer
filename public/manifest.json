@@ -1,0 +1,18 @@
+{
+  "name": "CW Trainer",
+  "short_name": "CW Trainer",
+  "description": "Train Morse code at your own pace. Track progress and improve your skills.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#059669",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

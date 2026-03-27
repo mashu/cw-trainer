@@ -1,0 +1,1366 @@
+'use client';
+
+import React, { useEffect, useState, useMemo } from 'react';
+
+import { useNumberInputHelpers } from '@/hooks/useNumberInput';
+import { LCWO_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
+import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
+import { computeCharPool } from '@/lib/trainingUtils';
+
+import { CustomAlphabetEditor } from './CustomAlphabetEditor';
+import { LinkedRangeInput } from './LinkedRangeInput';
+import { ToneEnvelopeSection } from './sections/ToneEnvelopeSection';
+import { SequenceEditorModal } from './SequenceEditorModal';
+
+export interface TrainingSettings {
+  kochLevel: number;
+  charSetMode?: 'koch' | 'digits' | 'custom' | 'mixed';
+  digitsLevel?: number;
+  /** When charSetMode is 'mixed': 0–100 = percent of characters that are letters. Default 70. */
+  mixedLettersPercent?: number;
+  customSet?: string[];
+  customSequence?: string[]; // Custom sequence order for Koch mode
+  slidingWindowStart?: number; // 1-based start index in unlocked sequence (1 = first)
+  slidingWindowEnd?: number;   // 1-based end index (inclusive); default wide = all unlocked
+  sideToneMin: number;
+  sideToneMax: number;
+  volumeMin?: number;
+  volumeMax?: number;
+  linkVolume?: boolean;
+  steepness: number;
+  sessionDuration: number;
+  charsPerGroup: number;
+  numGroups: number;
+  charWpmMin: number;
+  charWpmMax: number;
+  linkCharWpm: boolean;
+  effectiveWpmMin: number;
+  effectiveWpmMax: number;
+  linkEffectiveWpm: boolean;
+  linkCharToEffective: boolean;
+  echoKeyerMode?: 'manual' | 'iambic-b';
+  extraWordSpaceMultiplier?: number;
+  groupTimeout: number;
+  minGroupSize: number;
+  maxGroupSize: number;
+  linkGroupSize: boolean;
+  envelopeSmoothing?: number;
+  autoAdjustKoch?: boolean;
+  autoAdjustThreshold?: number;
+  autoAdjustBelowThresholdCount?: number;
+  autoAdjustAboveThresholdCount?: number;
+  errorWeightStrength?: number;
+}
+
+interface TrainingSettingsFormProps {
+  settings: TrainingSettings;
+  setSettings: (
+    settings: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings),
+  ) => void;
+  onSaveSettings?: () => void;
+}
+
+export function TrainingSettingsForm({
+  settings,
+  setSettings,
+  onSaveSettings,
+}: TrainingSettingsFormProps): JSX.Element {
+  // Local state for all number inputs to allow empty/invalid values while typing
+  const [charWpmMinInput, setCharWpmMinInput] = useState<string>(String(settings.charWpmMin));
+  const [charWpmMaxInput, setCharWpmMaxInput] = useState<string>(String(settings.charWpmMax));
+  const [effectiveWpmMinInput, setEffectiveWpmMinInput] = useState<string>(String(settings.effectiveWpmMin));
+  const [effectiveWpmMaxInput, setEffectiveWpmMaxInput] = useState<string>(String(settings.effectiveWpmMax));
+  const [numGroupsInput, setNumGroupsInput] = useState<string>(String(settings.numGroups));
+  const [extraWordSpaceInput, setExtraWordSpaceInput] = useState<string>(String(settings.extraWordSpaceMultiplier ?? 1));
+  const [groupTimeoutInput, setGroupTimeoutInput] = useState<string>(String(settings.groupTimeout));
+  const [minGroupSizeInput, setMinGroupSizeInput] = useState<string>(String(settings.minGroupSize));
+  const [maxGroupSizeInput, setMaxGroupSizeInput] = useState<string>(String(settings.maxGroupSize));
+  const [autoAdjustThresholdInput, setAutoAdjustThresholdInput] = useState<string>(String(settings.autoAdjustThreshold ?? 90));
+  const [autoAdjustBelowThresholdCountInput, setAutoAdjustBelowThresholdCountInput] = useState<string>(String(settings.autoAdjustBelowThresholdCount ?? 0));
+  const [autoAdjustAboveThresholdCountInput, setAutoAdjustAboveThresholdCountInput] = useState<string>(String(settings.autoAdjustAboveThresholdCount ?? 0));
+  const [kochLevelInput, setKochLevelInput] = useState<string>(String(settings.kochLevel));
+  
+  const { handleNumberInputChange, handleNumberInputBlur, handleSpinButtonClick } = useNumberInputHelpers(onSaveSettings);
+
+  
+  
+  // Sync local state when settings change externally
+  useEffect(() => {
+    setCharWpmMinInput(String(settings.charWpmMin));
+  }, [settings.charWpmMin]);
+  
+  useEffect(() => {
+    setCharWpmMaxInput(String(settings.charWpmMax));
+  }, [settings.charWpmMax]);
+  
+  useEffect(() => {
+    setEffectiveWpmMinInput(String(settings.effectiveWpmMin));
+  }, [settings.effectiveWpmMin]);
+  
+  useEffect(() => {
+    setEffectiveWpmMaxInput(String(settings.effectiveWpmMax));
+  }, [settings.effectiveWpmMax]);
+  
+  useEffect(() => {
+    setNumGroupsInput(String(settings.numGroups));
+  }, [settings.numGroups]);
+  
+  useEffect(() => {
+    setExtraWordSpaceInput(String(settings.extraWordSpaceMultiplier ?? 1));
+  }, [settings.extraWordSpaceMultiplier]);
+  
+  useEffect(() => {
+    setGroupTimeoutInput(String(settings.groupTimeout));
+  }, [settings.groupTimeout]);
+  
+  useEffect(() => {
+    setMinGroupSizeInput(String(settings.minGroupSize));
+  }, [settings.minGroupSize]);
+  
+  useEffect(() => {
+    setMaxGroupSizeInput(String(settings.maxGroupSize));
+  }, [settings.maxGroupSize]);
+  
+  
+
+  
+  useEffect(() => {
+    setAutoAdjustThresholdInput(String(settings.autoAdjustThreshold ?? 90));
+  }, [settings.autoAdjustThreshold]);
+  
+  useEffect(() => {
+    setAutoAdjustBelowThresholdCountInput(String(settings.autoAdjustBelowThresholdCount ?? 0));
+  }, [settings.autoAdjustBelowThresholdCount]);
+  
+  useEffect(() => {
+    setAutoAdjustAboveThresholdCountInput(String(settings.autoAdjustAboveThresholdCount ?? 0));
+  }, [settings.autoAdjustAboveThresholdCount]);
+  
+  useEffect(() => {
+    setKochLevelInput(String(settings.kochLevel));
+  }, [settings.kochLevel]);
+
+  const [digitsLevelInput, setDigitsLevelInput] = useState<string>(String(settings.digitsLevel ?? 10));
+  useEffect(() => {
+    setDigitsLevelInput(String(Math.max(1, Math.min(10, settings.digitsLevel ?? 10))));
+  }, [settings.digitsLevel]);
+
+  const [mixedLettersPercentInput, setMixedLettersPercentInput] = useState<string>(String(settings.mixedLettersPercent ?? 70));
+  useEffect(() => {
+    setMixedLettersPercentInput(String(Math.max(0, Math.min(100, settings.mixedLettersPercent ?? 70))));
+  }, [settings.mixedLettersPercent]);
+
+  
+  
+  
+  
+  
+
+  const charMode = settings.charSetMode || 'koch';
+  const digitsAsc = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  // Filter out prosigns (characters with < > format) - only single characters allowed
+  const allChars = Object.keys(MORSE_CODE).filter(char => {
+    // Exclude prosigns (format like <AR>, <BT>, etc.)
+    return !(char.startsWith('<') && char.endsWith('>'));
+  });
+  const letters = allChars.filter((character) => /[A-Z]/.test(character));
+
+  const resolvePreviewChars = (): string[] => {
+    if (charMode === 'mixed') {
+      return computeCharPool({
+        kochLevel: settings.kochLevel,
+        charSetMode: 'mixed',
+        digitsLevel: settings.digitsLevel ?? 10,
+        mixedLettersPercent: settings.mixedLettersPercent ?? 70,
+        ...(settings.customSet !== undefined ? { customSet: settings.customSet } : {}),
+        ...(settings.customSequence !== undefined ? { customSequence: settings.customSequence } : {}),
+        ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
+        ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
+      });
+    }
+    if (charMode === 'digits') {
+      const level = Math.max(1, Math.min(10, settings.digitsLevel || 10));
+      const fullUnlocked = digitsAsc.slice(0, level);
+      const n = fullUnlocked.length;
+      if (n === 0) return fullUnlocked;
+      const start1 = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, n));
+      const end1 = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, n));
+      const startIdx = Math.min(start1, end1);
+      const endIdx = Math.max(start1, end1);
+      const pool = fullUnlocked.slice(startIdx - 1, endIdx);
+      return pool.length >= 2 ? pool : fullUnlocked.slice(-2);
+    }
+    if (charMode === 'custom') {
+      const set = Array.isArray(settings.customSet) ? settings.customSet : [];
+      return Array.from(new Set(set.map((entry) => (entry || '').toUpperCase()).filter(Boolean)));
+    }
+    // Use custom sequence if available, otherwise fall back to LCWO_SEQUENCE
+    const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+      ? settings.customSequence
+      : LCWO_SEQUENCE;
+    // Level 1 = 2 characters, Level 2 = 3 characters, etc. (characters = level + 1)
+    const charCount = Math.min((settings.kochLevel || 1) + 1, sequence.length);
+    const fullUnlocked = sequence.slice(0, Math.max(2, charCount));
+    const n = fullUnlocked.length;
+    if (n === 0) return fullUnlocked;
+    const start1 = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, n));
+    const end1 = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, n));
+    const startIdx = Math.min(start1, end1);
+    const endIdx = Math.max(start1, end1);
+    const pool = fullUnlocked.slice(startIdx - 1, endIdx);
+    return pool.length >= 2 ? pool : fullUnlocked.slice(-2);
+  };
+
+  const currentPreviewChars = resolvePreviewChars();
+  
+  // Get current sequence for level calculation (Koch and Mixed both use sequence)
+  const currentSequence = useMemo(() => {
+    if (charMode === 'koch' || charMode === 'mixed') {
+      return Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+        ? settings.customSequence
+        : LCWO_SEQUENCE;
+    }
+    return [];
+  }, [charMode, settings.customSequence]);
+
+  const [showCharacterSetHelp, setShowCharacterSetHelp] = useState(false);
+  const [showSpeedGroupsHelp, setShowSpeedGroupsHelp] = useState(false);
+  const [showAutoAdjustHelp, setShowAutoAdjustHelp] = useState(false);
+  const [showSequenceEditor, setShowSequenceEditor] = useState(false);
+
+  // Detect which preset matches the current sequence
+  const currentPresetId = useMemo(() => {
+    // If no customSequence is set, use LCWO_SEQUENCE
+    const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+      ? settings.customSequence
+      : LCWO_SEQUENCE;
+    const sequenceStr = sequence.join(',');
+    const matchingPreset = SEQUENCE_PRESETS.find(
+      (preset) => preset.sequence.join(',') === sequenceStr
+    );
+    // If no customSequence was set and it matches LCWO, return 'lcwo'
+    // Otherwise return the matching preset or 'custom'
+    if (!Array.isArray(settings.customSequence) || settings.customSequence.length === 0) {
+      return matchingPreset?.id || 'lcwo';
+    }
+    return matchingPreset?.id || 'custom';
+  }, [settings.customSequence]);
+
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2 p-4 border border-gray-200 rounded-lg bg-slate-50">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-slate-700">Character set</h4>
+            <button
+              type="button"
+              onClick={() => setShowCharacterSetHelp((value) => !value)}
+              className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${
+                showCharacterSetHelp
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              }`}
+              title="What is Character set?"
+              aria-expanded={showCharacterSetHelp}
+            >
+              ?
+            </button>
+          </div>
+          {showCharacterSetHelp && (
+            <div className="mb-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
+              <ul className="list-disc ml-4 space-y-1">
+                <li>
+                  <span className="font-medium">Alphabet</span>: Letters from a preset sequence (e.g. LCWO). Preset and Level choose which letters are unlocked; Practice narrows the range.
+                </li>
+                <li>
+                  <span className="font-medium">Digits</span>: Digits 0–9 by level. Level and Practice work like Alphabet.
+                </li>
+                <li>
+                  <span className="font-medium">Mixed</span>: Same alphabet preset and level as Alphabet (all unlocked letters; no Practice slice), plus a digits level. Pool is the union (each digit counted once). Letters % sets how often a drawn character is a letter vs a digit.
+                </li>
+                <li>
+                  <span className="font-medium">Custom</span>: Pick your own set and order.
+                </li>
+              </ul>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Mode</label>
+              <div className="flex gap-2 mb-3">
+                {(['koch', 'digits', 'mixed'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSettings({ ...settings, charSetMode: mode })}
+                    className={`px-3 py-1.5 rounded-lg text-sm border ${
+                      charMode === mode
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white hover:bg-gray-50 border-gray-300 text-slate-700'
+                    }`}
+                  >
+                    {mode === 'koch' ? 'Alphabet' : mode === 'digits' ? 'Digits' : 'Mixed'}
+                  </button>
+                ))}
+              </div>
+              {charMode === 'koch' && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Preset Sequence
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={currentPresetId}
+                          onChange={(e) => {
+                            const presetId = e.target.value;
+                            if (presetId === 'custom') {
+                              // Keep current custom sequence, do nothing
+                              return;
+                            }
+                            const preset = SEQUENCE_PRESETS.find(p => p.id === presetId);
+                            if (preset) {
+                              setSettings({ ...settings, customSequence: preset.sequence });
+                            }
+                          }}
+                          className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none"
+                        >
+                          {SEQUENCE_PRESETS.map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              {preset.name}
+                            </option>
+                          ))}
+                          {currentPresetId === 'custom' && (
+                            <option value="custom">✨ Custom Sequence</option>
+                          )}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-6">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSequenceEditor(true);
+                        }}
+                        className="p-2 text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors flex items-center justify-center"
+                        title="Edit sequence order"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  {/* Unified: Level (number input for accuracy) + Practice (dropdown) */}
+                  {((): JSX.Element => {
+                    const maxLevel = Math.max(1, currentSequence.length - 1);
+                    const nLetters = Math.max(2, Math.min(settings.kochLevel + 1, currentSequence.length));
+                    const start = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, nLetters));
+                    const end = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, nLetters));
+                    const startIdx = Math.min(start, end);
+                    const endIdx = Math.max(start, end);
+                    const isAll = startIdx === 1 && endIdx >= nLetters;
+                    const isLast3 = nLetters >= 3 && startIdx === nLetters - 2 && endIdx === nLetters;
+                    const isLast5 = nLetters >= 5 && startIdx === nLetters - 4 && endIdx === nLetters;
+                    const practiceValue = isAll ? 'all' : isLast3 ? 'last3' : isLast5 ? 'last5' : 'all';
+                    return (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Level
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={maxLevel}
+                              value={kochLevelInput}
+                              onFocus={(e) => e.target.select()}
+                              onMouseUp={(e) => {
+                                const target = e.target as HTMLInputElement;
+                                if (target === document.activeElement) handleSpinButtonClick('kochLevel');
+                              }}
+                              onChange={(event) => {
+                                handleNumberInputChange(
+                                  event.target.value,
+                                  setKochLevelInput,
+                                  'kochLevel',
+                                  (num) => !isNaN(num) && num >= 1 && num <= maxLevel,
+                                  (num) => setSettings({ ...settings, kochLevel: Math.max(1, Math.min(maxLevel, Math.floor(num))) })
+                                );
+                              }}
+                              onBlur={(event) => {
+                                handleNumberInputBlur(
+                                  event.target.value,
+                                  setKochLevelInput,
+                                  (num) => !isNaN(num) && num >= 1 && num <= maxLevel,
+                                  (num) => setSettings((prev) => ({ ...prev, kochLevel: Math.max(1, Math.min(maxLevel, Math.floor(num))) })),
+                                  settings.kochLevel
+                                );
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              {nLetters} letters unlocked
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Practice
+                            </label>
+                            <select
+                              value={practiceValue}
+                              onChange={(e) => {
+                                const v = e.target.value as 'all' | 'last3' | 'last5';
+                                const n = Math.max(2, Math.min(settings.kochLevel + 1, currentSequence.length));
+                                if (v === 'all') setSettings({ ...settings, slidingWindowStart: 1, slidingWindowEnd: n });
+                                else if (v === 'last3') setSettings({ ...settings, slidingWindowStart: Math.max(1, n - 2), slidingWindowEnd: n });
+                                else if (v === 'last5') setSettings({ ...settings, slidingWindowStart: Math.max(1, n - 4), slidingWindowEnd: n });
+                              }}
+                              className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="all">All</option>
+                              <option value="last3">Last 3</option>
+                              <option value="last5">Last 5</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">
+                            Characters: {currentPreviewChars.join(' ')}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <SequenceEditorModal
+                    open={showSequenceEditor}
+                    onClose={() => setShowSequenceEditor(false)}
+                    sequence={
+                      Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+                        ? settings.customSequence
+                        : LCWO_SEQUENCE
+                    }
+                    onChange={(newSequence) => {
+                      setSettings({ ...settings, customSequence: newSequence });
+                    }}
+                  />
+                </div>
+              )}
+              {charMode === 'digits' && (
+                ((): JSX.Element => {
+                  const maxDigits = 10;
+                  const nDigits = Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10));
+                  const start = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, nDigits));
+                  const end = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, nDigits));
+                  const startIdx = Math.min(start, end);
+                  const endIdx = Math.max(start, end);
+                  const isAll = startIdx === 1 && endIdx >= nDigits;
+                  const isLast3 = nDigits >= 3 && startIdx === nDigits - 2 && endIdx === nDigits;
+                  const isLast5 = nDigits >= 5 && startIdx === nDigits - 4 && endIdx === nDigits;
+                  const practiceValue = isAll ? 'all' : isLast3 ? 'last3' : isLast5 ? 'last5' : 'all';
+                  return (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Level</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={maxDigits}
+                            value={digitsLevelInput}
+                            onFocus={(e) => e.target.select()}
+                            onMouseUp={(e) => {
+                              const target = e.target as HTMLInputElement;
+                              if (target === document.activeElement) handleSpinButtonClick('digitsLevel');
+                            }}
+                            onChange={(event) => {
+                              handleNumberInputChange(
+                                event.target.value,
+                                setDigitsLevelInput,
+                                'digitsLevel',
+                                (num) => !isNaN(num) && num >= 1 && num <= maxDigits,
+                                (num) => setSettings({ ...settings, digitsLevel: Math.max(1, Math.min(maxDigits, Math.floor(num))) })
+                              );
+                            }}
+                            onBlur={(event) => {
+                              handleNumberInputBlur(
+                                event.target.value,
+                                setDigitsLevelInput,
+                                (num) => !isNaN(num) && num >= 1 && num <= maxDigits,
+                                (num) => setSettings((prev) => ({ ...prev, digitsLevel: Math.max(1, Math.min(maxDigits, Math.floor(num))) })),
+                                settings.digitsLevel ?? 10
+                              );
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">{nDigits} digits</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Practice</label>
+                          <select
+                            value={practiceValue}
+                            onChange={(e) => {
+                              const v = e.target.value as 'all' | 'last3' | 'last5';
+                              const n = Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10));
+                              if (v === 'all') setSettings({ ...settings, slidingWindowStart: 1, slidingWindowEnd: n });
+                              else if (v === 'last3') setSettings({ ...settings, slidingWindowStart: Math.max(1, n - 2), slidingWindowEnd: n });
+                              else if (v === 'last5') setSettings({ ...settings, slidingWindowStart: Math.max(1, n - 4), slidingWindowEnd: n });
+                            }}
+                            className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="all">All</option>
+                            <option value="last3">Last 3</option>
+                            <option value="last5">Last 5</option>
+                          </select>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500">Digits: {currentPreviewChars.join(' ')}</p>
+                    </div>
+                  );
+                })()
+              )}
+              {charMode === 'mixed' && (
+                ((): JSX.Element => {
+                  const maxLevel = Math.max(1, currentSequence.length - 1);
+                  const maxDigits = 10;
+                  const nLetters = Math.max(2, Math.min(settings.kochLevel + 1, currentSequence.length));
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Preset sequence</label>
+                          <div className="relative">
+                            <select
+                              value={currentPresetId}
+                              onChange={(e) => {
+                                const presetId = e.target.value;
+                                if (presetId === 'custom') return;
+                                const preset = SEQUENCE_PRESETS.find((p) => p.id === presetId);
+                                if (preset) setSettings({ ...settings, customSequence: preset.sequence });
+                              }}
+                              className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none"
+                            >
+                              {SEQUENCE_PRESETS.map((preset) => (
+                                <option key={preset.id} value={preset.id}>
+                                  {preset.name}
+                                </option>
+                              ))}
+                              {currentPresetId === 'custom' && (
+                                <option value="custom">✨ Custom sequence</option>
+                              )}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="pt-6">
+                          <button
+                            type="button"
+                            onClick={() => setShowSequenceEditor(true)}
+                            className="p-2 text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors flex items-center justify-center"
+                            title="Edit sequence order"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Alphabet level</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={maxLevel}
+                            value={kochLevelInput}
+                            onFocus={(e) => e.target.select()}
+                            onMouseUp={(e) => {
+                              const target = e.target as HTMLInputElement;
+                              if (target === document.activeElement) handleSpinButtonClick('kochLevel');
+                            }}
+                            onChange={(event) => {
+                              handleNumberInputChange(
+                                event.target.value,
+                                setKochLevelInput,
+                                'kochLevel',
+                                (num) => !isNaN(num) && num >= 1 && num <= maxLevel,
+                                (num) => setSettings({ ...settings, kochLevel: Math.max(1, Math.min(maxLevel, Math.floor(num))) })
+                              );
+                            }}
+                            onBlur={(event) => {
+                              handleNumberInputBlur(
+                                event.target.value,
+                                setKochLevelInput,
+                                (num) => !isNaN(num) && num >= 1 && num <= maxLevel,
+                                (num) => setSettings((prev) => ({ ...prev, kochLevel: Math.max(1, Math.min(maxLevel, Math.floor(num))) })),
+                                settings.kochLevel
+                              );
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">{nLetters} letters in pool</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Digits level</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={maxDigits}
+                            value={digitsLevelInput}
+                            onFocus={(e) => e.target.select()}
+                            onMouseUp={(e) => {
+                              const target = e.target as HTMLInputElement;
+                              if (target === document.activeElement) handleSpinButtonClick('digitsLevel');
+                            }}
+                            onChange={(event) => {
+                              handleNumberInputChange(
+                                event.target.value,
+                                setDigitsLevelInput,
+                                'digitsLevel',
+                                (num) => !isNaN(num) && num >= 1 && num <= maxDigits,
+                                (num) => setSettings({ ...settings, digitsLevel: Math.max(1, Math.min(maxDigits, Math.floor(num))) })
+                              );
+                            }}
+                            onBlur={(event) => {
+                              handleNumberInputBlur(
+                                event.target.value,
+                                setDigitsLevelInput,
+                                (num) => !isNaN(num) && num >= 1 && num <= maxDigits,
+                                (num) => setSettings((prev) => ({ ...prev, digitsLevel: Math.max(1, Math.min(maxDigits, Math.floor(num))) })),
+                                settings.digitsLevel ?? 10
+                              );
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            {Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10))} digits in pool (union with alphabet)
+                          </p>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Letters % (draw bias)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={mixedLettersPercentInput}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(event) => {
+                            handleNumberInputChange(
+                              event.target.value,
+                              setMixedLettersPercentInput,
+                              'mixedLettersPercent',
+                              (num) => !isNaN(num) && num >= 0 && num <= 100,
+                              (num) => setSettings({ ...settings, mixedLettersPercent: Math.max(0, Math.min(100, Math.floor(num))) })
+                            );
+                          }}
+                          onBlur={(event) => {
+                            handleNumberInputBlur(
+                              event.target.value,
+                              setMixedLettersPercentInput,
+                              (num) => !isNaN(num) && num >= 0 && num <= 100,
+                              (num) => setSettings((prev) => ({ ...prev, mixedLettersPercent: Math.max(0, Math.min(100, Math.floor(num))) })),
+                              settings.mixedLettersPercent ?? 70
+                            );
+                          }}
+                          className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Combined pool: {currentPreviewChars.join(' ')}
+                      </p>
+                      <SequenceEditorModal
+                        open={showSequenceEditor}
+                        onClose={() => setShowSequenceEditor(false)}
+                        sequence={
+                          Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+                            ? settings.customSequence
+                            : LCWO_SEQUENCE
+                        }
+                        onChange={(newSequence) => {
+                          setSettings({ ...settings, customSequence: newSequence });
+                        }}
+                      />
+                    </div>
+                  );
+                })()
+              )}
+              {charMode === 'custom' && (
+                <CustomAlphabetEditor
+                  customSet={settings.customSet || []}
+                  onCustomSetChange={(newSet) => {
+                    setSettings({ ...settings, customSet: newSet });
+                  }}
+                  allChars={allChars}
+                  letters={letters}
+                  digitsAsc={digitsAsc}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="sm:col-span-2 p-4 border border-gray-200 rounded-lg bg-slate-50">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-slate-700">Speed &amp; groups</h4>
+            <button
+              type="button"
+              onClick={() => setShowSpeedGroupsHelp((value) => !value)}
+              className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${
+                showSpeedGroupsHelp
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              }`}
+              title="What are Speed &amp; groups?"
+              aria-expanded={showSpeedGroupsHelp}
+            >
+              ?
+            </button>
+          </div>
+          {showSpeedGroupsHelp && (
+            <div className="mb-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
+              <div className="font-semibold text-slate-800 mb-1">Speed &amp; groups</div>
+              <ul className="list-disc ml-4 space-y-1">
+                <li>
+                  <span className="font-medium">Character speed (WPM)</span>: Speed of dots and dashes within each letter.
+                </li>
+                <li>
+                  <span className="font-medium">Effective speed (WPM)</span>: Controls gap between letters (Farnsworth). Lower = longer gaps. Link to keep equal to character speed.
+                </li>
+                <li>
+                  <span className="font-medium">Extra word spacing</span>: Multiplies the gap between words. Used in Player mode (text with spaces).
+                </li>
+                <li>
+                  <span className="font-medium">Number of groups</span>: How many groups per session.
+                </li>
+                <li>
+                  <span className="font-medium">Group size</span>: Min/max characters per group (random in range).
+                </li>
+                <li>
+                  <span className="font-medium">Group timeout</span>: Seconds before a group is skipped or session ends.
+                </li>
+              </ul>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Number of Groups
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={numGroupsInput}
+                onMouseUp={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  if (target === document.activeElement) {
+                    handleSpinButtonClick('numGroups');
+                  }
+                }}
+                onChange={(event) => {
+                  handleNumberInputChange(
+                    event.target.value,
+                    setNumGroupsInput,
+                    'numGroups',
+                    (num) => !isNaN(num) && num > 0,
+                    (num) => setSettings({ ...settings, numGroups: Math.max(1, Math.floor(num)) })
+                  );
+                }}
+                onBlur={(event) => {
+                  handleNumberInputBlur(
+                    event.target.value,
+                    setNumGroupsInput,
+                    (num) => !isNaN(num) && num > 0,
+                    (num) => setSettings((prev) => ({ ...prev, numGroups: Math.max(1, Math.floor(num)) })),
+                    settings.numGroups
+                  );
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <LinkedRangeInput
+                label="Character Speed (WPM)"
+                minValue={charWpmMinInput}
+                maxValue={charWpmMaxInput}
+                linked={settings.linkCharWpm}
+                onMinChange={(value) => {
+                  setCharWpmMinInput(value);
+                  if (settings.linkCharWpm) {
+                    setCharWpmMaxInput(value);
+                  }
+                }}
+                onMaxChange={(value) => {
+                  setCharWpmMaxInput(value);
+                }}
+                onMinBlur={() => {
+                  const num = parseFloat(charWpmMinInput);
+                  if (isNaN(num) || num <= 0) {
+                    setCharWpmMinInput(String(settings.charWpmMin));
+                    if (settings.linkCharWpm) {
+                      setCharWpmMaxInput(String(settings.charWpmMin));
+                    }
+                  } else {
+                    // Ensure min <= max (clamp min to max if needed)
+                    const currentMax = settings.linkCharWpm ? num : settings.charWpmMax;
+                    const validMin = Math.min(num, currentMax);
+                    setCharWpmMinInput(String(validMin));
+                    
+                    const updates: Partial<TrainingSettings> = { charWpmMin: validMin };
+                    if (settings.linkCharWpm) {
+                      updates.charWpmMax = validMin;
+                      setCharWpmMaxInput(String(validMin));
+                    }
+                    // Propagate to effective WPM if char-to-effective link is enabled
+                    if (settings.linkCharToEffective) {
+                      updates.effectiveWpmMin = validMin;
+                      setEffectiveWpmMinInput(String(validMin));
+                      if (settings.linkCharWpm) {
+                        updates.effectiveWpmMax = validMin;
+                        setEffectiveWpmMaxInput(String(validMin));
+                      }
+                    }
+                    setSettings({ ...settings, ...updates });
+                    if (onSaveSettings) {
+                      setTimeout(() => onSaveSettings(), 50);
+                    }
+                  }
+                }}
+                onMaxBlur={() => {
+                  const num = parseFloat(charWpmMaxInput);
+                  if (isNaN(num) || num <= 0) {
+                    setCharWpmMaxInput(String(settings.charWpmMax));
+                  } else {
+                    // Ensure max >= min (clamp max to min if needed)
+                    const validMax = Math.max(num, settings.charWpmMin);
+                    setCharWpmMaxInput(String(validMax));
+                    
+                    const updates: Partial<TrainingSettings> = { charWpmMax: validMax };
+                    // Propagate to effective WPM max if char-to-effective link is enabled
+                    if (settings.linkCharToEffective) {
+                      updates.effectiveWpmMax = validMax;
+                      setEffectiveWpmMaxInput(String(validMax));
+                    }
+                    setSettings({ ...settings, ...updates });
+                    if (onSaveSettings) {
+                      setTimeout(() => onSaveSettings(), 50);
+                    }
+                  }
+                }}
+                onLinkToggle={(linked) => {
+                  const updates: Partial<TrainingSettings> = { linkCharWpm: linked };
+                  if (linked) {
+                    updates.charWpmMax = settings.charWpmMin;
+                    setCharWpmMaxInput(String(settings.charWpmMin));
+                    if (settings.linkCharToEffective) {
+                      updates.effectiveWpmMax = settings.charWpmMin;
+                      setEffectiveWpmMaxInput(String(settings.charWpmMin));
+                    }
+                  }
+                  setSettings({ ...settings, ...updates });
+                }}
+                min={1}
+                unit="WPM"
+              />
+            </div>
+            
+            {/* Vertical link between Character Speed and Effective Speed */}
+            <div className="sm:col-span-2 flex justify-center -my-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const newLinked = !settings.linkCharToEffective;
+                  const updates: Partial<TrainingSettings> = { linkCharToEffective: newLinked };
+                  if (newLinked) {
+                    // Sync effective WPM to character WPM when linking
+                    updates.effectiveWpmMin = settings.charWpmMin;
+                    updates.effectiveWpmMax = settings.charWpmMax;
+                    updates.linkEffectiveWpm = settings.linkCharWpm;
+                    setEffectiveWpmMinInput(String(settings.charWpmMin));
+                    setEffectiveWpmMaxInput(String(settings.charWpmMax));
+                  }
+                  setSettings({ ...settings, ...updates });
+                }}
+                className={`
+                  flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300
+                  ${settings.linkCharToEffective
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md hover:shadow-lg hover:scale-105'
+                    : 'bg-white border-2 border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50'
+                  }
+                `}
+                title={settings.linkCharToEffective ? 'Unlink character and effective speeds' : 'Link character and effective speeds'}
+              >
+                {settings.linkCharToEffective ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    <span>Char = Effective</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    <span>Char ≠ Effective</span>
+                  </>
+                )}
+              </button>
+            </div>
+            
+            <div className="sm:col-span-2">
+              <LinkedRangeInput
+                label="Effective Speed (WPM)"
+                minValue={effectiveWpmMinInput}
+                maxValue={effectiveWpmMaxInput}
+                linked={settings.linkEffectiveWpm}
+                disabled={settings.linkCharToEffective}
+                onMinChange={(value) => {
+                  setEffectiveWpmMinInput(value);
+                  if (settings.linkEffectiveWpm) {
+                    setEffectiveWpmMaxInput(value);
+                  }
+                }}
+                onMaxChange={(value) => {
+                  setEffectiveWpmMaxInput(value);
+                }}
+                onMinBlur={() => {
+                  const num = parseFloat(effectiveWpmMinInput);
+                  if (isNaN(num) || num <= 0) {
+                    setEffectiveWpmMinInput(String(settings.effectiveWpmMin));
+                    if (settings.linkEffectiveWpm) {
+                      setEffectiveWpmMaxInput(String(settings.effectiveWpmMin));
+                    }
+                  } else {
+                    // Ensure min <= max (clamp min to max if needed)
+                    const currentMax = settings.linkEffectiveWpm ? num : settings.effectiveWpmMax;
+                    const validMin = Math.min(num, currentMax);
+                    setEffectiveWpmMinInput(String(validMin));
+                    
+                    const updates: Partial<TrainingSettings> = { effectiveWpmMin: validMin };
+                    if (settings.linkEffectiveWpm) {
+                      updates.effectiveWpmMax = validMin;
+                      setEffectiveWpmMaxInput(String(validMin));
+                    }
+                    setSettings({ ...settings, ...updates });
+                    if (onSaveSettings) {
+                      setTimeout(() => onSaveSettings(), 50);
+                    }
+                  }
+                }}
+                onMaxBlur={() => {
+                  const num = parseFloat(effectiveWpmMaxInput);
+                  if (isNaN(num) || num <= 0) {
+                    setEffectiveWpmMaxInput(String(settings.effectiveWpmMax));
+                  } else {
+                    // Ensure max >= min (clamp max to min if needed)
+                    const validMax = Math.max(num, settings.effectiveWpmMin);
+                    setEffectiveWpmMaxInput(String(validMax));
+                    
+                    setSettings({ ...settings, effectiveWpmMax: validMax });
+                    if (onSaveSettings) {
+                      setTimeout(() => onSaveSettings(), 50);
+                    }
+                  }
+                }}
+                onLinkToggle={(linked) => {
+                  const updates: Partial<TrainingSettings> = { linkEffectiveWpm: linked };
+                  if (linked) {
+                    updates.effectiveWpmMax = settings.effectiveWpmMin;
+                    setEffectiveWpmMaxInput(String(settings.effectiveWpmMin));
+                  }
+                  setSettings({ ...settings, ...updates });
+                }}
+                min={1}
+                unit="WPM"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Extra Word Spacing
+              </label>
+              <input
+                type="number"
+                min={0.1}
+                step={0.1}
+                value={extraWordSpaceInput}
+                onMouseUp={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  if (target === document.activeElement) {
+                    handleSpinButtonClick('extraWordSpaceMultiplier');
+                  }
+                }}
+                onChange={(event) => {
+                  handleNumberInputChange(
+                    event.target.value,
+                    setExtraWordSpaceInput,
+                    'extraWordSpaceMultiplier',
+                    (num) => !isNaN(num) && num > 0,
+                    (num) => setSettings({ ...settings, extraWordSpaceMultiplier: num })
+                  );
+                }}
+                onBlur={(event) => {
+                  handleNumberInputBlur(
+                    event.target.value,
+                    setExtraWordSpaceInput,
+                    (num) => !isNaN(num) && num > 0,
+                    (num) => setSettings((prev) => ({ ...prev, extraWordSpaceMultiplier: num })),
+                    settings.extraWordSpaceMultiplier ?? 1
+                  );
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Group Timeout
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={groupTimeoutInput}
+                onMouseUp={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  if (target === document.activeElement) {
+                    handleSpinButtonClick('groupTimeout');
+                  }
+                }}
+                onChange={(event) => {
+                  handleNumberInputChange(
+                    event.target.value,
+                    setGroupTimeoutInput,
+                    'groupTimeout',
+                    (num) => !isNaN(num) && num >= 0,
+                    (num) => setSettings({ ...settings, groupTimeout: Math.max(0, num) })
+                  );
+                }}
+                onBlur={(event) => {
+                  handleNumberInputBlur(
+                    event.target.value,
+                    setGroupTimeoutInput,
+                    (num) => !isNaN(num) && num >= 0,
+                    (num) => setSettings((prev) => ({ ...prev, groupTimeout: Math.max(0, num) })),
+                    settings.groupTimeout
+                  );
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <LinkedRangeInput
+                label="Group Size"
+                minValue={minGroupSizeInput}
+                maxValue={maxGroupSizeInput}
+                linked={settings.linkGroupSize}
+                onMinChange={(value) => {
+                  setMinGroupSizeInput(value);
+                  if (settings.linkGroupSize) {
+                    setMaxGroupSizeInput(value);
+                  }
+                }}
+                onMaxChange={(value) => {
+                  setMaxGroupSizeInput(value);
+                }}
+                onMinBlur={() => {
+                  const num = parseFloat(minGroupSizeInput);
+                  if (isNaN(num) || num <= 0) {
+                    setMinGroupSizeInput(String(settings.minGroupSize));
+                    if (settings.linkGroupSize) {
+                      setMaxGroupSizeInput(String(settings.minGroupSize));
+                    }
+                  } else {
+                    // Ensure min <= max (clamp min to max if needed)
+                    const currentMax = settings.linkGroupSize ? Math.floor(num) : settings.maxGroupSize;
+                    const validMin = Math.max(1, Math.min(Math.floor(num), currentMax));
+                    setMinGroupSizeInput(String(validMin));
+                    
+                    const updates: Partial<TrainingSettings> = { minGroupSize: validMin };
+                    if (settings.linkGroupSize) {
+                      updates.maxGroupSize = validMin;
+                      setMaxGroupSizeInput(String(validMin));
+                    }
+                    setSettings({ ...settings, ...updates });
+                    if (onSaveSettings) {
+                      setTimeout(() => onSaveSettings(), 50);
+                    }
+                  }
+                }}
+                onMaxBlur={() => {
+                  const num = parseFloat(maxGroupSizeInput);
+                  if (isNaN(num) || num <= 0) {
+                    setMaxGroupSizeInput(String(settings.maxGroupSize));
+                  } else {
+                    // Ensure max >= min (clamp max to min if needed)
+                    const validMax = Math.max(1, Math.max(Math.floor(num), settings.minGroupSize));
+                    setMaxGroupSizeInput(String(validMax));
+                    
+                    setSettings({ ...settings, maxGroupSize: validMax });
+                    if (onSaveSettings) {
+                      setTimeout(() => onSaveSettings(), 50);
+                    }
+                  }
+                }}
+                onLinkToggle={(linked) => {
+                  const updates: Partial<TrainingSettings> = { linkGroupSize: linked };
+                  if (linked) {
+                    updates.maxGroupSize = settings.minGroupSize;
+                    setMaxGroupSizeInput(String(settings.minGroupSize));
+                  }
+                  setSettings({ ...settings, ...updates });
+                }}
+                min={1}
+                minLabel="Min"
+                maxLabel="Max"
+              />
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <h5 className="text-sm font-semibold text-slate-700">
+                Auto Sequence Level Adjustment
+              </h5>
+              <button
+                type="button"
+                onClick={() => setShowAutoAdjustHelp((v) => !v)}
+                className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${
+                  showAutoAdjustHelp
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                }`}
+                title="What do these settings do?"
+                aria-expanded={showAutoAdjustHelp}
+              >
+                ?
+              </button>
+            </div>
+            {showAutoAdjustHelp && (
+              <div className="mb-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
+                <div className="font-semibold text-slate-800 mb-1">Auto level adjustment</div>
+                <ul className="list-disc ml-4 space-y-1">
+                  <li>
+                    <span className="font-medium">Accuracy threshold</span>: Minimum session accuracy (%) to consider for level changes. Level only goes up when you meet this.
+                  </li>
+                  <li>
+                    <span className="font-medium">Sessions below threshold</span>: How many sessions below threshold before level decreases (0 = immediate).
+                  </li>
+                  <li>
+                    <span className="font-medium">Sessions above threshold</span>: How many sessions above threshold before level increases (0 = immediate).
+                  </li>
+                  <li>
+                    <span className="font-medium">Error weight strength</span>: 0 = uniform random; higher = more practice on letters you get wrong.
+                  </li>
+                </ul>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                id="autoAdjustKoch"
+                type="checkbox"
+                checked={Boolean(settings.autoAdjustKoch)}
+                onChange={(event) =>
+                  setSettings({ ...settings, autoAdjustKoch: event.target.checked })
+                }
+                className="w-4 h-4"
+              />
+              <label htmlFor="autoAdjustKoch" className="text-sm font-medium text-gray-700">
+                Automatically adjust level from session accuracy
+              </label>
+            </div>
+            {settings.autoAdjustKoch && charMode === 'digits' && (
+              <p className="mt-1.5 text-xs text-slate-600">
+                In Digits mode, the digits level is adjusted automatically; alphabet level stays fixed.
+              </p>
+            )}
+            {settings.autoAdjustKoch && charMode === 'mixed' && (
+              <p className="mt-1.5 text-xs text-slate-600">
+                In Mixed mode, the alphabet level is adjusted automatically; digits level stays fixed.
+              </p>
+            )}
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Threshold (%)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={autoAdjustThresholdInput}
+                  onMouseUp={(e) => {
+                    const target = e.target as HTMLInputElement;
+                    if (target === document.activeElement) {
+                      handleSpinButtonClick('autoAdjustThreshold');
+                    }
+                  }}
+                  onChange={(event) => {
+                    handleNumberInputChange(
+                      event.target.value,
+                      setAutoAdjustThresholdInput,
+                      'autoAdjustThreshold',
+                      (num) => !isNaN(num) && num >= 0 && num <= 100,
+                      (num) => setSettings({
+                        ...settings,
+                        autoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
+                      })
+                    );
+                  }}
+                  onBlur={(event) => {
+                    handleNumberInputBlur(
+                      event.target.value,
+                      setAutoAdjustThresholdInput,
+                      (num) => !isNaN(num) && num >= 0 && num <= 100,
+                      (num) => setSettings((prev) => ({
+                        ...prev,
+                        autoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
+                      })),
+                      settings.autoAdjustThreshold ?? 90
+                    );
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  To decrease
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={autoAdjustBelowThresholdCountInput}
+                  onMouseUp={(e) => {
+                    const target = e.target as HTMLInputElement;
+                    if (target === document.activeElement) {
+                      handleSpinButtonClick('autoAdjustBelowThresholdCount');
+                    }
+                  }}
+                  onChange={(event) => {
+                    handleNumberInputChange(
+                      event.target.value,
+                      setAutoAdjustBelowThresholdCountInput,
+                      'autoAdjustBelowThresholdCount',
+                      (num) => !isNaN(num) && num >= 0 && num <= 20,
+                      (num) => setSettings({
+                        ...settings,
+                        autoAdjustBelowThresholdCount: Math.max(0, Math.min(20, Math.floor(num))),
+                      })
+                    );
+                  }}
+                  onBlur={(event) => {
+                    handleNumberInputBlur(
+                      event.target.value,
+                      setAutoAdjustBelowThresholdCountInput,
+                      (num) => !isNaN(num) && num >= 0 && num <= 20,
+                      (num) => setSettings((prev) => ({
+                        ...prev,
+                        autoAdjustBelowThresholdCount: Math.max(0, Math.min(20, Math.floor(num))),
+                      })),
+                      settings.autoAdjustBelowThresholdCount ?? 0
+                    );
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  To increase
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={autoAdjustAboveThresholdCountInput}
+                  onMouseUp={(e) => {
+                    const target = e.target as HTMLInputElement;
+                    if (target === document.activeElement) {
+                      handleSpinButtonClick('autoAdjustAboveThresholdCount');
+                    }
+                  }}
+                  onChange={(event) => {
+                    handleNumberInputChange(
+                      event.target.value,
+                      setAutoAdjustAboveThresholdCountInput,
+                      'autoAdjustAboveThresholdCount',
+                      (num) => !isNaN(num) && num >= 0 && num <= 20,
+                      (num) => setSettings({
+                        ...settings,
+                        autoAdjustAboveThresholdCount: Math.max(0, Math.min(20, Math.floor(num))),
+                      })
+                    );
+                  }}
+                  onBlur={(event) => {
+                    handleNumberInputBlur(
+                      event.target.value,
+                      setAutoAdjustAboveThresholdCountInput,
+                      (num) => !isNaN(num) && num >= 0 && num <= 20,
+                      (num) => setSettings((prev) => ({
+                        ...prev,
+                        autoAdjustAboveThresholdCount: Math.max(0, Math.min(20, Math.floor(num))),
+                      })),
+                      settings.autoAdjustAboveThresholdCount ?? 0
+                    );
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Error weight ({settings.errorWeightStrength ?? 0})
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={5}
+                step={0.5}
+                value={settings.errorWeightStrength ?? 0}
+                onChange={(event) => {
+                  const numValue = parseFloat(event.target.value);
+                  if (!isNaN(numValue)) {
+                    setSettings({
+                      ...settings,
+                      errorWeightStrength: numValue,
+                    });
+                  }
+                }}
+                className="w-full accent-emerald-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        <ToneEnvelopeSection
+          settings={settings}
+          setSettings={setSettings}
+          {...(onSaveSettings ? { onSaveSettings } : {})}
+        />
+      </div>
+    </>
+  );
+}
+

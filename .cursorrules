@@ -1,0 +1,247 @@
+# CW-Trainer — Cursor Rules for TypeScript / Next.js
+
+## Project Context
+
+CW-Trainer is a **statically exported** Next.js app (output: 'export') deployed to GitHub Pages.
+There is **no backend** — all logic runs on the client. Firebase is used only for optional persistence
+via Firestore; the app works fully offline. The architecture is a Zustand-driven React SPA.
+
+Tech stack: Next.js 16+, React 18, TypeScript 5 (strict), Zustand 4, Zod, Recharts, Tailwind CSS, Firebase SDK.
+
+## Architecture Layers
+
+Follow this dependency direction strictly — never import upward:
+
+```
+Components (view)  →  Hooks (orchestration)  →  Store (slices)  →  Services  →  Repositories  →  Firebase/localStorage
+                                                                →  lib/ (pure domain logic, no React imports)
+```
+
+- **Components** render UI and call hooks. They never call services or repositories directly.
+- **Hooks** orchestrate component behavior by composing store selectors, services, and lib functions.
+- **Store slices** manage async state (loading, saving, error) and expose actions. They call services.
+- **Services** enforce business rules, validate with Zod, and delegate to repositories.
+- **Repositories** handle raw I/O (Firestore reads/writes, localStorage).
+- **lib/** contains pure functions — no React, no side effects, no state. Testable in isolation.
+
+## TypeScript Rules
+
+### Strictness
+
+The project uses maximum TypeScript strictness. Never weaken these settings:
+
+```
+strict: true
+noUncheckedIndexedAccess: true
+exactOptionalPropertyTypes: true
+noPropertyAccessFromIndexSignature: true
+useUnknownInCatchVariables: true
+noImplicitOverride: true
+```
+
+### Type Practices
+
+- Use `readonly` on all interface properties and function parameters that shouldn't be mutated.
+- Use `as const` for literal arrays and objects that should not widen.
+- Prefer `unknown` over `any`. The project has `ensureAppError()` in `lib/errors/` — use it for catch blocks.
+- Never use `// @ts-ignore` or `// @ts-expect-error` without a comment explaining why.
+- Prefer `type` for object shapes and unions; use `interface` only when extension/merging is needed.
+- When indexing arrays or records, always handle the `undefined` case (`noUncheckedIndexedAccess`).
+- For optional properties, remember `exactOptionalPropertyTypes` — `undefined` must be passed explicitly if the property is present.
+
+```typescript
+// ✅ Correct — handle undefined from indexing
+const item = items[index];
+if (item) {
+  process(item);
+}
+
+// ❌ Wrong — ignores noUncheckedIndexedAccess
+const item = items[index]!; // avoid non-null assertion on indexed access
+```
+
+### Discriminated Unions for State
+
+Prefer discriminated unions over boolean flags for state that has mutually exclusive modes:
+
+```typescript
+// ✅ Prefer
+type TrainingState =
+  | { status: 'idle' }
+  | { status: 'playing'; currentGroup: number }
+  | { status: 'results'; result: SessionResultSummary };
+
+// ❌ Avoid — isTraining + showResults + lastSessionResult are correlated but independent booleans
+```
+
+## React / Hooks Rules
+
+### Hook Size Limit
+
+**No hook should exceed ~200 lines.** If a hook grows beyond that, decompose it:
+
+1. Extract **pure computation** into `lib/` functions (no React imports needed).
+2. Extract **sub-concerns** into smaller hooks (e.g., `useTrainingAudio`, `useGroupInput`).
+3. The top-level hook becomes an **orchestrator** that composes sub-hooks.
+
+### Hook Naming
+
+- `use<Feature>` — orchestration hook for a feature (e.g., `useTrainingSession`)
+- `use<Feature>State` / `use<Feature>Actions` — split selectors for Zustand (e.g., `useSessionsState`, `useSessionsActions`)
+- `use<Concern>` — single-concern utility hook (e.g., `useTrainingAudio`, `useToast`)
+
+### Avoid These Anti-Patterns
+
+- **Ref mirrors of state:** If you have both `useState(x)` and `useRef(x)` for the same value, that's a design smell. Consider whether the ref-based value should be the sole source of truth (for async callbacks) or if the state can be removed.
+- **Huge dependency arrays:** If a `useCallback` or `useEffect` has 6+ dependencies, the function is doing too much. Extract sub-functions.
+- **`eslint-disable react-hooks/exhaustive-deps`:** This almost always indicates a structural problem. Fix the structure rather than suppressing the warning.
+- **Async loops inside hooks:** Long-running `for` loops with `await` inside `useCallback` are hard to cancel cleanly. Consider extracting into a generator or state machine pattern.
+
+### State Colocation
+
+- State used by a single component → `useState` in that component.
+- State shared by siblings → lift to nearest common parent, or use a Zustand slice if it crosses feature boundaries.
+- State that survives navigation / persists → Zustand slice backed by service/repository.
+- Derived values → compute inline or `useMemo`; never `useEffect` to sync derived state.
+
+## Component Rules
+
+### File Size Limit
+
+**No component file should exceed ~300 lines.** If it grows beyond that:
+
+1. Extract presentational sub-components into the same feature directory.
+2. Extract complex conditional rendering into a dedicated `<FeatureRouter>` component.
+3. Extract inline event handlers into the orchestration hook.
+
+### Folder Structure
+
+```
+src/components/
+├── features/          — feature-specific components (contain business logic)
+│   ├── training/      — CWTrainer, ActiveTrainingView, etc.
+│   ├── icr/           — ICRTrainer and its sub-components
+│   ├── stats/         — GroupTrainingStats, charts, Leaderboard
+│   └── sidebar/       — Sidebar
+└── ui/                — reusable, presentational components (no business logic)
+    ├── forms/         — form controls, settings forms
+    ├── training/      — GroupItem, ProgressHeader, etc.
+    ├── charts/        — ActivityHeatmap
+    ├── layouts/       — ErrorBoundary, LegalBanner, LegalFooter
+    └── navigation/    — TrainingModeCarousel
+```
+
+### Container/Presenter Pattern
+
+For complex features, split into:
+- **Container** (`FeatureName.tsx`) — uses hooks, passes props down, handles callbacks.
+- **Presenter** (`FeatureNameView.tsx`) — receives props, renders JSX, no hooks except `useState` for local UI state.
+
+This pattern is already partially used (e.g., `ActiveTrainingView`, `SessionResultsView`). Apply it consistently.
+
+### `'use client'` Directive
+
+Since the app is a static export, everything is client-side. However, keep `'use client'` **only on boundary files** that Next.js needs to mark:
+
+- `app/providers.tsx` — the client boundary for the app.
+- Feature entry components directly imported by server components (like `page.tsx` importing `CWTrainer`).
+
+Do **not** add `'use client'` to hooks, utility components, or files only imported by other client files.
+
+## Zustand Store Rules
+
+### Slice Pattern
+
+Each domain concern gets its own slice file in `store/slices/`. Slices:
+- Define their state shape + actions as a TypeScript type.
+- Accept dependencies (services, getContext) via a factory function.
+- Never import other slices — cross-slice communication goes through `get()` in the store factory.
+
+### Selector Granularity
+
+Export focused selector hooks from dedicated hook files (e.g., `useTrainingSettingsState`, `useTrainingSettingsActions`). This keeps components decoupled from the full store shape and enables React to optimize re-renders.
+
+```typescript
+// ✅ Good — component only re-renders when these specific fields change
+const { sessions, sessionsSyncing } = useSessionsState();
+
+// ❌ Avoid — subscribes to the entire store
+const store = useAppStore((s) => s);
+```
+
+## Domain Logic (`lib/`) Rules
+
+### Purity
+
+Files in `lib/` must be **pure functions** — no React imports, no DOM access, no `window`, no side effects. They receive all inputs as parameters and return values. This makes them trivially testable.
+
+Exception: `morseAudio.ts` legitimately needs `AudioContext` (a Web API). Pass it as a parameter rather than creating it internally.
+
+### Organization
+
+Group by domain, not by technical role:
+
+```
+src/lib/
+├── audio/         — morseAudio, morseConstants, morseSignals
+├── training/      — group generation, playback timing, Koch auto-adjust, training utils
+├── scoring/       — score computation, group alignment, stats aggregation
+├── persistence/   — Firebase client, session queue, session persistence
+├── db/            — repositories
+├── services/      — business logic services
+├── validators/    — Zod schemas
+├── errors/        — error types and ensureAppError
+└── utils/         — general utilities (settings transforms, formatters)
+```
+
+## Validation Rules
+
+- Validate at **I/O boundaries** only — where data enters or leaves the system (Firebase reads, user form submissions, localStorage reads).
+- Use Zod schemas in `lib/validators/`.
+- Services call `.parse()` or `.safeParse()` and throw `ValidationError` on failure.
+- Components and hooks trust the data they receive from the store (it's already validated).
+
+## Testing Rules
+
+- **Pure functions** (`lib/`): unit tests with Jest, no mocking needed.
+- **Hooks**: use `@testing-library/react` `renderHook`. Mock services/repositories, not the store.
+- **Components**: use `@testing-library/react`. Test behavior (what the user sees/does), not implementation.
+- **Repositories**: mock Firebase SDK.
+- **Services**: mock repositories, test business logic.
+- Test files go in `src/__tests__/` mirroring the source tree.
+
+## CSS / Tailwind Rules
+
+- Use Tailwind utility classes for all styling. No inline `style={}` unless truly dynamic (e.g., computed positions).
+- Avoid `@apply` — it defeats the purpose of utility-first CSS.
+- Keep responsive breakpoints consistent: `sm:`, `lg:` (the project already uses this).
+- Color palette: use slate/indigo/emerald/rose from the existing design system. Don't introduce new color families.
+
+## Naming Conventions
+
+| Kind | Convention | Example |
+|------|-----------|---------|
+| Component files | PascalCase.tsx | `ActiveTrainingView.tsx` |
+| Hook files | camelCase.ts prefixed with `use` | `useTrainingSession.ts` |
+| Lib/utility files | camelCase.ts or kebab-case.ts | `groupAlignment.ts`, `training-settings.ts` |
+| Types/interfaces | PascalCase | `SessionResult`, `TrainingSettings` |
+| Type files | camelCase.ts or kebab-case.ts | `domain.ts`, `api.ts` |
+| Constants | UPPER_SNAKE_CASE | `AUTO_CONFIRM_DELAY_MS` |
+| Zustand slices | kebab-case.slice.ts | `sessions.slice.ts` |
+| Zod schemas | kebab-case.schema.ts | `session-result.schema.ts` |
+| Repositories | kebab-case.repository.ts | `session.repository.ts` |
+| Services | kebab-case.service.ts | `session.service.ts` |
+
+## Git Conventions
+
+- Lint-staged runs ESLint + Prettier on commit (configured via Husky).
+- Run `npm run typecheck` before pushing — the CI pipeline will fail on type errors.
+- Run `npm test` before pushing.
+
+## Common Pitfalls in This Codebase
+
+1. **AudioContext must be created from a user gesture.** Always call `resumeAudioContextFromUserGesture()` in the click/touch handler path, not in a `useEffect`.
+2. **Training session active guard.** When `trainingSessionActive` is true in the store, skip data loads and store updates that could cause the component tree to re-render and lose training state.
+3. **`sleepCancelable` pattern.** The project uses polled sleeps (check abort flag every 50ms) rather than `AbortController` because `setTimeout` cannot be cancelled from outside. If refactoring, preserve this pattern or switch to `AbortSignal` with care.
+4. **Firebase is optional.** All code paths must handle the case where Firebase is not configured. The app works as a local-only trainer without sign-in.
+5. **Static export constraints.** No `getServerSideProps`, no API routes, no `headers()`, no `cookies()`. Everything must be client-renderable at build time or lazy-loaded in a `useEffect`.

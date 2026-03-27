@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow reading leaderboard entries from any user for global leaderboard
+    // This enables collectionGroup queries on 'leaderboard' subcollection
+    match /users/{userId}/leaderboard/{document} {
+      allow read: if request.auth != null;
+      // Only the owner can write their own leaderboard entries
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Allow reading call-sign from any user's profile for leaderboard display
+    match /users/{userId}/meta/profile {
+      allow read: if request.auth != null;
+      // Only the owner can write their own profile
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Protect all other user data - users can only access their own data
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+
