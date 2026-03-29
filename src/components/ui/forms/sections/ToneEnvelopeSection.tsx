@@ -209,8 +209,8 @@ export function ToneEnvelopeSection({
         Rise/decay: {Math.round(riseMs)} ms · Dot ≈ {Math.round(dotDurationMs)} ms @ {previewCharWpm} WPM · Smoothness: {Math.round(smoothing * 100)}%
       </p>
       <div className="mt-3 flex gap-2">
-        <button type="button" onClick={handleTestTone} disabled={isPlayingTestTone}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isPlayingTestTone ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-blue-500 text-white hover:bg-blue-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>
+        <button type="button" onClick={handleTestTone}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isPlayingTestTone ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-blue-500 text-white hover:bg-blue-600'}`}>
           {isPlayingTestTone ? '⏹ Stop' : '▶ Test'}
         </button>
         <button type="button" onClick={handleResetToneEnvelope}

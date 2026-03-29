@@ -5,16 +5,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildSessionResult } from '@/lib/buildSessionResult';
 import { AUTO_CONFIRM_DELAY_MS } from '@/lib/constants';
 import { ensureAppError } from '@/lib/errors';
+import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
+import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import { computeTrainingGroupGapMs } from '@/lib/trainingSessionPlayback';
 import { useAppStore } from '@/store';
-import type { TrainingSettings } from '@/types';
-import type { SessionResult } from '@/types/session';
+import type { SessionResult, TrainingSettings } from '@/types';
 
 import type { Toast } from './useToast';
 import { useTrainingAudio } from './useTrainingAudio';
-import { evaluateAutoLevelAdjust } from '../../lib/kochAutoAdjust';
-import type { AutoAdjustMode } from '../../lib/kochAutoAdjust';
 
 // ── Public types ───────────────────────────────────────────────────────
 
