@@ -95,6 +95,17 @@ export function useTrainingSession({
   const confirmedGroupsRef = useRef<Record<number, boolean>>({});
   const resultsProcessedRef = useRef(false);
   const activeSentGroupsRef = useRef<string[]>([]);
+
+  // Refs for values read by processResults to prevent stale closures
+  // (processResults runs after long async session; these may change mid-session)
+  const settingsRef = useRef(settings);
+  const saveSessionRef = useRef(saveSession);
+  const showToastRef = useRef(showToast);
+  const setTrainingSettingsStateRef = useRef(setTrainingSettingsState);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { saveSessionRef.current = saveSession; }, [saveSession]);
+  useEffect(() => { showToastRef.current = showToast; }, [showToast]);
+  useEffect(() => { setTrainingSettingsStateRef.current = setTrainingSettingsState; }, [setTrainingSettingsState]);
   const groupStartAtRef = useRef<number[]>([]);
   const groupEndAtRef = useRef<number[]>([]);
   const groupAnswerAtRef = useRef<number[]>([]);
@@ -155,6 +166,12 @@ export function useTrainingSession({
     if (resultsProcessedRef.current) return;
     resultsProcessedRef.current = true;
 
+    // Read from refs to avoid stale closures (session runs across many awaits)
+    const currentSettings = settingsRef.current;
+    const currentSaveSession = saveSessionRef.current;
+    const currentShowToast = showToastRef.current;
+    const currentSetTrainingSettingsState = setTrainingSettingsStateRef.current;
+
     const sentSource =
       Array.isArray(sentOverride) && sentOverride.length
         ? sentOverride
@@ -166,7 +183,7 @@ export function useTrainingSession({
     const groupTimings = sentSource.map((_sent, idx) => {
       const endAt = groupEndAtRef.current[idx] || 0;
       const rawAnsAt = groupAnswerAtRef.current[idx] || 0;
-      const timeoutMs = Math.max(0, settings.groupTimeout || 0) * 1000;
+      const timeoutMs = Math.max(0, currentSettings.groupTimeout || 0) * 1000;
       const fallbackAnsAt = endAt > 0 && timeoutMs > 0 ? endAt + timeoutMs : 0;
       const ansAt = rawAnsAt > 0 ? rawAnsAt : fallbackAnsAt;
       const delta = Math.max(0, ansAt - endAt);
@@ -195,29 +212,29 @@ export function useTrainingSession({
     setShowResults(true);
 
     try {
-      await saveSession(result as unknown as Record<string, unknown>);
+      await currentSaveSession(result as unknown as Record<string, unknown>);
     } catch (error) {
-      showToast({ message: ensureAppError(error).message, type: 'error' });
+      currentShowToast({ message: ensureAppError(error).message, type: 'error' });
     }
 
     // Auto-adjust level
     try {
-      const charSetMode = settings.charSetMode ?? 'koch';
+      const charSetMode = currentSettings.charSetMode ?? 'koch';
       const mode: AutoAdjustMode =
         charSetMode === 'digits' ? 'digits' : charSetMode === 'mixed' ? 'mixed' : 'koch';
-      const currentLevel = mode === 'digits' ? (settings.digitsLevel ?? 10) : settings.kochLevel;
+      const currentLevel = mode === 'digits' ? (currentSettings.digitsLevel ?? 10) : currentSettings.kochLevel;
       const maxLevel = mode === 'digits' ? 10 : 40;
       const adjustment = evaluateAutoLevelAdjust(result.accuracy, {
-        enabled: settings.autoAdjustKoch, mode,
-        threshold: settings.autoAdjustThreshold ?? 90,
-        aboveThresholdCount: Math.max(0, settings.autoAdjustAboveThresholdCount ?? 0),
-        belowThresholdCount: Math.max(0, settings.autoAdjustBelowThresholdCount ?? 0),
+        enabled: currentSettings.autoAdjustKoch, mode,
+        threshold: currentSettings.autoAdjustThreshold ?? 90,
+        aboveThresholdCount: Math.max(0, currentSettings.autoAdjustAboveThresholdCount ?? 0),
+        belowThresholdCount: Math.max(0, currentSettings.autoAdjustBelowThresholdCount ?? 0),
         currentLevel, maxLevel,
       });
       if (adjustment) {
         const field = mode === 'digits' ? 'digitsLevel' : 'kochLevel';
-        setTrainingSettingsState((prev) => ({ ...prev, [field]: adjustment.nextLevel }));
-        showToast({ message: adjustment.message, type: adjustment.messageType });
+        currentSetTrainingSettingsState((prev) => ({ ...prev, [field]: adjustment.nextLevel }));
+        currentShowToast({ message: adjustment.message, type: adjustment.messageType });
       }
     } catch (autoAdjustError) {
       console.warn('[Training] Auto-adjust error:', autoAdjustError);

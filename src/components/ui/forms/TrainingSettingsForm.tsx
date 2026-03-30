@@ -165,53 +165,17 @@ export function TrainingSettingsForm({
   });
   const letters = allChars.filter((character) => /[A-Z]/.test(character));
 
-  const resolvePreviewChars = (): string[] => {
-    if (charMode === 'mixed') {
-      return computeCharPool({
-        kochLevel: settings.kochLevel,
-        charSetMode: 'mixed',
-        digitsLevel: settings.digitsLevel ?? 10,
-        mixedLettersPercent: settings.mixedLettersPercent ?? 70,
-        ...(settings.customSet !== undefined ? { customSet: settings.customSet } : {}),
-        ...(settings.customSequence !== undefined ? { customSequence: settings.customSequence } : {}),
-        ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
-        ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
-      });
-    }
-    if (charMode === 'digits') {
-      const level = Math.max(1, Math.min(10, settings.digitsLevel || 10));
-      const fullUnlocked = digitsAsc.slice(0, level);
-      const n = fullUnlocked.length;
-      if (n === 0) return fullUnlocked;
-      const start1 = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, n));
-      const end1 = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, n));
-      const startIdx = Math.min(start1, end1);
-      const endIdx = Math.max(start1, end1);
-      const pool = fullUnlocked.slice(startIdx - 1, endIdx);
-      return pool.length >= 2 ? pool : fullUnlocked.slice(-2);
-    }
-    if (charMode === 'custom') {
-      const set = Array.isArray(settings.customSet) ? settings.customSet : [];
-      return Array.from(new Set(set.map((entry) => (entry || '').toUpperCase()).filter(Boolean)));
-    }
-    // Use custom sequence if available, otherwise fall back to LCWO_SEQUENCE
-    const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
-      ? settings.customSequence
-      : LCWO_SEQUENCE;
-    // Level 1 = 2 characters, Level 2 = 3 characters, etc. (characters = level + 1)
-    const charCount = Math.min((settings.kochLevel || 1) + 1, sequence.length);
-    const fullUnlocked = sequence.slice(0, Math.max(2, charCount));
-    const n = fullUnlocked.length;
-    if (n === 0) return fullUnlocked;
-    const start1 = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, n));
-    const end1 = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, n));
-    const startIdx = Math.min(start1, end1);
-    const endIdx = Math.max(start1, end1);
-    const pool = fullUnlocked.slice(startIdx - 1, endIdx);
-    return pool.length >= 2 ? pool : fullUnlocked.slice(-2);
-  };
-
-  const currentPreviewChars = resolvePreviewChars();
+  // Use the shared computeCharPool instead of reimplementing sliding window logic
+  const currentPreviewChars = useMemo(() => computeCharPool({
+    kochLevel: settings.kochLevel,
+    ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
+    ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
+    ...(settings.mixedLettersPercent !== undefined ? { mixedLettersPercent: settings.mixedLettersPercent } : {}),
+    ...(settings.customSet !== undefined ? { customSet: settings.customSet } : {}),
+    ...(settings.customSequence !== undefined ? { customSequence: settings.customSequence } : {}),
+    ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
+    ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
+  }), [settings.kochLevel, settings.charSetMode, settings.digitsLevel, settings.mixedLettersPercent, settings.customSet, settings.customSequence, settings.slidingWindowStart, settings.slidingWindowEnd]);
   
   // Get current sequence for level calculation (Koch and Mixed both use sequence)
   const currentSequence = useMemo(() => {

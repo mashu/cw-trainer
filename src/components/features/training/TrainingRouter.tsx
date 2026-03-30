@@ -1,14 +1,24 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 
-import { ICRTrainer } from '@/components/features/icr/ICRTrainer';
-import { GroupTrainingStats } from '@/components/features/stats/GroupTrainingStats';
 import type { TrainingSettings as FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
-import { TextPlayer } from '@/components/ui/training/TextPlayer';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
 import type { UseTrainingSessionReturn } from '@/hooks/useTrainingSession';
 import type { SharedAudioFromSettings } from '@/lib/settingsToSharedAudioProps';
 import type { IcrSettings, TrainingMode, TrainingSettings, SessionResult } from '@/types';
+
+// Lazy-loaded heavy views — only downloaded when the user navigates to them
+const ICRTrainer = React.lazy(() => import('@/components/features/icr/ICRTrainer').then(m => ({ default: m.ICRTrainer })));
+const GroupTrainingStats = React.lazy(() => import('@/components/features/stats/GroupTrainingStats').then(m => ({ default: m.GroupTrainingStats })));
+const TextPlayer = React.lazy(() => import('@/components/ui/training/TextPlayer').then(m => ({ default: m.TextPlayer })));
+
+function LazyFallback(): JSX.Element {
+  return (
+    <div className="flex items-center justify-center min-h-[200px]">
+      <div className="text-sm text-slate-500">Loading…</div>
+    </div>
+  );
+}
 
 import { ActiveTrainingView } from './ActiveTrainingView';
 import { EchoSessionResultsView } from './EchoSessionResultsView';
@@ -172,7 +182,9 @@ export function TrainingRouter({
             Back to Training
           </button>
         </div>
-        <GroupTrainingStats embedded onBack={() => setGroupTab('train')} />
+        <Suspense fallback={<LazyFallback />}>
+          <GroupTrainingStats embedded onBack={() => setGroupTab('train')} />
+        </Suspense>
       </div>
     );
   }
@@ -228,11 +240,13 @@ export function TrainingRouter({
         onSwipeLeft={() => handleMoveMode(1)}
         onSwipeRight={() => handleMoveMode(-1)}
       >
-        <ICRTrainer
-          sharedAudio={sharedAudio}
-          icrSettings={icrSettings}
-          showToast={showToast}
-        />
+        <Suspense fallback={<LazyFallback />}>
+          <ICRTrainer
+            sharedAudio={sharedAudio}
+            icrSettings={icrSettings}
+            showToast={showToast}
+          />
+        </Suspense>
       </SwipeContainer>
     );
   }
@@ -242,7 +256,9 @@ export function TrainingRouter({
     return (
       <SwipeContainer onSwipeRight={() => handleMoveMode(-1)}>
         <div className="space-y-6">
-          <TextPlayer settings={formSettings} />
+          <Suspense fallback={<LazyFallback />}>
+            <TextPlayer settings={formSettings} />
+          </Suspense>
         </div>
       </SwipeContainer>
     );
