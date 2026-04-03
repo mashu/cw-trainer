@@ -49,8 +49,14 @@ export interface TrainingSettings {
   autoAdjustThreshold?: number;
   autoAdjustBelowThresholdCount?: number;
   autoAdjustAboveThresholdCount?: number;
+  echoAutoAdjustKoch?: boolean;
+  echoAutoAdjustThreshold?: number;
+  echoAutoAdjustBelowThresholdCount?: number;
+  echoAutoAdjustAboveThresholdCount?: number;
   errorWeightStrength?: number;
 }
+
+export type AutoAdjustContext = 'group' | 'echo';
 
 interface TrainingSettingsFormProps {
   settings: TrainingSettings;
@@ -58,13 +64,17 @@ interface TrainingSettingsFormProps {
     settings: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings),
   ) => void;
   onSaveSettings?: () => void;
+  /** Which training mode’s auto-adjust fields to edit (persisted separately). ICR/Player use group. */
+  autoAdjustContext?: AutoAdjustContext;
 }
 
 export function TrainingSettingsForm({
   settings,
   setSettings,
   onSaveSettings,
+  autoAdjustContext = 'group',
 }: TrainingSettingsFormProps): JSX.Element {
+  const isEchoCtx = autoAdjustContext === 'echo';
   // Local state for all number inputs to allow empty/invalid values while typing
   const [charWpmMinInput, setCharWpmMinInput] = useState<string>(String(settings.charWpmMin));
   const [charWpmMaxInput, setCharWpmMaxInput] = useState<string>(String(settings.charWpmMax));
@@ -125,16 +135,25 @@ export function TrainingSettingsForm({
 
   
   useEffect(() => {
-    setAutoAdjustThresholdInput(String(settings.autoAdjustThreshold ?? 90));
-  }, [settings.autoAdjustThreshold]);
-  
+    const th = isEchoCtx
+      ? (settings.echoAutoAdjustThreshold ?? 90)
+      : (settings.autoAdjustThreshold ?? 90);
+    setAutoAdjustThresholdInput(String(th));
+  }, [isEchoCtx, settings.echoAutoAdjustThreshold, settings.autoAdjustThreshold]);
+
   useEffect(() => {
-    setAutoAdjustBelowThresholdCountInput(String(settings.autoAdjustBelowThresholdCount ?? 0));
-  }, [settings.autoAdjustBelowThresholdCount]);
-  
+    const n = isEchoCtx
+      ? (settings.echoAutoAdjustBelowThresholdCount ?? 0)
+      : (settings.autoAdjustBelowThresholdCount ?? 0);
+    setAutoAdjustBelowThresholdCountInput(String(n));
+  }, [isEchoCtx, settings.echoAutoAdjustBelowThresholdCount, settings.autoAdjustBelowThresholdCount]);
+
   useEffect(() => {
-    setAutoAdjustAboveThresholdCountInput(String(settings.autoAdjustAboveThresholdCount ?? 0));
-  }, [settings.autoAdjustAboveThresholdCount]);
+    const n = isEchoCtx
+      ? (settings.echoAutoAdjustAboveThresholdCount ?? 0)
+      : (settings.autoAdjustAboveThresholdCount ?? 0);
+    setAutoAdjustAboveThresholdCountInput(String(n));
+  }, [isEchoCtx, settings.echoAutoAdjustAboveThresholdCount, settings.autoAdjustAboveThresholdCount]);
   
   useEffect(() => {
     setKochLevelInput(String(settings.kochLevel));
@@ -1101,14 +1120,70 @@ export function TrainingSettingsForm({
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <h5 className="text-sm font-semibold text-slate-700">
-                Auto Sequence Level Adjustment
-              </h5>
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <h5 className="text-sm font-semibold text-slate-700">
+                  Auto Sequence Level Adjustment
+                </h5>
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border shrink-0 ${
+                    isEchoCtx
+                      ? 'border-violet-200 bg-violet-50 text-violet-700'
+                      : 'border-slate-200 bg-slate-100 text-slate-600'
+                  }`}
+                  title={
+                    isEchoCtx
+                      ? 'These options apply after Echo sessions. Progress counters are separate from Group training.'
+                      : 'These options apply after Group training sessions. Progress counters are separate from Echo.'
+                  }
+                >
+                  {isEchoCtx ? (
+                    <>
+                      <svg
+                        className="w-3 h-3 shrink-0 opacity-90"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 11c0 3-2.5 5.5-5.5 5.5S1 14 1 10V4.5C1 4.5 4.5 3 6.5 3S12 6 12 11z"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 11c0-3 2.5-5.5 5.5-5.5S23 7 23 11v5.5c0 0-3.5 1.5-5.5 1.5S12 16 12 11z"
+                        />
+                      </svg>
+                      Echo
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-3 h-3 shrink-0 opacity-90"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden
+                      >
+                        <rect x="3" y="3" width="7" height="7" rx="1" />
+                        <rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" />
+                        <rect x="14" y="14" width="7" height="7" rx="1" />
+                      </svg>
+                      Group
+                    </>
+                  )}
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowAutoAdjustHelp((v) => !v)}
-                className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors ${
+                className={`inline-flex items-center justify-center h-6 px-2 rounded-full text-xs font-semibold border transition-colors shrink-0 ${
                   showAutoAdjustHelp
                     ? 'bg-indigo-600 text-white border-indigo-600'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
@@ -1124,44 +1199,60 @@ export function TrainingSettingsForm({
                 <div className="font-semibold text-slate-800 mb-1">Auto level adjustment</div>
                 <ul className="list-disc ml-4 space-y-1">
                   <li>
-                    <span className="font-medium">Accuracy threshold</span>: Minimum session accuracy (%) to consider for level changes. Level only goes up when you meet this.
+                    <span className="font-medium">Mode badge</span>: Switch Group / Echo / ICR / Player in the bar above.
+                    Group and Echo each have their own saved threshold and session counters; ICR and Player edit the Group profile here.
                   </li>
                   <li>
-                    <span className="font-medium">Sessions below threshold</span>: How many sessions below threshold before level decreases (0 = immediate).
+                    <span className="font-medium">Accuracy threshold</span>: Minimum session accuracy (%) to count toward a level increase.
                   </li>
                   <li>
-                    <span className="font-medium">Sessions above threshold</span>: How many sessions above threshold before level increases (0 = immediate).
+                    <span className="font-medium">To decrease</span>: Sessions in a row below threshold before the level drops (0 = first miss drops).
                   </li>
                   <li>
-                    <span className="font-medium">Error weight strength</span>: 0 = uniform random; higher = more practice on letters you get wrong.
+                    <span className="font-medium">To increase</span>: Sessions in a row at or above threshold before the level rises (0 = first success rises).
+                  </li>
+                  <li>
+                    <span className="font-medium">Error weight</span> (below): Shared — biases random practice toward letters you miss.
                   </li>
                 </ul>
               </div>
             )}
             <div className="flex items-center gap-2">
               <input
-                id="autoAdjustKoch"
+                id={isEchoCtx ? 'echoAutoAdjustKoch' : 'autoAdjustKoch'}
                 type="checkbox"
-                checked={Boolean(settings.autoAdjustKoch)}
+                checked={
+                  isEchoCtx ? Boolean(settings.echoAutoAdjustKoch) : Boolean(settings.autoAdjustKoch)
+                }
                 onChange={(event) =>
-                  setSettings({ ...settings, autoAdjustKoch: event.target.checked })
+                  setSettings(
+                    isEchoCtx
+                      ? { ...settings, echoAutoAdjustKoch: event.target.checked }
+                      : { ...settings, autoAdjustKoch: event.target.checked },
+                  )
                 }
                 className="w-4 h-4"
               />
-              <label htmlFor="autoAdjustKoch" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor={isEchoCtx ? 'echoAutoAdjustKoch' : 'autoAdjustKoch'}
+                className="text-sm font-medium text-gray-700"
+              >
                 Automatically adjust level from session accuracy
               </label>
             </div>
-            {settings.autoAdjustKoch && charMode === 'digits' && (
+            {(isEchoCtx ? settings.echoAutoAdjustKoch : settings.autoAdjustKoch) &&
+              charMode === 'digits' && (
               <p className="mt-1.5 text-xs text-slate-600">
                 In Digits mode, the digits level is adjusted automatically; alphabet level stays fixed.
               </p>
             )}
-            {settings.autoAdjustKoch && charMode === 'mixed' && (
+            {(isEchoCtx ? settings.echoAutoAdjustKoch : settings.autoAdjustKoch) &&
+              charMode === 'mixed' && (
               <p className="mt-1.5 text-xs text-slate-600">
                 In Mixed mode, the alphabet level is adjusted automatically; digits level stays fixed.
               </p>
             )}
+            {(isEchoCtx ? settings.echoAutoAdjustKoch : settings.autoAdjustKoch) && (
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1176,19 +1267,29 @@ export function TrainingSettingsForm({
                   onMouseUp={(e) => {
                     const target = e.target as HTMLInputElement;
                     if (target === document.activeElement) {
-                      handleSpinButtonClick('autoAdjustThreshold');
+                      handleSpinButtonClick(
+                        isEchoCtx ? 'echoAutoAdjustThreshold' : 'autoAdjustThreshold',
+                      );
                     }
                   }}
                   onChange={(event) => {
                     handleNumberInputChange(
                       event.target.value,
                       setAutoAdjustThresholdInput,
-                      'autoAdjustThreshold',
+                      isEchoCtx ? 'echoAutoAdjustThreshold' : 'autoAdjustThreshold',
                       (num) => !isNaN(num) && num >= 0 && num <= 100,
-                      (num) => setSettings({
-                        ...settings,
-                        autoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
-                      })
+                      (num) =>
+                        setSettings(
+                          isEchoCtx
+                            ? {
+                                ...settings,
+                                echoAutoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
+                              }
+                            : {
+                                ...settings,
+                                autoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
+                              },
+                        ),
                     );
                   }}
                   onBlur={(event) => {
@@ -1196,11 +1297,21 @@ export function TrainingSettingsForm({
                       event.target.value,
                       setAutoAdjustThresholdInput,
                       (num) => !isNaN(num) && num >= 0 && num <= 100,
-                      (num) => setSettings((prev) => ({
-                        ...prev,
-                        autoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
-                      })),
-                      settings.autoAdjustThreshold ?? 90
+                      (num) =>
+                        setSettings((prev) =>
+                          isEchoCtx
+                            ? {
+                                ...prev,
+                                echoAutoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
+                              }
+                            : {
+                                ...prev,
+                                autoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
+                              },
+                        ),
+                      isEchoCtx
+                        ? (settings.echoAutoAdjustThreshold ?? 90)
+                        : (settings.autoAdjustThreshold ?? 90),
                     );
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
@@ -1219,19 +1330,39 @@ export function TrainingSettingsForm({
                   onMouseUp={(e) => {
                     const target = e.target as HTMLInputElement;
                     if (target === document.activeElement) {
-                      handleSpinButtonClick('autoAdjustBelowThresholdCount');
+                      handleSpinButtonClick(
+                        isEchoCtx
+                          ? 'echoAutoAdjustBelowThresholdCount'
+                          : 'autoAdjustBelowThresholdCount',
+                      );
                     }
                   }}
                   onChange={(event) => {
                     handleNumberInputChange(
                       event.target.value,
                       setAutoAdjustBelowThresholdCountInput,
-                      'autoAdjustBelowThresholdCount',
+                      isEchoCtx
+                        ? 'echoAutoAdjustBelowThresholdCount'
+                        : 'autoAdjustBelowThresholdCount',
                       (num) => !isNaN(num) && num >= 0 && num <= 20,
-                      (num) => setSettings({
-                        ...settings,
-                        autoAdjustBelowThresholdCount: Math.max(0, Math.min(20, Math.floor(num))),
-                      })
+                      (num) =>
+                        setSettings(
+                          isEchoCtx
+                            ? {
+                                ...settings,
+                                echoAutoAdjustBelowThresholdCount: Math.max(
+                                  0,
+                                  Math.min(20, Math.floor(num)),
+                                ),
+                              }
+                            : {
+                                ...settings,
+                                autoAdjustBelowThresholdCount: Math.max(
+                                  0,
+                                  Math.min(20, Math.floor(num)),
+                                ),
+                              },
+                        ),
                     );
                   }}
                   onBlur={(event) => {
@@ -1239,11 +1370,27 @@ export function TrainingSettingsForm({
                       event.target.value,
                       setAutoAdjustBelowThresholdCountInput,
                       (num) => !isNaN(num) && num >= 0 && num <= 20,
-                      (num) => setSettings((prev) => ({
-                        ...prev,
-                        autoAdjustBelowThresholdCount: Math.max(0, Math.min(20, Math.floor(num))),
-                      })),
-                      settings.autoAdjustBelowThresholdCount ?? 0
+                      (num) =>
+                        setSettings((prev) =>
+                          isEchoCtx
+                            ? {
+                                ...prev,
+                                echoAutoAdjustBelowThresholdCount: Math.max(
+                                  0,
+                                  Math.min(20, Math.floor(num)),
+                                ),
+                              }
+                            : {
+                                ...prev,
+                                autoAdjustBelowThresholdCount: Math.max(
+                                  0,
+                                  Math.min(20, Math.floor(num)),
+                                ),
+                              },
+                        ),
+                      isEchoCtx
+                        ? (settings.echoAutoAdjustBelowThresholdCount ?? 0)
+                        : (settings.autoAdjustBelowThresholdCount ?? 0),
                     );
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
@@ -1262,19 +1409,39 @@ export function TrainingSettingsForm({
                   onMouseUp={(e) => {
                     const target = e.target as HTMLInputElement;
                     if (target === document.activeElement) {
-                      handleSpinButtonClick('autoAdjustAboveThresholdCount');
+                      handleSpinButtonClick(
+                        isEchoCtx
+                          ? 'echoAutoAdjustAboveThresholdCount'
+                          : 'autoAdjustAboveThresholdCount',
+                      );
                     }
                   }}
                   onChange={(event) => {
                     handleNumberInputChange(
                       event.target.value,
                       setAutoAdjustAboveThresholdCountInput,
-                      'autoAdjustAboveThresholdCount',
+                      isEchoCtx
+                        ? 'echoAutoAdjustAboveThresholdCount'
+                        : 'autoAdjustAboveThresholdCount',
                       (num) => !isNaN(num) && num >= 0 && num <= 20,
-                      (num) => setSettings({
-                        ...settings,
-                        autoAdjustAboveThresholdCount: Math.max(0, Math.min(20, Math.floor(num))),
-                      })
+                      (num) =>
+                        setSettings(
+                          isEchoCtx
+                            ? {
+                                ...settings,
+                                echoAutoAdjustAboveThresholdCount: Math.max(
+                                  0,
+                                  Math.min(20, Math.floor(num)),
+                                ),
+                              }
+                            : {
+                                ...settings,
+                                autoAdjustAboveThresholdCount: Math.max(
+                                  0,
+                                  Math.min(20, Math.floor(num)),
+                                ),
+                              },
+                        ),
                     );
                   }}
                   onBlur={(event) => {
@@ -1282,18 +1449,35 @@ export function TrainingSettingsForm({
                       event.target.value,
                       setAutoAdjustAboveThresholdCountInput,
                       (num) => !isNaN(num) && num >= 0 && num <= 20,
-                      (num) => setSettings((prev) => ({
-                        ...prev,
-                        autoAdjustAboveThresholdCount: Math.max(0, Math.min(20, Math.floor(num))),
-                      })),
-                      settings.autoAdjustAboveThresholdCount ?? 0
+                      (num) =>
+                        setSettings((prev) =>
+                          isEchoCtx
+                            ? {
+                                ...prev,
+                                echoAutoAdjustAboveThresholdCount: Math.max(
+                                  0,
+                                  Math.min(20, Math.floor(num)),
+                                ),
+                              }
+                            : {
+                                ...prev,
+                                autoAdjustAboveThresholdCount: Math.max(
+                                  0,
+                                  Math.min(20, Math.floor(num)),
+                                ),
+                              },
+                        ),
+                      isEchoCtx
+                        ? (settings.echoAutoAdjustAboveThresholdCount ?? 0)
+                        : (settings.autoAdjustAboveThresholdCount ?? 0),
                     );
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 />
               </div>
             </div>
-            <div className="mt-4">
+            )}
+            <div className="mt-4 pt-4 border-t border-slate-100">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Error weight ({settings.errorWeightStrength ?? 0})
               </label>

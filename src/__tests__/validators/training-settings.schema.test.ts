@@ -36,6 +36,10 @@ const buildValidSettings = (): TrainingSettingsInput => ({
   autoAdjustThreshold: 90,
   autoAdjustBelowThresholdCount: 0,
   autoAdjustAboveThresholdCount: 0,
+  echoAutoAdjustKoch: false,
+  echoAutoAdjustThreshold: 90,
+  echoAutoAdjustBelowThresholdCount: 0,
+  echoAutoAdjustAboveThresholdCount: 0,
   errorWeightStrength: 0,
 });
 

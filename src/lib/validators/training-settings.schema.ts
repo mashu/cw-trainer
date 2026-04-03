@@ -68,6 +68,20 @@ export const trainingSettingsSchema = z
     autoAdjustThreshold: z.number().min(AUTO_THRESHOLD_MIN).max(AUTO_THRESHOLD_MAX),
     autoAdjustBelowThresholdCount: z.number().int().min(AUTO_ADJUST_COUNT_MIN).max(AUTO_ADJUST_COUNT_MAX).default(0),
     autoAdjustAboveThresholdCount: z.number().int().min(AUTO_ADJUST_COUNT_MIN).max(AUTO_ADJUST_COUNT_MAX).default(0),
+    echoAutoAdjustKoch: z.boolean().default(false),
+    echoAutoAdjustThreshold: z.number().min(AUTO_THRESHOLD_MIN).max(AUTO_THRESHOLD_MAX).default(90),
+    echoAutoAdjustBelowThresholdCount: z
+      .number()
+      .int()
+      .min(AUTO_ADJUST_COUNT_MIN)
+      .max(AUTO_ADJUST_COUNT_MAX)
+      .default(0),
+    echoAutoAdjustAboveThresholdCount: z
+      .number()
+      .int()
+      .min(AUTO_ADJUST_COUNT_MIN)
+      .max(AUTO_ADJUST_COUNT_MAX)
+      .default(0),
     errorWeightStrength: z.number().min(0).max(5).default(0),
   })
   .superRefine((value, ctx) => {

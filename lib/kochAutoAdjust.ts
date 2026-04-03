@@ -2,7 +2,14 @@ import { MAX_KOCH_LEVEL_GUESS } from './constants';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type AutoAdjustMode = 'koch' | 'digits' | 'mixed';
+/** Group training counters use `koch` / `digits` / `mixed`. Echo uses `echo-*` so level-advance rules stay independent. */
+export type AutoAdjustMode =
+  | 'koch'
+  | 'digits'
+  | 'mixed'
+  | 'echo-koch'
+  | 'echo-digits'
+  | 'echo-mixed';
 
 export interface AutoLevelAdjustConfig {
   /** Whether the feature is enabled at all. */
@@ -96,6 +103,9 @@ const MODE_LABELS: Record<AutoAdjustMode, string> = {
   koch: 'Alphabet level',
   digits: 'Digits level',
   mixed: 'Alphabet level (mixed)',
+  'echo-koch': 'Echo alphabet level',
+  'echo-digits': 'Echo digits level',
+  'echo-mixed': 'Echo alphabet level (mixed)',
 };
 
 // ── Core logic ─────────────────────────────────────────────────────────

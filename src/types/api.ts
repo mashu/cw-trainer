@@ -44,6 +44,10 @@ export interface TrainingSettingsDto {
   readonly autoAdjustThreshold: number;
   readonly autoAdjustBelowThresholdCount: number;
   readonly autoAdjustAboveThresholdCount: number;
+  readonly echoAutoAdjustKoch?: boolean;
+  readonly echoAutoAdjustThreshold?: number;
+  readonly echoAutoAdjustBelowThresholdCount?: number;
+  readonly echoAutoAdjustAboveThresholdCount?: number;
   readonly errorWeightStrength: number;
 }
 

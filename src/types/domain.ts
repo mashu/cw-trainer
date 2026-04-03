@@ -147,6 +147,11 @@ export interface TrainingSettings {
   readonly autoAdjustThreshold: number;
   readonly autoAdjustBelowThresholdCount: number;
   readonly autoAdjustAboveThresholdCount: number;
+  /** Echo-only: auto level from echo session accuracy (separate counters from group training). */
+  readonly echoAutoAdjustKoch: boolean;
+  readonly echoAutoAdjustThreshold: number;
+  readonly echoAutoAdjustBelowThresholdCount: number;
+  readonly echoAutoAdjustAboveThresholdCount: number;
   readonly errorWeightStrength: number;
 }
 

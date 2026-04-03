@@ -40,8 +40,8 @@ export function EchoSettingsForm({
         </select>
       </div>
       <p className="text-[11px] text-slate-500 mt-3">
-        `Manual` treats each paddle event as one element. `Iambic B` keys a timed
-        element stream and alternates when both paddles are squeezed.
+        Manual and Iambic B use timed element spacing from your character speed; Iambic B alternates
+        when both paddles are squeezed.
       </p>
     </div>
   );

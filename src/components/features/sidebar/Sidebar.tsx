@@ -265,7 +265,12 @@ export function Sidebar({
             {settingsOpen && (
               <div className="px-4 pb-4">
                 {/* Shared settings - always visible (character set, audio, etc.) */}
-                <TrainingSettingsForm settings={settings} setSettings={setSettings} onSaveSettings={onSaveSettings} />
+                <TrainingSettingsForm
+                  settings={settings}
+                  setSettings={setSettings}
+                  onSaveSettings={onSaveSettings}
+                  autoAdjustContext={activeMode === 'echo' ? 'echo' : 'group'}
+                />
                 
                 {/* ICR Settings - only visible when in ICR mode */}
                 {activeMode === 'icr' && icrSettings && setIcrSettings && (

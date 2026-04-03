@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
 import { ensureAppError } from '@/lib/errors';
+import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
+import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import {
   playMorseCodeControlled,
   resumeAudioContextFromUserGesture,
@@ -50,6 +52,9 @@ export interface UseEchoTrainingSessionOptions {
   readonly settings: TrainingSettings;
   readonly sessions: readonly SessionResult[];
   readonly saveSession: (input: Record<string, unknown>) => Promise<SessionResult[]>;
+  readonly setTrainingSettingsState: (
+    next: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings),
+  ) => void;
   readonly showToast: (toast: Toast) => void;
 }
 
@@ -97,10 +102,20 @@ export function useEchoTrainingSession({
   settings,
   sessions: historicalSessions,
   saveSession,
+  setTrainingSettingsState,
   showToast,
 }: UseEchoTrainingSessionOptions): UseEchoTrainingSessionReturn {
   const setTrainingSessionActive = useAppStore((state) => state.setTrainingSessionActive);
   const audio = useTrainingAudio(settings);
+
+  const settingsRef = useRef(settings);
+  const saveSessionRef = useRef(saveSession);
+  const showToastRef = useRef(showToast);
+  const setTrainingSettingsStateRef = useRef(setTrainingSettingsState);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { saveSessionRef.current = saveSession; }, [saveSession]);
+  useEffect(() => { showToastRef.current = showToast; }, [showToast]);
+  useEffect(() => { setTrainingSettingsStateRef.current = setTrainingSettingsState; }, [setTrainingSettingsState]);
 
   const [isTraining, setIsTraining] = useState(false);
   const [currentGroup, setCurrentGroup] = useState(0);
@@ -425,9 +440,48 @@ export function useEchoTrainingSession({
         incorrectCharacters: nextIncorrectChars,
       });
       setShowResults(true);
-      await saveSession(result as unknown as Record<string, unknown>);
+
+      const currentSaveSession = saveSessionRef.current;
+      const currentShowToast = showToastRef.current;
+      const currentSetTrainingSettingsState = setTrainingSettingsStateRef.current;
+      const currentSettings = settingsRef.current;
+
+      try {
+        await currentSaveSession(result as unknown as Record<string, unknown>);
+      } catch (error) {
+        currentShowToast({ message: ensureAppError(error).message, type: 'error' });
+      }
+
+      try {
+        const charSetMode = currentSettings.charSetMode ?? 'koch';
+        const mode: AutoAdjustMode =
+          charSetMode === 'digits'
+            ? 'echo-digits'
+            : charSetMode === 'mixed'
+              ? 'echo-mixed'
+              : 'echo-koch';
+        const currentLevel =
+          charSetMode === 'digits' ? (currentSettings.digitsLevel ?? 10) : currentSettings.kochLevel;
+        const maxLevel = charSetMode === 'digits' ? 10 : 40;
+        const adjustment = evaluateAutoLevelAdjust(result.accuracy, {
+          enabled: currentSettings.echoAutoAdjustKoch,
+          mode,
+          threshold: currentSettings.echoAutoAdjustThreshold,
+          aboveThresholdCount: Math.max(0, currentSettings.echoAutoAdjustAboveThresholdCount),
+          belowThresholdCount: Math.max(0, currentSettings.echoAutoAdjustBelowThresholdCount),
+          currentLevel,
+          maxLevel,
+        });
+        if (adjustment) {
+          const field = charSetMode === 'digits' ? 'digitsLevel' : 'kochLevel';
+          currentSetTrainingSettingsState((prev) => ({ ...prev, [field]: adjustment.nextLevel }));
+          currentShowToast({ message: adjustment.message, type: adjustment.messageType });
+        }
+      } catch (autoAdjustError) {
+        console.warn('[EchoTraining] Auto-adjust error:', autoAdjustError);
+      }
     },
-    [saveSession],
+    [],
   );
 
   const stopTraining = useCallback((): void => {

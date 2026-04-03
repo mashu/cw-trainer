@@ -157,6 +157,22 @@ export const normalizeTrainingSettings = (
       typeof candidate['autoAdjustKoch'] === 'boolean'
         ? candidate['autoAdjustKoch']
         : fallback.autoAdjustKoch,
+    echoAutoAdjustKoch:
+      typeof candidate['echoAutoAdjustKoch'] === 'boolean'
+        ? candidate['echoAutoAdjustKoch']
+        : fallback.echoAutoAdjustKoch,
+    echoAutoAdjustThreshold:
+      typeof candidate['echoAutoAdjustThreshold'] === 'number'
+        ? candidate['echoAutoAdjustThreshold']
+        : fallback.echoAutoAdjustThreshold,
+    echoAutoAdjustBelowThresholdCount:
+      typeof candidate['echoAutoAdjustBelowThresholdCount'] === 'number'
+        ? candidate['echoAutoAdjustBelowThresholdCount']
+        : fallback.echoAutoAdjustBelowThresholdCount,
+    echoAutoAdjustAboveThresholdCount:
+      typeof candidate['echoAutoAdjustAboveThresholdCount'] === 'number'
+        ? candidate['echoAutoAdjustAboveThresholdCount']
+        : fallback.echoAutoAdjustAboveThresholdCount,
     linkCharWpm:
       typeof candidate['linkCharWpm'] === 'boolean' ? candidate['linkCharWpm'] : fallback.linkCharWpm,
     linkEffectiveWpm:
@@ -214,7 +230,14 @@ export const normalizeTrainingSettings = (
   if (typeof candidate['autoAdjustThreshold'] === 'number') partialResult.autoAdjustThreshold = candidate['autoAdjustThreshold'];
   if (typeof candidate['autoAdjustBelowThresholdCount'] === 'number') partialResult.autoAdjustBelowThresholdCount = candidate['autoAdjustBelowThresholdCount'];
   if (typeof candidate['autoAdjustAboveThresholdCount'] === 'number') partialResult.autoAdjustAboveThresholdCount = candidate['autoAdjustAboveThresholdCount'];
-  
+  if (typeof candidate['echoAutoAdjustThreshold'] === 'number') partialResult.echoAutoAdjustThreshold = candidate['echoAutoAdjustThreshold'];
+  if (typeof candidate['echoAutoAdjustBelowThresholdCount'] === 'number') {
+    partialResult.echoAutoAdjustBelowThresholdCount = candidate['echoAutoAdjustBelowThresholdCount'];
+  }
+  if (typeof candidate['echoAutoAdjustAboveThresholdCount'] === 'number') {
+    partialResult.echoAutoAdjustAboveThresholdCount = candidate['echoAutoAdjustAboveThresholdCount'];
+  }
+
   partialResult.charSetMode = normalizeCharSetMode(candidate['charSetMode'], fallback.charSetMode);
   partialResult.digitsLevel = normalizedDigits;
   if (typeof candidate['mixedLettersPercent'] === 'number') {
@@ -230,6 +253,10 @@ export const normalizeTrainingSettings = (
     fallback.echoKeyerMode,
   );
   partialResult.autoAdjustKoch = typeof candidate['autoAdjustKoch'] === 'boolean' ? candidate['autoAdjustKoch'] : fallback.autoAdjustKoch;
+  partialResult.echoAutoAdjustKoch =
+    typeof candidate['echoAutoAdjustKoch'] === 'boolean'
+      ? candidate['echoAutoAdjustKoch']
+      : fallback.echoAutoAdjustKoch;
   partialResult.linkCharWpm = typeof candidate['linkCharWpm'] === 'boolean' ? candidate['linkCharWpm'] : fallback.linkCharWpm;
   partialResult.linkEffectiveWpm = typeof candidate['linkEffectiveWpm'] === 'boolean' ? candidate['linkEffectiveWpm'] : fallback.linkEffectiveWpm;
   partialResult.linkGroupSize = typeof candidate['linkGroupSize'] === 'boolean' ? candidate['linkGroupSize'] : fallback.linkGroupSize;

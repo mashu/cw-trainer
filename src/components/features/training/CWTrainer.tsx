@@ -58,6 +58,7 @@ export function CWTrainer(): JSX.Element {
   const echoTraining = useEchoTrainingSession({
     settings, sessions: sessions ?? [],
     saveSession: saveSession as (input: Record<string, unknown>) => Promise<SessionResult[]>,
+    setTrainingSettingsState,
     showToast,
   });
 
