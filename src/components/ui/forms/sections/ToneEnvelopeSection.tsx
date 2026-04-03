@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
-import { useNumberInputHelpers } from '@/hooks/useNumberInput';
+import { useNumberField } from '@/hooks/useNumberField';
 import { playMorseCodeControlled } from '@/lib/morseAudio';
 
 import { LinkedRangeInput } from '../LinkedRangeInput';
@@ -20,11 +20,24 @@ export function ToneEnvelopeSection({
   setSettings,
   onSaveSettings,
 }: ToneEnvelopeSectionProps): JSX.Element {
-  const { handleNumberInputChange, handleNumberInputBlur, handleSpinButtonClick } =
-    useNumberInputHelpers(onSaveSettings);
+  const sideToneMinField = useNumberField(settings.sideToneMin, {
+    min: 100,
+    max: 2000,
+    step: 1,
+    fieldName: 'sideToneMin',
+    onChange: (n) => setSettings((prev) => ({ ...prev, sideToneMin: n })),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
 
-  const [sideToneMinInput, setSideToneMinInput] = useState<string>(String(settings.sideToneMin));
-  const [sideToneMaxInput, setSideToneMaxInput] = useState<string>(String(settings.sideToneMax));
+  const sideToneMaxField = useNumberField(settings.sideToneMax, {
+    min: 100,
+    max: 2000,
+    step: 1,
+    fieldName: 'sideToneMax',
+    onChange: (n) => setSettings((prev) => ({ ...prev, sideToneMax: n })),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
   const [volumeMinInput, setVolumeMinInput] = useState<string>(String(settings.volumeMin ?? 1));
   const [volumeMaxInput, setVolumeMaxInput] = useState<string>(String(settings.volumeMax ?? 1));
   const [showToneHelp, setShowToneHelp] = useState(false);
@@ -34,8 +47,6 @@ export function ToneEnvelopeSection({
   const currentStopRef = useRef<(() => void) | null>(null);
   const testToneTimeoutRef = useRef<number | undefined>(undefined);
 
-  useEffect(() => { setSideToneMinInput(String(settings.sideToneMin)); }, [settings.sideToneMin]);
-  useEffect(() => { setSideToneMaxInput(String(settings.sideToneMax)); }, [settings.sideToneMax]);
   useEffect(() => { setVolumeMinInput(String(clampVolume(settings.volumeMin ?? 1))); }, [settings.volumeMin]);
   useEffect(() => { setVolumeMaxInput(String(clampVolume(settings.volumeMax ?? 1))); }, [settings.volumeMax]);
 
@@ -88,8 +99,6 @@ export function ToneEnvelopeSection({
 
   const handleResetToneEnvelope = useCallback((): void => {
     setSettings({ ...settings, sideToneMin: 600, sideToneMax: 600, steepness: 5, envelopeSmoothing: 0 });
-    setSideToneMinInput('600');
-    setSideToneMaxInput('600');
   }, [settings, setSettings]);
 
   const previewCharWpm = Math.max(1, settings.charWpmMin || settings.effectiveWpmMin || 20);
@@ -130,19 +139,11 @@ export function ToneEnvelopeSection({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tone Min (Hz)</label>
-            <input type="number" min={100} max={2000} step={1} value={sideToneMinInput}
-              onMouseUp={(e) => { if ((e.target as HTMLInputElement) === document.activeElement) handleSpinButtonClick('sideToneMin'); }}
-              onChange={(e) => handleNumberInputChange(e.target.value, setSideToneMinInput, 'sideToneMin', (n) => !isNaN(n) && n >= 100 && n <= 2000, (n) => setSettings({ ...settings, sideToneMin: Math.max(100, Math.min(2000, Math.floor(n))) }))}
-              onBlur={(e) => handleNumberInputBlur(e.target.value, setSideToneMinInput, (n) => !isNaN(n) && n >= 100 && n <= 2000, (n) => setSettings((prev) => ({ ...prev, sideToneMin: Math.max(100, Math.min(2000, Math.floor(n))) })), settings.sideToneMin)}
-              className="w-full px-3 py-2 border border-gray-300 rounded" />
+            <input {...sideToneMinField.inputProps} className="w-full px-3 py-2 border border-gray-300 rounded" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tone Max (Hz)</label>
-            <input type="number" min={100} max={2000} step={1} value={sideToneMaxInput}
-              onMouseUp={(e) => { if ((e.target as HTMLInputElement) === document.activeElement) handleSpinButtonClick('sideToneMax'); }}
-              onChange={(e) => handleNumberInputChange(e.target.value, setSideToneMaxInput, 'sideToneMax', (n) => !isNaN(n) && n >= 100 && n <= 2000, (n) => setSettings({ ...settings, sideToneMax: Math.max(100, Math.min(2000, Math.floor(n))) }))}
-              onBlur={(e) => handleNumberInputBlur(e.target.value, setSideToneMaxInput, (n) => !isNaN(n) && n >= 100 && n <= 2000, (n) => setSettings((prev) => ({ ...prev, sideToneMax: Math.max(100, Math.min(2000, Math.floor(n))) })), settings.sideToneMax)}
-              className="w-full px-3 py-2 border border-gray-300 rounded" />
+            <input {...sideToneMaxField.inputProps} className="w-full px-3 py-2 border border-gray-300 rounded" />
             <p className="text-xs text-gray-500 mt-1">Equal min/max = fixed tone.</p>
           </div>
         </div>

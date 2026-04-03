@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
-import { useNumberInputHelpers } from '@/hooks/useNumberInput';
+import { useNumberField } from '@/hooks/useNumberField';
 
 import type { FormTrainingSettings } from './TrainingSettingsForm';
 
@@ -36,8 +36,6 @@ function AutoAdjustProfileBlock({
   readonly onSaveSettings?: () => void;
 }): JSX.Element {
   const isEcho = variant === 'echo';
-  const { handleNumberInputChange, handleNumberInputBlur, handleSpinButtonClick } =
-    useNumberInputHelpers(onSaveSettings);
 
   const enabled = isEcho ? Boolean(settings.echoAutoAdjustKoch) : Boolean(settings.autoAdjustKoch);
   const threshold = isEcho
@@ -50,22 +48,6 @@ function AutoAdjustProfileBlock({
     ? (settings.echoAutoAdjustAboveThresholdCount ?? 0)
     : (settings.autoAdjustAboveThresholdCount ?? 0);
 
-  const [thresholdInput, setThresholdInput] = useState<string>(String(threshold));
-  const [belowInput, setBelowInput] = useState<string>(String(belowCount));
-  const [aboveInput, setAboveInput] = useState<string>(String(aboveCount));
-
-  useEffect(() => {
-    setThresholdInput(String(threshold));
-  }, [threshold]);
-
-  useEffect(() => {
-    setBelowInput(String(belowCount));
-  }, [belowCount]);
-
-  useEffect(() => {
-    setAboveInput(String(aboveCount));
-  }, [aboveCount]);
-
   const thresholdField = isEcho ? 'echoAutoAdjustThreshold' : 'autoAdjustThreshold';
   const belowField = isEcho
     ? 'echoAutoAdjustBelowThresholdCount'
@@ -75,6 +57,46 @@ function AutoAdjustProfileBlock({
     : 'autoAdjustAboveThresholdCount';
 
   const checkboxId = isEcho ? 'echoAutoAdjustKoch' : 'autoAdjustKoch';
+
+  const thresholdInput = useNumberField(threshold, {
+    min: 0,
+    max: 100,
+    step: 1,
+    fieldName: thresholdField,
+    onChange: (n) =>
+      setSettings((prev) =>
+        isEcho ? { ...prev, echoAutoAdjustThreshold: n } : { ...prev, autoAdjustThreshold: n },
+      ),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
+  const belowInput = useNumberField(belowCount, {
+    min: 0,
+    max: 20,
+    step: 1,
+    fieldName: belowField,
+    onChange: (n) =>
+      setSettings((prev) =>
+        isEcho
+          ? { ...prev, echoAutoAdjustBelowThresholdCount: n }
+          : { ...prev, autoAdjustBelowThresholdCount: n },
+      ),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
+  const aboveInput = useNumberField(aboveCount, {
+    min: 0,
+    max: 20,
+    step: 1,
+    fieldName: aboveField,
+    onChange: (n) =>
+      setSettings((prev) =>
+        isEcho
+          ? { ...prev, echoAutoAdjustAboveThresholdCount: n }
+          : { ...prev, autoAdjustAboveThresholdCount: n },
+      ),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
 
   return (
     <div
@@ -130,198 +152,15 @@ function AutoAdjustProfileBlock({
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Threshold (%)</label>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step={1}
-              value={thresholdInput}
-              onMouseUp={(e) => {
-                const target = e.target as HTMLInputElement;
-                if (target === document.activeElement) {
-                  handleSpinButtonClick(thresholdField);
-                }
-              }}
-              onChange={(event) => {
-                handleNumberInputChange(
-                  event.target.value,
-                  setThresholdInput,
-                  thresholdField,
-                  (num) => !isNaN(num) && num >= 0 && num <= 100,
-                  (num) =>
-                    setSettings(
-                      isEcho
-                        ? {
-                            ...settings,
-                            echoAutoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
-                          }
-                        : {
-                            ...settings,
-                            autoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
-                          },
-                    ),
-                );
-              }}
-              onBlur={(event) => {
-                handleNumberInputBlur(
-                  event.target.value,
-                  setThresholdInput,
-                  (num) => !isNaN(num) && num >= 0 && num <= 100,
-                  (num) =>
-                    setSettings((prev) =>
-                      isEcho
-                        ? {
-                            ...prev,
-                            echoAutoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
-                          }
-                        : {
-                            ...prev,
-                            autoAdjustThreshold: Math.max(0, Math.min(100, Math.floor(num))),
-                          },
-                    ),
-                  threshold,
-                );
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-            />
+            <input {...thresholdInput.inputProps} className="w-full px-3 py-2 border border-gray-300 rounded" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">To decrease</label>
-            <input
-              type="number"
-              min={0}
-              max={20}
-              step={1}
-              value={belowInput}
-              onMouseUp={(e) => {
-                const target = e.target as HTMLInputElement;
-                if (target === document.activeElement) {
-                  handleSpinButtonClick(belowField);
-                }
-              }}
-              onChange={(event) => {
-                handleNumberInputChange(
-                  event.target.value,
-                  setBelowInput,
-                  belowField,
-                  (num) => !isNaN(num) && num >= 0 && num <= 20,
-                  (num) =>
-                    setSettings(
-                      isEcho
-                        ? {
-                            ...settings,
-                            echoAutoAdjustBelowThresholdCount: Math.max(
-                              0,
-                              Math.min(20, Math.floor(num)),
-                            ),
-                          }
-                        : {
-                            ...settings,
-                            autoAdjustBelowThresholdCount: Math.max(
-                              0,
-                              Math.min(20, Math.floor(num)),
-                            ),
-                          },
-                    ),
-                );
-              }}
-              onBlur={(event) => {
-                handleNumberInputBlur(
-                  event.target.value,
-                  setBelowInput,
-                  (num) => !isNaN(num) && num >= 0 && num <= 20,
-                  (num) =>
-                    setSettings((prev) =>
-                      isEcho
-                        ? {
-                            ...prev,
-                            echoAutoAdjustBelowThresholdCount: Math.max(
-                              0,
-                              Math.min(20, Math.floor(num)),
-                            ),
-                          }
-                        : {
-                            ...prev,
-                            autoAdjustBelowThresholdCount: Math.max(
-                              0,
-                              Math.min(20, Math.floor(num)),
-                            ),
-                          },
-                    ),
-                  belowCount,
-                );
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-            />
+            <input {...belowInput.inputProps} className="w-full px-3 py-2 border border-gray-300 rounded" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">To increase</label>
-            <input
-              type="number"
-              min={0}
-              max={20}
-              step={1}
-              value={aboveInput}
-              onMouseUp={(e) => {
-                const target = e.target as HTMLInputElement;
-                if (target === document.activeElement) {
-                  handleSpinButtonClick(aboveField);
-                }
-              }}
-              onChange={(event) => {
-                handleNumberInputChange(
-                  event.target.value,
-                  setAboveInput,
-                  aboveField,
-                  (num) => !isNaN(num) && num >= 0 && num <= 20,
-                  (num) =>
-                    setSettings(
-                      isEcho
-                        ? {
-                            ...settings,
-                            echoAutoAdjustAboveThresholdCount: Math.max(
-                              0,
-                              Math.min(20, Math.floor(num)),
-                            ),
-                          }
-                        : {
-                            ...settings,
-                            autoAdjustAboveThresholdCount: Math.max(
-                              0,
-                              Math.min(20, Math.floor(num)),
-                            ),
-                          },
-                    ),
-                );
-              }}
-              onBlur={(event) => {
-                handleNumberInputBlur(
-                  event.target.value,
-                  setAboveInput,
-                  (num) => !isNaN(num) && num >= 0 && num <= 20,
-                  (num) =>
-                    setSettings((prev) =>
-                      isEcho
-                        ? {
-                            ...prev,
-                            echoAutoAdjustAboveThresholdCount: Math.max(
-                              0,
-                              Math.min(20, Math.floor(num)),
-                            ),
-                          }
-                        : {
-                            ...prev,
-                            autoAdjustAboveThresholdCount: Math.max(
-                              0,
-                              Math.min(20, Math.floor(num)),
-                            ),
-                          },
-                    ),
-                  aboveCount,
-                );
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-            />
+            <input {...aboveInput.inputProps} className="w-full px-3 py-2 border border-gray-300 rounded" />
           </div>
         </div>
       )}

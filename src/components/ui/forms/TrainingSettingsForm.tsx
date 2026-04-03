@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 
-import { useNumberInputHelpers } from '@/hooks/useNumberInput';
+import { useNumberField } from '@/hooks/useNumberField';
 import { LCWO_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
 import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
 import { computeCharPool } from '@/lib/trainingUtils';
@@ -70,83 +70,113 @@ export function TrainingSettingsForm({
   setSettings,
   onSaveSettings,
 }: TrainingSettingsFormProps): JSX.Element {
-  // Local state for all number inputs to allow empty/invalid values while typing
+  const charMode = settings.charSetMode || 'koch';
+
+  const currentSequence = useMemo(() => {
+    if (charMode === 'koch' || charMode === 'mixed') {
+      return Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+        ? settings.customSequence
+        : LCWO_SEQUENCE;
+    }
+    return [];
+  }, [charMode, settings.customSequence]);
+
+  const kochLevelMax = useMemo(() => {
+    if (charMode === 'koch' || charMode === 'mixed') {
+      return Math.max(1, currentSequence.length - 1);
+    }
+    return 40;
+  }, [charMode, currentSequence.length]);
+
   const [charWpmMinInput, setCharWpmMinInput] = useState<string>(String(settings.charWpmMin));
   const [charWpmMaxInput, setCharWpmMaxInput] = useState<string>(String(settings.charWpmMax));
   const [effectiveWpmMinInput, setEffectiveWpmMinInput] = useState<string>(String(settings.effectiveWpmMin));
   const [effectiveWpmMaxInput, setEffectiveWpmMaxInput] = useState<string>(String(settings.effectiveWpmMax));
-  const [numGroupsInput, setNumGroupsInput] = useState<string>(String(settings.numGroups));
-  const [extraWordSpaceInput, setExtraWordSpaceInput] = useState<string>(String(settings.extraWordSpaceMultiplier ?? 1));
-  const [groupTimeoutInput, setGroupTimeoutInput] = useState<string>(String(settings.groupTimeout));
   const [minGroupSizeInput, setMinGroupSizeInput] = useState<string>(String(settings.minGroupSize));
   const [maxGroupSizeInput, setMaxGroupSizeInput] = useState<string>(String(settings.maxGroupSize));
-  const [kochLevelInput, setKochLevelInput] = useState<string>(String(settings.kochLevel));
-  
-  const { handleNumberInputChange, handleNumberInputBlur, handleSpinButtonClick } = useNumberInputHelpers(onSaveSettings);
 
-  
-  
-  // Sync local state when settings change externally
+  const [showCharacterSetHelp, setShowCharacterSetHelp] = useState(false);
+  const [showSpeedGroupsHelp, setShowSpeedGroupsHelp] = useState(false);
+  const [showAutoAdjustHelp, setShowAutoAdjustHelp] = useState(false);
+  const [showSequenceEditor, setShowSequenceEditor] = useState(false);
+
+  const kochLevelField = useNumberField(settings.kochLevel, {
+    min: 1,
+    max: kochLevelMax,
+    step: 1,
+    fieldName: 'kochLevel',
+    onChange: (n) => setSettings((prev) => ({ ...prev, kochLevel: n })),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
+  const digitsLevelField = useNumberField(settings.digitsLevel ?? 10, {
+    min: 1,
+    max: 10,
+    step: 1,
+    fieldName: 'digitsLevel',
+    onChange: (n) => setSettings((prev) => ({ ...prev, digitsLevel: n })),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
+  const mixedLettersPercentField = useNumberField(settings.mixedLettersPercent ?? 70, {
+    min: 0,
+    max: 100,
+    step: 1,
+    fieldName: 'mixedLettersPercent',
+    onChange: (n) => setSettings((prev) => ({ ...prev, mixedLettersPercent: n })),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
+  const numGroupsField = useNumberField(settings.numGroups, {
+    min: 1,
+    max: 10_000,
+    step: 1,
+    fieldName: 'numGroups',
+    onChange: (n) => setSettings((prev) => ({ ...prev, numGroups: n })),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
+  const extraWordSpaceField = useNumberField(settings.extraWordSpaceMultiplier ?? 1, {
+    min: 0.1,
+    max: 100,
+    step: 0.1,
+    fieldName: 'extraWordSpaceMultiplier',
+    onChange: (n) => setSettings((prev) => ({ ...prev, extraWordSpaceMultiplier: n })),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
+  const groupTimeoutField = useNumberField(settings.groupTimeout, {
+    min: 0,
+    max: 600,
+    step: 0.1,
+    fieldName: 'groupTimeout',
+    onChange: (n) => setSettings((prev) => ({ ...prev, groupTimeout: n })),
+    ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
+  });
+
   useEffect(() => {
     setCharWpmMinInput(String(settings.charWpmMin));
   }, [settings.charWpmMin]);
-  
+
   useEffect(() => {
     setCharWpmMaxInput(String(settings.charWpmMax));
   }, [settings.charWpmMax]);
-  
+
   useEffect(() => {
     setEffectiveWpmMinInput(String(settings.effectiveWpmMin));
   }, [settings.effectiveWpmMin]);
-  
+
   useEffect(() => {
     setEffectiveWpmMaxInput(String(settings.effectiveWpmMax));
   }, [settings.effectiveWpmMax]);
-  
-  useEffect(() => {
-    setNumGroupsInput(String(settings.numGroups));
-  }, [settings.numGroups]);
-  
-  useEffect(() => {
-    setExtraWordSpaceInput(String(settings.extraWordSpaceMultiplier ?? 1));
-  }, [settings.extraWordSpaceMultiplier]);
-  
-  useEffect(() => {
-    setGroupTimeoutInput(String(settings.groupTimeout));
-  }, [settings.groupTimeout]);
-  
+
   useEffect(() => {
     setMinGroupSizeInput(String(settings.minGroupSize));
   }, [settings.minGroupSize]);
-  
+
   useEffect(() => {
     setMaxGroupSizeInput(String(settings.maxGroupSize));
   }, [settings.maxGroupSize]);
-  
-  
-
-  
-  useEffect(() => {
-    setKochLevelInput(String(settings.kochLevel));
-  }, [settings.kochLevel]);
-
-  const [digitsLevelInput, setDigitsLevelInput] = useState<string>(String(settings.digitsLevel ?? 10));
-  useEffect(() => {
-    setDigitsLevelInput(String(Math.max(1, Math.min(10, settings.digitsLevel ?? 10))));
-  }, [settings.digitsLevel]);
-
-  const [mixedLettersPercentInput, setMixedLettersPercentInput] = useState<string>(String(settings.mixedLettersPercent ?? 70));
-  useEffect(() => {
-    setMixedLettersPercentInput(String(Math.max(0, Math.min(100, settings.mixedLettersPercent ?? 70))));
-  }, [settings.mixedLettersPercent]);
-
-  
-  
-  
-  
-  
-
-  const charMode = settings.charSetMode || 'koch';
   const digitsAsc = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
   // Filter out prosigns (characters with < > format) - only single characters allowed
   const allChars = Object.keys(MORSE_CODE).filter(char => {
@@ -166,21 +196,6 @@ export function TrainingSettingsForm({
     ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
     ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
   }), [settings.kochLevel, settings.charSetMode, settings.digitsLevel, settings.mixedLettersPercent, settings.customSet, settings.customSequence, settings.slidingWindowStart, settings.slidingWindowEnd]);
-  
-  // Get current sequence for level calculation (Koch and Mixed both use sequence)
-  const currentSequence = useMemo(() => {
-    if (charMode === 'koch' || charMode === 'mixed') {
-      return Array.isArray(settings.customSequence) && settings.customSequence.length > 0
-        ? settings.customSequence
-        : LCWO_SEQUENCE;
-    }
-    return [];
-  }, [charMode, settings.customSequence]);
-
-  const [showCharacterSetHelp, setShowCharacterSetHelp] = useState(false);
-  const [showSpeedGroupsHelp, setShowSpeedGroupsHelp] = useState(false);
-  const [showAutoAdjustHelp, setShowAutoAdjustHelp] = useState(false);
-  const [showSequenceEditor, setShowSequenceEditor] = useState(false);
 
   // Detect which preset matches the current sequence
   const currentPresetId = useMemo(() => {
@@ -323,7 +338,6 @@ export function TrainingSettingsForm({
                   </div>
                   {/* Unified: Level (number input for accuracy) + Practice (dropdown) */}
                   {((): JSX.Element => {
-                    const maxLevel = Math.max(1, currentSequence.length - 1);
                     const nLetters = Math.max(2, Math.min(settings.kochLevel + 1, currentSequence.length));
                     const start = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, nLetters));
                     const end = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, nLetters));
@@ -341,33 +355,7 @@ export function TrainingSettingsForm({
                               Level
                             </label>
                             <input
-                              type="number"
-                              min={1}
-                              max={maxLevel}
-                              value={kochLevelInput}
-                              onFocus={(e) => e.target.select()}
-                              onMouseUp={(e) => {
-                                const target = e.target as HTMLInputElement;
-                                if (target === document.activeElement) handleSpinButtonClick('kochLevel');
-                              }}
-                              onChange={(event) => {
-                                handleNumberInputChange(
-                                  event.target.value,
-                                  setKochLevelInput,
-                                  'kochLevel',
-                                  (num) => !isNaN(num) && num >= 1 && num <= maxLevel,
-                                  (num) => setSettings({ ...settings, kochLevel: Math.max(1, Math.min(maxLevel, Math.floor(num))) })
-                                );
-                              }}
-                              onBlur={(event) => {
-                                handleNumberInputBlur(
-                                  event.target.value,
-                                  setKochLevelInput,
-                                  (num) => !isNaN(num) && num >= 1 && num <= maxLevel,
-                                  (num) => setSettings((prev) => ({ ...prev, kochLevel: Math.max(1, Math.min(maxLevel, Math.floor(num))) })),
-                                  settings.kochLevel
-                                );
-                              }}
+                              {...kochLevelField.inputProps}
                               className="w-full px-3 py-2 border border-gray-300 rounded"
                             />
                             <p className="text-xs text-gray-500 mt-1">
@@ -435,33 +423,7 @@ export function TrainingSettingsForm({
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Level</label>
                           <input
-                            type="number"
-                            min={1}
-                            max={maxDigits}
-                            value={digitsLevelInput}
-                            onFocus={(e) => e.target.select()}
-                            onMouseUp={(e) => {
-                              const target = e.target as HTMLInputElement;
-                              if (target === document.activeElement) handleSpinButtonClick('digitsLevel');
-                            }}
-                            onChange={(event) => {
-                              handleNumberInputChange(
-                                event.target.value,
-                                setDigitsLevelInput,
-                                'digitsLevel',
-                                (num) => !isNaN(num) && num >= 1 && num <= maxDigits,
-                                (num) => setSettings({ ...settings, digitsLevel: Math.max(1, Math.min(maxDigits, Math.floor(num))) })
-                              );
-                            }}
-                            onBlur={(event) => {
-                              handleNumberInputBlur(
-                                event.target.value,
-                                setDigitsLevelInput,
-                                (num) => !isNaN(num) && num >= 1 && num <= maxDigits,
-                                (num) => setSettings((prev) => ({ ...prev, digitsLevel: Math.max(1, Math.min(maxDigits, Math.floor(num))) })),
-                                settings.digitsLevel ?? 10
-                              );
-                            }}
+                            {...digitsLevelField.inputProps}
                             className="w-full px-3 py-2 border border-gray-300 rounded"
                           />
                           <p className="text-xs text-gray-500 mt-1">{nDigits} digits</p>
@@ -492,7 +454,6 @@ export function TrainingSettingsForm({
               )}
               {charMode === 'mixed' && (
                 ((): JSX.Element => {
-                  const maxLevel = Math.max(1, currentSequence.length - 1);
                   const maxDigits = 10;
                   const nLetters = Math.max(2, Math.min(settings.kochLevel + 1, currentSequence.length));
                   return (
@@ -544,33 +505,7 @@ export function TrainingSettingsForm({
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Alphabet level</label>
                           <input
-                            type="number"
-                            min={1}
-                            max={maxLevel}
-                            value={kochLevelInput}
-                            onFocus={(e) => e.target.select()}
-                            onMouseUp={(e) => {
-                              const target = e.target as HTMLInputElement;
-                              if (target === document.activeElement) handleSpinButtonClick('kochLevel');
-                            }}
-                            onChange={(event) => {
-                              handleNumberInputChange(
-                                event.target.value,
-                                setKochLevelInput,
-                                'kochLevel',
-                                (num) => !isNaN(num) && num >= 1 && num <= maxLevel,
-                                (num) => setSettings({ ...settings, kochLevel: Math.max(1, Math.min(maxLevel, Math.floor(num))) })
-                              );
-                            }}
-                            onBlur={(event) => {
-                              handleNumberInputBlur(
-                                event.target.value,
-                                setKochLevelInput,
-                                (num) => !isNaN(num) && num >= 1 && num <= maxLevel,
-                                (num) => setSettings((prev) => ({ ...prev, kochLevel: Math.max(1, Math.min(maxLevel, Math.floor(num))) })),
-                                settings.kochLevel
-                              );
-                            }}
+                            {...kochLevelField.inputProps}
                             className="w-full px-3 py-2 border border-gray-300 rounded"
                           />
                           <p className="text-xs text-gray-500 mt-1">{nLetters} letters in pool</p>
@@ -578,33 +513,7 @@ export function TrainingSettingsForm({
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Digits level</label>
                           <input
-                            type="number"
-                            min={1}
-                            max={maxDigits}
-                            value={digitsLevelInput}
-                            onFocus={(e) => e.target.select()}
-                            onMouseUp={(e) => {
-                              const target = e.target as HTMLInputElement;
-                              if (target === document.activeElement) handleSpinButtonClick('digitsLevel');
-                            }}
-                            onChange={(event) => {
-                              handleNumberInputChange(
-                                event.target.value,
-                                setDigitsLevelInput,
-                                'digitsLevel',
-                                (num) => !isNaN(num) && num >= 1 && num <= maxDigits,
-                                (num) => setSettings({ ...settings, digitsLevel: Math.max(1, Math.min(maxDigits, Math.floor(num))) })
-                              );
-                            }}
-                            onBlur={(event) => {
-                              handleNumberInputBlur(
-                                event.target.value,
-                                setDigitsLevelInput,
-                                (num) => !isNaN(num) && num >= 1 && num <= maxDigits,
-                                (num) => setSettings((prev) => ({ ...prev, digitsLevel: Math.max(1, Math.min(maxDigits, Math.floor(num))) })),
-                                settings.digitsLevel ?? 10
-                              );
-                            }}
+                            {...digitsLevelField.inputProps}
                             className="w-full px-3 py-2 border border-gray-300 rounded"
                           />
                           <p className="text-xs text-gray-500 mt-1">
@@ -615,29 +524,7 @@ export function TrainingSettingsForm({
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Letters % (draw bias)</label>
                         <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={mixedLettersPercentInput}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(event) => {
-                            handleNumberInputChange(
-                              event.target.value,
-                              setMixedLettersPercentInput,
-                              'mixedLettersPercent',
-                              (num) => !isNaN(num) && num >= 0 && num <= 100,
-                              (num) => setSettings({ ...settings, mixedLettersPercent: Math.max(0, Math.min(100, Math.floor(num))) })
-                            );
-                          }}
-                          onBlur={(event) => {
-                            handleNumberInputBlur(
-                              event.target.value,
-                              setMixedLettersPercentInput,
-                              (num) => !isNaN(num) && num >= 0 && num <= 100,
-                              (num) => setSettings((prev) => ({ ...prev, mixedLettersPercent: Math.max(0, Math.min(100, Math.floor(num))) })),
-                              settings.mixedLettersPercent ?? 70
-                            );
-                          }}
+                          {...mixedLettersPercentField.inputProps}
                           className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded"
                         />
                       </div>
@@ -723,33 +610,7 @@ export function TrainingSettingsForm({
                 Number of Groups
               </label>
               <input
-                type="number"
-                min={1}
-                value={numGroupsInput}
-                onMouseUp={(e) => {
-                  const target = e.target as HTMLInputElement;
-                  if (target === document.activeElement) {
-                    handleSpinButtonClick('numGroups');
-                  }
-                }}
-                onChange={(event) => {
-                  handleNumberInputChange(
-                    event.target.value,
-                    setNumGroupsInput,
-                    'numGroups',
-                    (num) => !isNaN(num) && num > 0,
-                    (num) => setSettings({ ...settings, numGroups: Math.max(1, Math.floor(num)) })
-                  );
-                }}
-                onBlur={(event) => {
-                  handleNumberInputBlur(
-                    event.target.value,
-                    setNumGroupsInput,
-                    (num) => !isNaN(num) && num > 0,
-                    (num) => setSettings((prev) => ({ ...prev, numGroups: Math.max(1, Math.floor(num)) })),
-                    settings.numGroups
-                  );
-                }}
+                {...numGroupsField.inputProps}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
             </div>
@@ -955,34 +816,7 @@ export function TrainingSettingsForm({
                 Extra Word Spacing
               </label>
               <input
-                type="number"
-                min={0.1}
-                step={0.1}
-                value={extraWordSpaceInput}
-                onMouseUp={(e) => {
-                  const target = e.target as HTMLInputElement;
-                  if (target === document.activeElement) {
-                    handleSpinButtonClick('extraWordSpaceMultiplier');
-                  }
-                }}
-                onChange={(event) => {
-                  handleNumberInputChange(
-                    event.target.value,
-                    setExtraWordSpaceInput,
-                    'extraWordSpaceMultiplier',
-                    (num) => !isNaN(num) && num > 0,
-                    (num) => setSettings({ ...settings, extraWordSpaceMultiplier: num })
-                  );
-                }}
-                onBlur={(event) => {
-                  handleNumberInputBlur(
-                    event.target.value,
-                    setExtraWordSpaceInput,
-                    (num) => !isNaN(num) && num > 0,
-                    (num) => setSettings((prev) => ({ ...prev, extraWordSpaceMultiplier: num })),
-                    settings.extraWordSpaceMultiplier ?? 1
-                  );
-                }}
+                {...extraWordSpaceField.inputProps}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
             </div>
@@ -991,34 +825,7 @@ export function TrainingSettingsForm({
                 Group Timeout
               </label>
               <input
-                type="number"
-                min={0}
-                step={0.1}
-                value={groupTimeoutInput}
-                onMouseUp={(e) => {
-                  const target = e.target as HTMLInputElement;
-                  if (target === document.activeElement) {
-                    handleSpinButtonClick('groupTimeout');
-                  }
-                }}
-                onChange={(event) => {
-                  handleNumberInputChange(
-                    event.target.value,
-                    setGroupTimeoutInput,
-                    'groupTimeout',
-                    (num) => !isNaN(num) && num >= 0,
-                    (num) => setSettings({ ...settings, groupTimeout: Math.max(0, num) })
-                  );
-                }}
-                onBlur={(event) => {
-                  handleNumberInputBlur(
-                    event.target.value,
-                    setGroupTimeoutInput,
-                    (num) => !isNaN(num) && num >= 0,
-                    (num) => setSettings((prev) => ({ ...prev, groupTimeout: Math.max(0, num) })),
-                    settings.groupTimeout
-                  );
-                }}
+                {...groupTimeoutField.inputProps}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
             </div>
