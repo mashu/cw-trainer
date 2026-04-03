@@ -37,6 +37,7 @@ const toFirebaseUser = (user: AppUser | null): { uid: string; email: string } | 
   };
 };
 
+/** Delegates to `lib/sessionPersistence` (AppUser → Firebase user shape). Unit tests are awkward under Next/Jest + `@/` + root `lib/`; behaviour is covered via session service / integration flows. */
 export class FirebaseSessionRepository implements SessionRepository {
   async getAll(context: SessionRepositoryContext): Promise<SessionResult[]> {
     const firebaseUser = toFirebaseUser(context.user);
