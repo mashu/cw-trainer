@@ -32,6 +32,16 @@ interface AppStoreProviderProps {
 
 type AppStoreApi = StoreApi<AppStore>;
 
+type TriggerLoadsOptions = {
+  /**
+   * When true, only sessions (and ICR) reload — not training settings.
+   * Used when a training session ends: `loadTrainingSettings` can race with
+   * in-memory updates (e.g. auto level) that are not persisted yet and would
+   * overwrite the store with stale server data.
+   */
+  readonly skipTrainingSettings?: boolean;
+};
+
 const StoreContext = createContext<AppStoreApi | null>(null);
 
 const buildDefaultServices = (): {
@@ -111,7 +121,7 @@ export function AppStoreProvider({
   // Shared function to trigger data loads with debouncing.
   // Skips running loads while a training session is active to avoid store updates
   // that can cause the UI to flip to the front page and leave audio playing.
-  const triggerLoads = (): void => {
+  const triggerLoads = (options?: TriggerLoadsOptions): void => {
     const store = storeRef.current;
     if (!store) {
       return;
@@ -130,17 +140,27 @@ export function AppStoreProvider({
         loadTimeoutRef.current = null;
         return;
       }
-      console.debug('[app-store-provider] Context changed, triggering loads');
+      const skipTrainingSettings = options?.skipTrainingSettings ?? false;
+      console.debug('[app-store-provider] Context changed, triggering loads', {
+        skipTrainingSettings,
+      });
       const markSyncCompleted = (): void => {
         if (store.getState().context.user) {
           store.setState({ lastSyncCompletedAt: Date.now() });
         }
       };
-      const settingsPromise = state.loadTrainingSettings().then((settings) => {
-        console.debug('[app-store-provider] loadTrainingSettings completed:', { kochLevel: settings.kochLevel });
-      }).catch((error) => {
-        console.error('[app-store-provider] loadTrainingSettings error:', error);
-      });
+      const settingsPromise = skipTrainingSettings
+        ? Promise.resolve()
+        : state
+            .loadTrainingSettings()
+            .then((settings) => {
+              console.debug('[app-store-provider] loadTrainingSettings completed:', {
+                kochLevel: settings.kochLevel,
+              });
+            })
+            .catch((error) => {
+              console.error('[app-store-provider] loadTrainingSettings error:', error);
+            });
       const sessionsPromise = state.loadSessions().catch(() => undefined);
       void state.loadIcrSessions().catch(() => undefined);
       void Promise.all([settingsPromise, sessionsPromise]).then(() => markSyncCompleted());
@@ -199,7 +219,10 @@ export function AppStoreProvider({
       const currentTrainingSessionActive = state.trainingSessionActive;
       if (previousTrainingSessionActive && !currentTrainingSessionActive) {
         console.debug('[app-store-provider] Training session ended, triggering loads');
-        triggerLoads();
+        // Do not reload training settings here: session teardown runs before
+        // processResults/auto-adjust and autosave; a settings load would race
+        // and replace the store with stale remote state.
+        triggerLoads({ skipTrainingSettings: true });
       }
       previousTrainingSessionActive = currentTrainingSessionActive;
     });
