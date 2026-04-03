@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { ActivityHeatmap, type ActivitySessionLite } from '@/components/ui/charts/ActivityHeatmap';
+import { ActivityHeatmap } from '@/components/ui/charts/ActivityHeatmap';
+import type { HeatmapSession } from '@/types';
 
 describe('ActivityHeatmap', (): void => {
-  const mockSessions: ActivitySessionLite[] = [
+  const mockSessions: HeatmapSession[] = [
     { date: '2024-01-15', timestamp: 1705276800000, count: 5 },
     { date: '2024-01-16', timestamp: 1705363200000, count: 10 },
     { date: '2024-01-17', timestamp: 1705449600000, count: 3 },

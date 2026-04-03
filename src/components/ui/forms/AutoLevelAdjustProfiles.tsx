@@ -4,14 +4,14 @@ import React, { useEffect, useState } from 'react';
 
 import { useNumberInputHelpers } from '@/hooks/useNumberInput';
 
-import type { TrainingSettings } from './TrainingSettingsForm';
+import type { FormTrainingSettings } from './TrainingSettingsForm';
 
 type CharMode = 'koch' | 'digits' | 'custom' | 'mixed';
 
 interface AutoLevelAdjustProfilesProps {
-  readonly settings: TrainingSettings;
+  readonly settings: FormTrainingSettings;
   readonly setSettings: (
-    settings: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings),
+    settings: FormTrainingSettings | ((prev: FormTrainingSettings) => FormTrainingSettings),
   ) => void;
   readonly charMode: CharMode;
   readonly onSaveSettings?: () => void;
@@ -28,9 +28,9 @@ function AutoAdjustProfileBlock({
   onSaveSettings,
 }: {
   readonly variant: ProfileVariant;
-  readonly settings: TrainingSettings;
+  readonly settings: FormTrainingSettings;
   readonly setSettings: (
-    settings: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings),
+    settings: FormTrainingSettings | ((prev: FormTrainingSettings) => FormTrainingSettings),
   ) => void;
   readonly charMode: CharMode;
   readonly onSaveSettings?: () => void;

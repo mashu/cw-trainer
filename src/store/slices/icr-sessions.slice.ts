@@ -92,9 +92,6 @@ export const createIcrSessionsSlice = ({
     set({ icrSessionsSaving: true });
 
     try {
-      if (!service.deleteSession) {
-        throw new Error('deleteSession method not available on IcrSessionService');
-      }
       const sessions = await service.deleteSession(timestamp);
       applySuccessState(set, sessions);
       return sessions;

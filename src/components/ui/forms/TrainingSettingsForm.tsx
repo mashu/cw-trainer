@@ -13,7 +13,7 @@ import { LinkedRangeInput } from './LinkedRangeInput';
 import { ToneEnvelopeSection } from './sections/ToneEnvelopeSection';
 import { SequenceEditorModal } from './SequenceEditorModal';
 
-export interface TrainingSettings {
+export interface FormTrainingSettings {
   kochLevel: number;
   charSetMode?: 'koch' | 'digits' | 'custom' | 'mixed';
   digitsLevel?: number;
@@ -58,9 +58,9 @@ export interface TrainingSettings {
 }
 
 interface TrainingSettingsFormProps {
-  settings: TrainingSettings;
+  settings: FormTrainingSettings;
   setSettings: (
-    settings: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings),
+    settings: FormTrainingSettings | ((prev: FormTrainingSettings) => FormTrainingSettings),
   ) => void;
   onSaveSettings?: () => void;
 }
@@ -781,7 +781,7 @@ export function TrainingSettingsForm({
                     const validMin = Math.min(num, currentMax);
                     setCharWpmMinInput(String(validMin));
                     
-                    const updates: Partial<TrainingSettings> = { charWpmMin: validMin };
+                    const updates: Partial<FormTrainingSettings> = { charWpmMin: validMin };
                     if (settings.linkCharWpm) {
                       updates.charWpmMax = validMin;
                       setCharWpmMaxInput(String(validMin));
@@ -810,7 +810,7 @@ export function TrainingSettingsForm({
                     const validMax = Math.max(num, settings.charWpmMin);
                     setCharWpmMaxInput(String(validMax));
                     
-                    const updates: Partial<TrainingSettings> = { charWpmMax: validMax };
+                    const updates: Partial<FormTrainingSettings> = { charWpmMax: validMax };
                     // Propagate to effective WPM max if char-to-effective link is enabled
                     if (settings.linkCharToEffective) {
                       updates.effectiveWpmMax = validMax;
@@ -823,7 +823,7 @@ export function TrainingSettingsForm({
                   }
                 }}
                 onLinkToggle={(linked) => {
-                  const updates: Partial<TrainingSettings> = { linkCharWpm: linked };
+                  const updates: Partial<FormTrainingSettings> = { linkCharWpm: linked };
                   if (linked) {
                     updates.charWpmMax = settings.charWpmMin;
                     setCharWpmMaxInput(String(settings.charWpmMin));
@@ -845,7 +845,7 @@ export function TrainingSettingsForm({
                 type="button"
                 onClick={() => {
                   const newLinked = !settings.linkCharToEffective;
-                  const updates: Partial<TrainingSettings> = { linkCharToEffective: newLinked };
+                  const updates: Partial<FormTrainingSettings> = { linkCharToEffective: newLinked };
                   if (newLinked) {
                     // Sync effective WPM to character WPM when linking
                     updates.effectiveWpmMin = settings.charWpmMin;
@@ -912,7 +912,7 @@ export function TrainingSettingsForm({
                     const validMin = Math.min(num, currentMax);
                     setEffectiveWpmMinInput(String(validMin));
                     
-                    const updates: Partial<TrainingSettings> = { effectiveWpmMin: validMin };
+                    const updates: Partial<FormTrainingSettings> = { effectiveWpmMin: validMin };
                     if (settings.linkEffectiveWpm) {
                       updates.effectiveWpmMax = validMin;
                       setEffectiveWpmMaxInput(String(validMin));
@@ -939,7 +939,7 @@ export function TrainingSettingsForm({
                   }
                 }}
                 onLinkToggle={(linked) => {
-                  const updates: Partial<TrainingSettings> = { linkEffectiveWpm: linked };
+                  const updates: Partial<FormTrainingSettings> = { linkEffectiveWpm: linked };
                   if (linked) {
                     updates.effectiveWpmMax = settings.effectiveWpmMin;
                     setEffectiveWpmMaxInput(String(settings.effectiveWpmMin));
@@ -1050,7 +1050,7 @@ export function TrainingSettingsForm({
                     const validMin = Math.max(1, Math.min(Math.floor(num), currentMax));
                     setMinGroupSizeInput(String(validMin));
                     
-                    const updates: Partial<TrainingSettings> = { minGroupSize: validMin };
+                    const updates: Partial<FormTrainingSettings> = { minGroupSize: validMin };
                     if (settings.linkGroupSize) {
                       updates.maxGroupSize = validMin;
                       setMaxGroupSizeInput(String(validMin));
@@ -1077,7 +1077,7 @@ export function TrainingSettingsForm({
                   }
                 }}
                 onLinkToggle={(linked) => {
-                  const updates: Partial<TrainingSettings> = { linkGroupSize: linked };
+                  const updates: Partial<FormTrainingSettings> = { linkGroupSize: linked };
                   if (linked) {
                     updates.maxGroupSize = settings.minGroupSize;
                     setMaxGroupSizeInput(String(settings.minGroupSize));

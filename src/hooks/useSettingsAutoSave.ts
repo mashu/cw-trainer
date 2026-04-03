@@ -9,6 +9,7 @@ import {
   normalizeTrainingSettings,
   serializeTrainingSettings,
 } from '@/lib/utils/training-settings';
+import { trainingSettingsSchema, type TrainingSettingsInput } from '@/lib/validators';
 import { useAppStore } from '@/store';
 import type { TrainingSettings } from '@/types';
 
@@ -19,9 +20,7 @@ type TimeoutId = number;
 export interface UseSettingsAutoSaveOptions {
   readonly settings: TrainingSettings;
   readonly trainingSettingsStatus: string;
-  readonly saveTrainingSettings: (
-    input: Record<string, unknown>,
-  ) => Promise<TrainingSettings>;
+  readonly saveTrainingSettings: (input: TrainingSettingsInput) => Promise<TrainingSettings>;
   readonly firebaseServices: unknown;
   readonly firebaseUserUid: string | undefined;
   readonly showToast: (t: Toast) => void;
@@ -77,7 +76,7 @@ export function useSettingsAutoSave({
 
       try {
         const toSave = prepareForSave(latestSettingsRef.current);
-        const saved = await saveTrainingSettings(toSave as Record<string, unknown>);
+        const saved = await saveTrainingSettings(toSave);
         lastSavedRef.current = serializeForComparison(saved);
 
         // Don't show save toast during an active session: we already told the user
@@ -131,15 +130,13 @@ function serializeForComparison(s: TrainingSettings): string {
   return serializeTrainingSettings(normalized);
 }
 
-function prepareForSave(
-  s: TrainingSettings,
-): Record<string, unknown> {
+function prepareForSave(s: TrainingSettings): TrainingSettingsInput {
   const { customSet, customSequence, ...rest } = s;
-  return {
+  return trainingSettingsSchema.parse({
     ...rest,
-    customSet: customSet && customSet.length > 0 ? [...customSet] : [],
-    ...(customSequence && customSequence.length > 0
+    customSet: customSet.length > 0 ? [...customSet] : [],
+    ...(customSequence !== undefined && customSequence.length > 0
       ? { customSequence: [...customSequence] }
       : {}),
-  };
+  });
 }

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import {
   playMorseCodeControlled,
   resumeAudioContextFromUserGesture,
@@ -13,7 +13,7 @@ import { computeCharPool } from '@/lib/trainingUtils';
 interface TextPlayerModalProps {
   open: boolean;
   onClose: () => void;
-  settings: TrainingSettings;
+  settings: FormTrainingSettings;
   initialText?: string;
 }
 

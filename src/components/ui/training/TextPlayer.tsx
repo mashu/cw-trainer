@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import {
   playMorseCodeControlled,
   renderMorseToWavBlob,
@@ -13,7 +13,7 @@ import { LCWO_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
 
 interface TextPlayerProps {
-  settings: TrainingSettings;
+  settings: FormTrainingSettings;
   initialText?: string;
 }
 

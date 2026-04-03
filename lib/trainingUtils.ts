@@ -1,8 +1,18 @@
-import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
-
 import { LCWO_SEQUENCE } from './morseConstants';
 
 const DIGITS_SET = new Set<string>(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
+
+/** Character-set inputs for `computeCharPool` (optional fields use defaults inside the function). */
+export type CharPoolSettingsInput = {
+  readonly kochLevel: number;
+  readonly charSetMode?: 'koch' | 'digits' | 'custom' | 'mixed';
+  readonly digitsLevel?: number;
+  readonly mixedLettersPercent?: number;
+  readonly customSet?: string[];
+  readonly customSequence?: string[];
+  readonly slidingWindowStart?: number;
+  readonly slidingWindowEnd?: number;
+};
 
 export interface TrainingSettingsLite {
   kochLevel: number;
@@ -21,9 +31,7 @@ export interface TrainingSettingsLite {
 
 const DIGITS_ASC: string[] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
-export function computeCharPool(
-  settings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'mixedLettersPercent' | 'customSet' | 'customSequence' | 'slidingWindowStart' | 'slidingWindowEnd'>,
-): string[] {
+export function computeCharPool(settings: CharPoolSettingsInput): string[] {
   const mode = settings.charSetMode || 'koch';
   if (mode === 'mixed') {
     // Union of alphabet (Koch) pool and digits pool. In mixed we always use all unlocked letters (no Practice slice).
@@ -106,7 +114,7 @@ export function generateGroup(
   settings: TrainingSettingsLite,
   charWeights?: Readonly<Record<string, number>>,
 ): string {
-  const poolSettings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'mixedLettersPercent' | 'customSet' | 'customSequence' | 'slidingWindowStart' | 'slidingWindowEnd'> = {
+  const poolSettings: CharPoolSettingsInput = {
     kochLevel: settings.kochLevel,
     ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
     ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),

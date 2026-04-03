@@ -3,8 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Sidebar } from '@/components/features/sidebar/Sidebar';
-import { TrainingRouter, type HeatmapSession } from '@/components/features/training/TrainingRouter';
-import type { TrainingSettings as FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import { TrainingRouter } from '@/components/features/training/TrainingRouter';
+import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { SyncStatusIndicator } from '@/components/ui/training/SyncStatusIndicator';
 import { ToastOverlay } from '@/components/ui/training/ToastOverlay';
 import { useAuth, type AuthUserSummary } from '@/hooks/useAuth';
@@ -16,8 +16,8 @@ import { useToast } from '@/hooks/useToast';
 import { useTrainingSession } from '@/hooks/useTrainingSession';
 import { useTrainingSettingsActions, useTrainingSettingsState } from '@/hooks/useTrainingSettings';
 import { formSettingsToStoreUpdate } from '@/lib/formSettingsToStore';
-import { calculateTotalChars } from '@/lib/score';
 import { settingsToSharedAudioProps } from '@/lib/settingsToSharedAudioProps';
+import { mapSessionsToHeatmap } from '@/lib/utils/mapSessionsToHeatmap';
 import { useAppStore } from '@/store';
 import type { SessionResult, TrainingMode, TrainingSettings } from '@/types';
 
@@ -46,18 +46,18 @@ export function CWTrainer(): JSX.Element {
 
   const { saveSettings, latestSettingsRef } = useSettingsAutoSave({
     settings, trainingSettingsStatus,
-    saveTrainingSettings: saveTrainingSettings as (input: Record<string, unknown>) => Promise<TrainingSettings>,
+    saveTrainingSettings,
     firebaseServices, firebaseUserUid: firebaseUser?.uid, showToast,
   });
 
   const training = useTrainingSession({
     settings, sessions: sessions ?? [],
-    saveSession: saveSession as (input: Record<string, unknown>) => Promise<SessionResult[]>,
+    saveSession,
     setTrainingSettingsState, showToast,
   });
   const echoTraining = useEchoTrainingSession({
     settings, sessions: sessions ?? [],
-    saveSession: saveSession as (input: Record<string, unknown>) => Promise<SessionResult[]>,
+    saveSession,
     setTrainingSettingsState,
     showToast,
   });
@@ -181,24 +181,8 @@ export function CWTrainer(): JSX.Element {
   const groupSessions = useMemo(() => sessions.filter((s) => (s.mode ?? 'group') === 'group'), [sessions]);
   const echoSessions = useMemo(() => sessions.filter((s) => s.mode === 'echo'), [sessions]);
 
-  const mapSessionsForHeatmap = useCallback(
-    (items: readonly SessionResult[]): HeatmapSession[] =>
-      items.map((session) => {
-        const count = calculateTotalChars(session.groups || []);
-        const durationMs = session.finishedAt && session.startedAt ? Math.max(0, session.finishedAt - session.startedAt) : undefined;
-        const groupCount = Array.isArray(session.groups) ? session.groups.length : undefined;
-        const accuracy = typeof session.accuracy === 'number' && isFinite(session.accuracy) && session.accuracy >= 0 && session.accuracy <= 1 ? session.accuracy : undefined;
-        return { date: session.date, timestamp: session.timestamp, count,
-          ...(durationMs !== undefined && durationMs > 0 ? { durationMs } : {}),
-          ...(groupCount !== undefined && groupCount > 0 ? { groupCount } : {}),
-          ...(accuracy !== undefined ? { accuracy } : {}),
-        };
-      }),
-    [],
-  );
-
-  const groupHeatmapSessions = useMemo(() => mapSessionsForHeatmap(groupSessions), [groupSessions, mapSessionsForHeatmap]);
-  const echoHeatmapSessions = useMemo(() => mapSessionsForHeatmap(echoSessions), [echoSessions, mapSessionsForHeatmap]);
+  const groupHeatmapSessions = useMemo(() => mapSessionsToHeatmap(groupSessions), [groupSessions]);
+  const echoHeatmapSessions = useMemo(() => mapSessionsToHeatmap(echoSessions), [echoSessions]);
 
   const computeLastAccuracy = useCallback(
     (items: readonly SessionResult[]): number => {

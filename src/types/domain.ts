@@ -1,5 +1,3 @@
-import type { SessionResultDto, TrainingSettingsDto } from './api';
-
 /** Unique identifier for a user. */
 export type UserId = string;
 
@@ -208,6 +206,16 @@ export interface DailyAggregate {
   readonly totalCharacters: number;
 }
 
+/** One session row for activity heatmaps (calendar cells, tooltips). */
+export interface HeatmapSession {
+  readonly date: string;
+  readonly timestamp: number;
+  readonly count: number;
+  readonly durationMs?: number;
+  readonly groupCount?: number;
+  readonly accuracy?: number;
+}
+
 /** Per-character accuracy summary used in analytics views. */
 export interface LetterStatistic {
   readonly character: string;
@@ -216,12 +224,3 @@ export interface LetterStatistic {
   readonly correct: number;
 }
 
-/**
- * Mapping utilities between DTOs and domain models.
- */
-export interface DomainMapper {
-  readonly toDomainSession: (dto: SessionResultDto) => SessionResult;
-  readonly toDtoSession: (result: SessionResult) => SessionResultDto;
-  readonly toDomainSettings: (dto: TrainingSettingsDto) => TrainingSettings;
-  readonly toDtoSettings: (settings: TrainingSettings) => TrainingSettingsDto;
-}

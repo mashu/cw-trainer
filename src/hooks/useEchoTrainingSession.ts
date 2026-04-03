@@ -16,14 +16,13 @@ import {
   isMorsePrefix,
   keyboardInputToMorseSignal,
   type MorseSignal,
-  MORSE_DASH_KEY,
-  MORSE_DOT_KEY,
 } from '@/lib/morseSignals';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import {
   computeTrainingGroupGapMs,
   pickTrainingToneHz,
 } from '@/lib/trainingSessionPlayback';
+import type { SessionResultInput } from '@/lib/validators';
 import { useAppStore } from '@/store';
 import type { SessionResult, TrainingSettings } from '@/types';
 
@@ -51,7 +50,7 @@ export interface EchoSessionResultSummary {
 export interface UseEchoTrainingSessionOptions {
   readonly settings: TrainingSettings;
   readonly sessions: readonly SessionResult[];
-  readonly saveSession: (input: Record<string, unknown>) => Promise<SessionResult[]>;
+  readonly saveSession: (input: SessionResultInput) => Promise<SessionResult[]>;
   readonly setTrainingSettingsState: (
     next: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings),
   ) => void;
@@ -153,8 +152,6 @@ export function useEchoTrainingSession({
     keyerRunningRef.current = false;
     resetKeyerMemory();
   }, [resetKeyerMemory]);
-
-  const echoKeyerMode = settings.echoKeyerMode ?? 'manual';
 
   const settleActiveAttempt = useCallback((result: EchoAttemptResult): void => {
     const attempt = activeAttemptRef.current;
@@ -281,7 +278,8 @@ export function useEchoTrainingSession({
     return 1200 / Math.max(1, Math.round((min + max) / 2));
   }, [settings.charWpmMax, settings.charWpmMin]);
 
-  const chooseNextIambicSignal = useCallback((): MorseSignal | null => {
+  /** Iambic and manual keyboard paddle paths share the same timing and squeeze logic. */
+  const chooseNextPaddleSignal = useCallback((): MorseSignal | null => {
     const ditPressed = paddleStateRef.current['.'];
     const dahPressed = paddleStateRef.current['-'];
     if (ditPressed && dahPressed) {
@@ -299,12 +297,12 @@ export function useEchoTrainingSession({
     return null;
   }, []);
 
-  const runIambicKeyer = useCallback(async (): Promise<void> => {
+  const runPaddleKeyer = useCallback(async (): Promise<void> => {
     if (keyerRunningRef.current || audio.trainingAbortRef.current || !isTrainingRef.current || !activeAttemptRef.current) return;
     keyerRunningRef.current = true;
     try {
       while (!audio.trainingAbortRef.current && isTrainingRef.current && activeAttemptRef.current) {
-        const signal = chooseNextIambicSignal();
+        const signal = chooseNextPaddleSignal();
         if (!signal) break;
         lastKeyerSignalRef.current = signal;
         dispatchSignal(signal);
@@ -312,41 +310,7 @@ export function useEchoTrainingSession({
         await audio.sleepCancelable(signal === '.' ? dotMs * 2 : dotMs * 4, audio.sessionIdRef.current);
       }
     } finally { keyerRunningRef.current = false; }
-  }, [chooseNextIambicSignal, dispatchSignal, keyerDotMs, audio]);
-
-  /** Manual mode: timed dits/dahs from held keys (browser key-repeat is unreliable with preventDefault). */
-  const chooseNextManualSignal = useCallback((): MorseSignal | null => {
-    const ditPressed = paddleStateRef.current['.'];
-    const dahPressed = paddleStateRef.current['-'];
-    if (ditPressed && dahPressed) {
-      const last = lastKeyerSignalRef.current;
-      if (last === '.') return '-';
-      if (last === '-') return '.';
-      return lastPressedPaddleRef.current ?? '.';
-    }
-    if (ditPressed) return '.';
-    if (dahPressed) return '-';
-    if (squeezeLatchedRef.current && lastKeyerSignalRef.current) {
-      squeezeLatchedRef.current = false;
-      return lastKeyerSignalRef.current === '.' ? '-' : '.';
-    }
-    return null;
-  }, []);
-
-  const runManualKeyer = useCallback(async (): Promise<void> => {
-    if (keyerRunningRef.current || audio.trainingAbortRef.current || !isTrainingRef.current || !activeAttemptRef.current) return;
-    keyerRunningRef.current = true;
-    try {
-      while (!audio.trainingAbortRef.current && isTrainingRef.current && activeAttemptRef.current) {
-        const signal = chooseNextManualSignal();
-        if (!signal) break;
-        lastKeyerSignalRef.current = signal;
-        dispatchSignal(signal);
-        const dotMs = keyerDotMs();
-        await audio.sleepCancelable(signal === '.' ? dotMs * 2 : dotMs * 4, audio.sessionIdRef.current);
-      }
-    } finally { keyerRunningRef.current = false; }
-  }, [chooseNextManualSignal, dispatchSignal, keyerDotMs, audio]);
+  }, [chooseNextPaddleSignal, dispatchSignal, keyerDotMs, audio]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -358,8 +322,7 @@ export function useEchoTrainingSession({
       paddleStateRef.current[signal] = true;
       lastPressedPaddleRef.current = signal;
       if (paddleStateRef.current['.'] && paddleStateRef.current['-']) squeezeLatchedRef.current = true;
-      if (echoKeyerMode === 'iambic-b') void runIambicKeyer();
-      else void runManualKeyer();
+      void runPaddleKeyer();
     };
     const handleKeyUp = (event: KeyboardEvent): void => {
       const signal = keyboardInputToMorseSignal({ key: event.key, code: event.code });
@@ -374,15 +337,14 @@ export function useEchoTrainingSession({
       window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('keyup', handleKeyUp, true);
     };
-  }, [echoKeyerMode, runIambicKeyer, runManualKeyer, audio.trainingAbortRef]);
+  }, [runPaddleKeyer, audio.trainingAbortRef]);
 
   useEffect(() => {
     if (currentCharacterState !== 'awaiting' || !isTraining || audio.trainingAbortRef.current) return;
     const paddleDown = paddleStateRef.current['.'] || paddleStateRef.current['-'];
     if (!paddleDown || !activeAttemptRef.current) return;
-    if (echoKeyerMode === 'iambic-b') void runIambicKeyer();
-    else void runManualKeyer();
-  }, [currentCharacterState, isTraining, echoKeyerMode, runIambicKeyer, runManualKeyer, audio.trainingAbortRef]);
+    void runPaddleKeyer();
+  }, [currentCharacterState, isTraining, runPaddleKeyer, audio.trainingAbortRef]);
 
   const waitForAttempt = useCallback(
     (targetCharacter: string, expectedPattern: string, sessionId: number): Promise<EchoAttemptResult> =>
@@ -447,7 +409,7 @@ export function useEchoTrainingSession({
       const currentSettings = settingsRef.current;
 
       try {
-        await currentSaveSession(result as unknown as Record<string, unknown>);
+        await currentSaveSession(result as SessionResultInput);
       } catch (error) {
         currentShowToast({ message: ensureAppError(error).message, type: 'error' });
       }
@@ -601,5 +563,3 @@ export function useEchoTrainingSession({
     showResults, lastSessionResult, startTraining, stopTraining, dismissResults,
   };
 }
-
-export { MORSE_DASH_KEY, MORSE_DOT_KEY };

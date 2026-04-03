@@ -2,11 +2,11 @@
 
 import React from 'react';
 
-import type { TrainingSettings } from './TrainingSettingsForm';
+import type { FormTrainingSettings } from './TrainingSettingsForm';
 
 interface EchoSettingsFormProps {
-  readonly settings: TrainingSettings;
-  readonly setSettings: React.Dispatch<React.SetStateAction<TrainingSettings>>;
+  readonly settings: FormTrainingSettings;
+  readonly setSettings: React.Dispatch<React.SetStateAction<FormTrainingSettings>>;
 }
 
 export function EchoSettingsForm({

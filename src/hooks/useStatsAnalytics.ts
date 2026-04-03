@@ -2,10 +2,9 @@
 
 import { useMemo } from 'react';
 
-import type { ActivitySessionLite } from '@/components/ui/charts/ActivityHeatmap';
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
-import { calculateTotalChars } from '@/lib/score';
-import type { SessionResult } from '@/types';
+import { mapSessionsToHeatmap } from '@/lib/utils/mapSessionsToHeatmap';
+import type { HeatmapSession, SessionResult } from '@/types';
 
 /** Format a session timestamp for display. If not provided, ISO string is used (hydration-safe). */
 export type FormatSessionDate = (timestamp: number) => string;
@@ -79,7 +78,7 @@ export interface SessionFatiguePoint {
 export interface UseStatsAnalyticsResult {
   readonly sessionsSorted: SessionResult[];
   readonly chartData: AccuracyChartPoint[];
-  readonly activitySessions: ActivitySessionLite[];
+  readonly activitySessions: readonly HeatmapSession[];
   readonly timingDailyAgg: TimingDailyAggregate[];
   readonly dayIndexByDate: Record<string, number>;
   readonly dayIndexToLabel: Record<number, string>;
@@ -137,30 +136,7 @@ export function useStatsAnalytics(
     [sessionsSorted, formatSessionDate],
   );
 
-  const activitySessions = useMemo<ActivitySessionLite[]>(
-    () =>
-      sessionsSorted.map((session) => {
-        // Count only valid letters (A-Z, 0-9) from sent strings, not dots/dashes or other characters
-        // Use the same function as calculateTotalChars for consistency
-        const count = calculateTotalChars(session.groups || []);
-        const durationMs = session.finishedAt && session.startedAt 
-          ? Math.max(0, session.finishedAt - session.startedAt)
-          : undefined;
-        const groupCount = Array.isArray(session.groups) ? session.groups.length : undefined;
-        const accuracy = typeof session.accuracy === 'number' && isFinite(session.accuracy) && session.accuracy >= 0 && session.accuracy <= 1
-          ? session.accuracy
-          : undefined;
-        return {
-          date: session.date,
-          timestamp: session.timestamp,
-          count,
-          ...(durationMs !== undefined && durationMs > 0 ? { durationMs } : {}),
-          ...(groupCount !== undefined && groupCount > 0 ? { groupCount } : {}),
-          ...(accuracy !== undefined ? { accuracy } : {}),
-        };
-      }),
-    [sessionsSorted],
-  );
+  const activitySessions = useMemo(() => mapSessionsToHeatmap(sessionsSorted), [sessionsSorted]);
 
   const timingDailyAgg = useMemo<TimingDailyAggregate[]>(() => {
     const daily: Record<string, number[]> = {};

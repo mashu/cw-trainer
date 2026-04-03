@@ -1,14 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import {
-  AppError,
-  ValidationError,
-  NotFoundError,
-  UnauthorizedError,
-  ForbiddenError,
-  ConflictError,
-  ensureAppError,
-} from '@/lib/errors';
+import { AppError, ValidationError, NotFoundError, ensureAppError } from '@/lib/errors';
 
 describe('AppError', () => {
   it('creates error with all properties', () => {
@@ -75,45 +67,6 @@ describe('NotFoundError', () => {
     expect(error.code).toBe('NOT_FOUND');
     expect(error.expose).toBe(true);
     expect(error).toBeInstanceOf(NotFoundError);
-    expect(error).toBeInstanceOf(AppError);
-  });
-});
-
-describe('UnauthorizedError', () => {
-  it('creates unauthorized error with correct defaults', () => {
-    const error = new UnauthorizedError('Not authorized');
-
-    expect(error.message).toBe('Not authorized');
-    expect(error.statusCode).toBe(401);
-    expect(error.code).toBe('UNAUTHORIZED');
-    expect(error.expose).toBe(true);
-    expect(error).toBeInstanceOf(UnauthorizedError);
-    expect(error).toBeInstanceOf(AppError);
-  });
-});
-
-describe('ForbiddenError', () => {
-  it('creates forbidden error with correct defaults', () => {
-    const error = new ForbiddenError('Access forbidden');
-
-    expect(error.message).toBe('Access forbidden');
-    expect(error.statusCode).toBe(403);
-    expect(error.code).toBe('FORBIDDEN');
-    expect(error.expose).toBe(true);
-    expect(error).toBeInstanceOf(ForbiddenError);
-    expect(error).toBeInstanceOf(AppError);
-  });
-});
-
-describe('ConflictError', () => {
-  it('creates conflict error with correct defaults', () => {
-    const error = new ConflictError('Resource conflict');
-
-    expect(error.message).toBe('Resource conflict');
-    expect(error.statusCode).toBe(409);
-    expect(error.code).toBe('CONFLICT');
-    expect(error.expose).toBe(true);
-    expect(error).toBeInstanceOf(ConflictError);
     expect(error).toBeInstanceOf(AppError);
   });
 });

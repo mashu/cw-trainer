@@ -1,5 +1,4 @@
-import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
-import { computeCharPool } from '@/lib/trainingUtils';
+import { computeCharPool, type CharPoolSettingsInput } from '@/lib/trainingUtils';
 
 /**
  * Pick a random character from the active pool.
@@ -14,7 +13,7 @@ export const pickRandomChar = (opts: {
   slidingWindowStart?: number;
   slidingWindowEnd?: number;
 }): string => {
-  const poolSettings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel' | 'mixedLettersPercent' | 'customSet' | 'customSequence' | 'slidingWindowStart' | 'slidingWindowEnd'> = {
+  const poolSettings: CharPoolSettingsInput = {
     kochLevel: opts.kochLevel,
     ...(opts.charSetMode !== undefined ? { charSetMode: opts.charSetMode } : { charSetMode: 'koch' }),
     ...(opts.digitsLevel !== undefined ? { digitsLevel: opts.digitsLevel } : {}),

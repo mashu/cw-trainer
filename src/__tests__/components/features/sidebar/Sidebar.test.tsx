@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 
 import { Sidebar } from '@/components/features/sidebar/Sidebar';
-import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import type { IcrSessionService } from '@/lib/services/icr-session.service';
 import type { SessionService } from '@/lib/services/session.service';
 import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
@@ -12,7 +12,7 @@ import type { IcrSettings } from '@/types';
 
 // Mock form components
 jest.mock('@/components/ui/forms/TrainingSettingsForm', () => ({
-  TrainingSettingsForm: ({ settings }: { settings: TrainingSettings }): JSX.Element => (
+  TrainingSettingsForm: ({ settings }: { settings: FormTrainingSettings }): JSX.Element => (
     <div data-testid="training-settings-form">Training Settings: {settings.kochLevel}</div>
   ),
 }));
@@ -66,7 +66,7 @@ function TestWrapper({ children }: { children: React.ReactNode }): JSX.Element {
 }
 
 describe('Sidebar', () => {
-  const defaultTrainingSettings: TrainingSettings = {
+  const defaultTrainingSettings: FormTrainingSettings = {
     kochLevel: 2,
     charSetMode: 'koch',
     digitsLevel: 10,

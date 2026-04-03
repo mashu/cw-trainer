@@ -5,11 +5,11 @@ import { useNumberInputHelpers } from '@/hooks/useNumberInput';
 import { playMorseCodeControlled } from '@/lib/morseAudio';
 
 import { LinkedRangeInput } from '../LinkedRangeInput';
-import type { TrainingSettings } from '../TrainingSettingsForm';
+import type { FormTrainingSettings } from '../TrainingSettingsForm';
 
 interface ToneEnvelopeSectionProps {
-  readonly settings: TrainingSettings;
-  readonly setSettings: (s: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings)) => void;
+  readonly settings: FormTrainingSettings;
+  readonly setSettings: (s: FormTrainingSettings | ((prev: FormTrainingSettings) => FormTrainingSettings)) => void;
   readonly onSaveSettings?: () => void;
 }
 
@@ -157,7 +157,7 @@ export function ToneEnvelopeSection({
               else {
                 const v = clampVolume(num); const maxVal = settings.linkVolume ? v : (settings.volumeMax ?? 1); const validMin = Math.min(v, maxVal);
                 setVolumeMinInput(String(validMin));
-                const updates: Partial<TrainingSettings> = { volumeMin: validMin };
+                const updates: Partial<FormTrainingSettings> = { volumeMin: validMin };
                 if (settings.linkVolume) { updates.volumeMax = validMin; setVolumeMaxInput(String(validMin)); }
                 setSettings({ ...settings, ...updates });
                 if (onSaveSettings) setTimeout(() => onSaveSettings(), 50);
@@ -174,7 +174,7 @@ export function ToneEnvelopeSection({
               }
             }}
             onLinkToggle={(linked) => {
-              const updates: Partial<TrainingSettings> = { linkVolume: linked };
+              const updates: Partial<FormTrainingSettings> = { linkVolume: linked };
               if (linked) { updates.volumeMax = settings.volumeMin ?? 1; setVolumeMaxInput(String(settings.volumeMin ?? 1)); }
               setSettings({ ...settings, ...updates });
             }}

@@ -1,11 +1,11 @@
 import React, { Suspense } from 'react';
 
-import type { TrainingSettings as FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
 import type { UseTrainingSessionReturn } from '@/hooks/useTrainingSession';
 import type { SharedAudioFromSettings } from '@/lib/settingsToSharedAudioProps';
-import type { IcrSettings, TrainingMode, TrainingSettings, SessionResult } from '@/types';
+import type { HeatmapSession, IcrSettings, SessionResult, TrainingMode, TrainingSettings } from '@/types';
 
 // Lazy-loaded heavy views — only downloaded when the user navigates to them
 const ICRTrainer = React.lazy(() => import('@/components/features/icr/ICRTrainer').then(m => ({ default: m.ICRTrainer })));
@@ -26,15 +26,6 @@ import { EchoTrainingView } from './EchoTrainingView';
 import { SessionResultsView } from './SessionResultsView';
 import { TrainingHomeView } from './TrainingHomeView';
 
-export interface HeatmapSession {
-  readonly date: string;
-  readonly timestamp: number;
-  readonly count: number;
-  readonly durationMs?: number;
-  readonly groupCount?: number;
-  readonly accuracy?: number;
-}
-
 interface TrainingRouterProps {
   readonly activeMode: TrainingMode;
   readonly groupTab: 'train' | 'stats';
@@ -44,8 +35,8 @@ interface TrainingRouterProps {
   readonly echoTraining: UseEchoTrainingSessionReturn;
   readonly settings: TrainingSettings;
   readonly formSettings: FormTrainingSettings;
-  readonly groupHeatmapSessions: HeatmapSession[];
-  readonly echoHeatmapSessions: HeatmapSession[];
+  readonly groupHeatmapSessions: readonly HeatmapSession[];
+  readonly echoHeatmapSessions: readonly HeatmapSession[];
   readonly groupSessions: readonly SessionResult[];
   readonly echoSessions: readonly SessionResult[];
   readonly lastAccuracyPercent: number;

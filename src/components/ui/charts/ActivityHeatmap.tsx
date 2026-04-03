@@ -4,6 +4,7 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useHasMounted } from '@/hooks/useHasMounted';
+import type { HeatmapSession } from '@/types';
 
 type TooltipData = {
   date: Date;
@@ -236,19 +237,8 @@ function ActivityTooltip({ data, formatDate }: { data: TooltipData; formatDate: 
   );
 }
 
-export type ActivitySessionLite = {
-  date: string; // YYYY-MM-DD in local time (already stored by app)
-  timestamp: number;
-  // Optional count payload allowing callers to represent arbitrary activity (e.g., characters trained)
-  count?: number;
-  // Optional session metadata for detailed tooltips
-  durationMs?: number; // session duration in milliseconds
-  groupCount?: number; // number of groups in this session
-  accuracy?: number; // session accuracy (0-1)
-};
-
 type ActivityHeatmapProps = {
-  sessions: readonly ActivitySessionLite[];
+  sessions: readonly HeatmapSession[];
   monthsPerPage?: number; // default 3, used as initial value
   startOfWeek?: 0 | 1; // 0 = Sunday, 1 = Monday
   onSelectDate?: (dateYmd: string) => void; // optional day selection callback

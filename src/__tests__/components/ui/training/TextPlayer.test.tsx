@@ -1,7 +1,7 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { TextPlayer } from '@/components/ui/training/TextPlayer';
 
 // Mock morseAudio functions
@@ -18,7 +18,7 @@ jest.mock('@/lib/morseAudio', () => ({
 }));
 
 describe('TextPlayer', (): void => {
-  const defaultSettings: TrainingSettings = {
+  const defaultSettings: FormTrainingSettings = {
     kochLevel: 2,
     charSetMode: 'koch',
     digitsLevel: 10,

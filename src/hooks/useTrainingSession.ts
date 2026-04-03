@@ -9,6 +9,7 @@ import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import { computeTrainingGroupGapMs } from '@/lib/trainingSessionPlayback';
+import type { SessionResultInput } from '@/lib/validators';
 import { useAppStore } from '@/store';
 import type { SessionResult, TrainingSettings } from '@/types';
 
@@ -32,9 +33,7 @@ export interface SessionResultSummary {
 export interface UseTrainingSessionOptions {
   readonly settings: TrainingSettings;
   readonly sessions: readonly SessionResult[];
-  readonly saveSession: (
-    input: Record<string, unknown>,
-  ) => Promise<SessionResult[]>;
+  readonly saveSession: (input: SessionResultInput) => Promise<SessionResult[]>;
   readonly setTrainingSettingsState: (
     next: TrainingSettings | ((prev: TrainingSettings) => TrainingSettings),
   ) => void;
@@ -212,7 +211,7 @@ export function useTrainingSession({
     setShowResults(true);
 
     try {
-      await currentSaveSession(result as unknown as Record<string, unknown>);
+      await currentSaveSession(result as SessionResultInput);
     } catch (error) {
       currentShowToast({ message: ensureAppError(error).message, type: 'error' });
     }

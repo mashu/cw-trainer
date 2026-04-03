@@ -135,8 +135,6 @@ export interface UseIcrSettingsResult {
   readonly resetIcrSettings: () => void;
 }
 
-export const DEFAULT_ICR_SETTINGS_VALUE = DEFAULT_ICR_SETTINGS;
-
 export function useIcrSettings(storageKey: string = STORAGE_KEY): UseIcrSettingsResult {
   const [icrSettings, setIcrSettingsState] = useState<IcrSettings>(DEFAULT_ICR_SETTINGS);
 

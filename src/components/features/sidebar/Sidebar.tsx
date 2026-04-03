@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, type Dispatch, type SetStateAction 
 
 import { EchoSettingsForm } from '@/components/ui/forms/EchoSettingsForm';
 import { ICRSettingsForm } from '@/components/ui/forms/ICRSettingsForm';
-import type { TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingSettingsForm } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingModeCarousel } from '@/components/ui/navigation/TrainingModeCarousel';
 import type { AuthUserSummary } from '@/hooks/useAuth';
@@ -22,8 +22,8 @@ interface SidebarProps {
   readonly onLogout: () => void;
   readonly onSwitchAccount: () => void | Promise<void>;
   readonly authInProgress?: boolean;
-  readonly settings: TrainingSettings;
-  readonly setSettings: Dispatch<SetStateAction<TrainingSettings>>;
+  readonly settings: FormTrainingSettings;
+  readonly setSettings: Dispatch<SetStateAction<FormTrainingSettings>>;
   readonly onSaveSettings: () => void;
   readonly isSavingSettings?: boolean;
   readonly sessionResultsCount: number;

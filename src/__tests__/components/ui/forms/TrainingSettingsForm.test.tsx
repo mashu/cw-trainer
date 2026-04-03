@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 
-import { TrainingSettingsForm, type TrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import { TrainingSettingsForm, type FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 
 // Mock Recharts components
 jest.mock('recharts', () => ({
@@ -15,7 +15,7 @@ jest.mock('recharts', () => ({
 }));
 
 describe('TrainingSettingsForm', () => {
-  const defaultSettings: TrainingSettings = {
+  const defaultSettings: FormTrainingSettings = {
     kochLevel: 1, // Level 1 = 2 characters
     charSetMode: 'koch',
     digitsLevel: 10,
@@ -103,7 +103,7 @@ describe('TrainingSettingsForm', () => {
 
   it('should handle digits mode', () => {
     const setSettings = jest.fn();
-    const digitsSettings: TrainingSettings = {
+    const digitsSettings: FormTrainingSettings = {
       ...defaultSettings,
       charSetMode: 'digits',
       digitsLevel: 5,
@@ -116,7 +116,7 @@ describe('TrainingSettingsForm', () => {
 
   it('should handle custom mode', () => {
     const setSettings = jest.fn();
-    const customSettings: TrainingSettings = {
+    const customSettings: FormTrainingSettings = {
       ...defaultSettings,
       charSetMode: 'custom',
       customSet: ['A', 'B', 'C'],
@@ -139,7 +139,7 @@ describe('TrainingSettingsForm', () => {
   it('should sync effectiveWpm with charWpm when linkCharToEffective is true', async () => {
     const user = userEvent.setup();
     const setSettings = jest.fn();
-    const linkedSettings: TrainingSettings = {
+    const linkedSettings: FormTrainingSettings = {
       ...defaultSettings,
       linkCharToEffective: true,
       charWpmMin: 20,
@@ -165,7 +165,7 @@ describe('TrainingSettingsForm', () => {
   it('should toggle char-to-effective link button', async () => {
     const user = userEvent.setup();
     const setSettings = jest.fn();
-    const unlinkedSettings: TrainingSettings = {
+    const unlinkedSettings: FormTrainingSettings = {
       ...defaultSettings,
       linkCharToEffective: false,
       charWpmMin: 20,
@@ -278,7 +278,7 @@ describe('TrainingSettingsForm', () => {
 
   it('should call setSettings when digits level changes', async () => {
     const setSettings = jest.fn();
-    const digitsSettings: TrainingSettings = {
+    const digitsSettings: FormTrainingSettings = {
       ...defaultSettings,
       charSetMode: 'digits',
       digitsLevel: 5,
@@ -420,7 +420,7 @@ describe('TrainingSettingsForm', () => {
   it('should handle effectiveWpm input when linkCharToEffective is false', async () => {
     const user = userEvent.setup();
     const setSettings = jest.fn();
-    const unlinkedSettings: TrainingSettings = {
+    const unlinkedSettings: FormTrainingSettings = {
       ...defaultSettings,
       linkCharToEffective: false,
       charWpmMin: 20,
@@ -444,7 +444,7 @@ describe('TrainingSettingsForm', () => {
 
   it('should disable effectiveWpm input when linkCharToEffective is true', () => {
     const setSettings = jest.fn();
-    const linkedSettings: TrainingSettings = {
+    const linkedSettings: FormTrainingSettings = {
       ...defaultSettings,
       linkCharToEffective: true,
     };
@@ -477,7 +477,7 @@ describe('TrainingSettingsForm', () => {
   it('should handle invalid effectiveWpm input on blur', async () => {
     const user = userEvent.setup();
     const setSettings = jest.fn();
-    const unlinkedSettings: TrainingSettings = {
+    const unlinkedSettings: FormTrainingSettings = {
       ...defaultSettings,
       linkCharToEffective: false,
     };
