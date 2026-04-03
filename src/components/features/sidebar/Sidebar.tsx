@@ -269,7 +269,6 @@ export function Sidebar({
                   settings={settings}
                   setSettings={setSettings}
                   onSaveSettings={onSaveSettings}
-                  autoAdjustContext={activeMode === 'echo' ? 'echo' : 'group'}
                 />
                 
                 {/* ICR Settings - only visible when in ICR mode */}

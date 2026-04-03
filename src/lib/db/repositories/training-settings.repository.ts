@@ -1,7 +1,9 @@
+import { deleteField } from '@firebase/firestore';
 import { onAuthStateChanged, type User as FirebaseUser, type getAuth } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import type { getFirestore } from 'firebase/firestore';
 
+import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
 import type { FirebaseServicesLite } from '@/lib/sessionPersistence';
 import {
   normalizeTrainingSettings,
@@ -26,6 +28,20 @@ export interface TrainingSettingsRepository {
 }
 
 const DEFAULT_LOCAL_KEY = 'morse_settings_local';
+
+/**
+ * Firestore `setDoc(..., { merge: true })` does not remove omitted fields. When the user clears
+ * `customSequence`, we must send `deleteField()` so the cloud document matches local storage.
+ */
+function buildFirestoreTrainingSettingsPayload(settings: TrainingSettings): Record<string, unknown> {
+  const normalized = normalizeTrainingSettings(settings, DEFAULT_TRAINING_SETTINGS);
+  const data = JSON.parse(serializeTrainingSettings(normalized)) as Record<string, unknown>;
+  const seq = data['customSequence'];
+  if (!Array.isArray(seq) || seq.length === 0) {
+    data['customSequence'] = deleteField();
+  }
+  return data;
+}
 
 const resolveLocalKey = (user: AppUser | null): string => {
   if (user?.email) {
@@ -441,7 +457,7 @@ export class FirebaseTrainingSettingsRepository implements TrainingSettingsRepos
     if (firestore && firebaseUser) {
       try {
         const ref = doc(firestore, 'users', firebaseUser.uid, 'settings', 'default');
-        await setDoc(ref, settings, { merge: true });
+        await setDoc(ref, buildFirestoreTrainingSettingsPayload(settings), { merge: true });
         console.debug('[settings] Successfully saved to Firestore');
       } catch (error) {
         console.warn('[settings] Failed to persist to Firestore; local copy kept.', error);

@@ -464,11 +464,11 @@ export function useEchoTrainingSession({
           charSetMode === 'digits' ? (currentSettings.digitsLevel ?? 10) : currentSettings.kochLevel;
         const maxLevel = charSetMode === 'digits' ? 10 : 40;
         const adjustment = evaluateAutoLevelAdjust(result.accuracy, {
-          enabled: currentSettings.echoAutoAdjustKoch,
+          enabled: Boolean(currentSettings.echoAutoAdjustKoch),
           mode,
-          threshold: currentSettings.echoAutoAdjustThreshold,
-          aboveThresholdCount: Math.max(0, currentSettings.echoAutoAdjustAboveThresholdCount),
-          belowThresholdCount: Math.max(0, currentSettings.echoAutoAdjustBelowThresholdCount),
+          threshold: currentSettings.echoAutoAdjustThreshold ?? 90,
+          aboveThresholdCount: Math.max(0, currentSettings.echoAutoAdjustAboveThresholdCount ?? 0),
+          belowThresholdCount: Math.max(0, currentSettings.echoAutoAdjustBelowThresholdCount ?? 0),
           currentLevel,
           maxLevel,
         });

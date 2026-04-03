@@ -2,9 +2,13 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 
+import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
 import { AUTO_SAVE_DELAY_MS } from '@/lib/constants';
 import { ensureAppError } from '@/lib/errors';
-import { serializeSettings as tsSerialize } from '@/lib/trainingSettings';
+import {
+  normalizeTrainingSettings,
+  serializeTrainingSettings,
+} from '@/lib/utils/training-settings';
 import { useAppStore } from '@/store';
 import type { TrainingSettings } from '@/types';
 
@@ -123,15 +127,8 @@ export function useSettingsAutoSave({
 
 // ── helpers ────────────────────────────────────────────────────────────
 function serializeForComparison(s: TrainingSettings): string {
-  const { customSet, customSequence, ...rest } = s;
-  const obj: Parameters<typeof tsSerialize>[0] = {
-    ...rest,
-    ...(customSet && customSet.length > 0 ? { customSet: [...customSet] } : {}),
-    ...(customSequence && customSequence.length > 0
-      ? { customSequence: [...customSequence] }
-      : {}),
-  };
-  return tsSerialize(obj);
+  const normalized = normalizeTrainingSettings(s, DEFAULT_TRAINING_SETTINGS);
+  return serializeTrainingSettings(normalized);
 }
 
 function prepareForSave(
