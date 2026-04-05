@@ -21,6 +21,7 @@ function LazyFallback(): JSX.Element {
 }
 
 import { ActiveTrainingView } from './ActiveTrainingView';
+import { EchoDecoderPractice } from './EchoDecoderPractice';
 import { EchoSessionResultsView } from './EchoSessionResultsView';
 import { EchoTrainingView } from './EchoTrainingView';
 import { SessionResultsView } from './SessionResultsView';
@@ -157,6 +158,7 @@ export function TrainingRouter({
           setGroupTab('stats');
           setActiveMode('group');
         }}
+        beforeTipsSlot={<EchoDecoderPractice settings={settings} enabled />}
       />
     );
   }

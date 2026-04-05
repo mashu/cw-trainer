@@ -61,6 +61,8 @@ export function Sidebar({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const { loadSessions } = useSessionsActions();
 
+  const autoAdjustProfile = activeMode === 'echo' ? 'echo' : 'group';
+
   // Load call-sign when user is available
   useEffect(() => {
     if (!user?.uid || !firebaseReady) {
@@ -269,6 +271,7 @@ export function Sidebar({
                   settings={settings}
                   setSettings={setSettings}
                   onSaveSettings={onSaveSettings}
+                  autoAdjustProfile={autoAdjustProfile}
                 />
                 
                 {/* ICR Settings - only visible when in ICR mode */}

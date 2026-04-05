@@ -1,5 +1,6 @@
 import {
   decodeMorsePattern,
+  isMorseCodePrefix,
   isMorsePrefix,
   keyboardInputToMorseSignal,
   keyToMorseSignal,
@@ -37,5 +38,12 @@ describe('morseSignals', () => {
   it('checks partial prefixes', () => {
     expect(isMorsePrefix('.---', '.-')).toBe(true);
     expect(isMorsePrefix('.---', '..')).toBe(false);
+  });
+
+  it('detects whether a pattern can still extend to a valid character', () => {
+    expect(isMorseCodePrefix('')).toBe(true);
+    expect(isMorseCodePrefix('.')).toBe(true);
+    expect(isMorseCodePrefix('.-')).toBe(true);
+    expect(isMorseCodePrefix('...---...')).toBe(false);
   });
 });

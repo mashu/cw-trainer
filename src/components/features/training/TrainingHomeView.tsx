@@ -82,6 +82,8 @@ export interface TrainingHomeViewProps {
   readonly viewStatsLabel?: string;
   readonly listeningPrompt?: string;
   readonly tips?: readonly string[];
+  /** Optional region (e.g. echo-mode Morse decoder warm-up) rendered between the intro card and tips. */
+  readonly beforeTipsSlot?: React.ReactNode;
 }
 
 export function TrainingHomeView({
@@ -97,6 +99,7 @@ export function TrainingHomeView({
   viewStatsLabel = '📊 View Stats',
   listeningPrompt = 'New to this level? Listen to the letters:',
   tips = DEFAULT_TIPS,
+  beforeTipsSlot,
 }: TrainingHomeViewProps): JSX.Element {
   return (
     <div className="space-y-8">
@@ -155,6 +158,8 @@ export function TrainingHomeView({
         <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
         <p className="text-sm text-slate-600 mt-2">{description}</p>
       </div>
+
+      {beforeTipsSlot != null ? beforeTipsSlot : null}
 
       <TrainingTipsCarousel tips={tips} />
 

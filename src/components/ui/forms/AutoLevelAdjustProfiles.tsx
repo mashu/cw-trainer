@@ -8,17 +8,21 @@ import type { FormTrainingSettings } from './TrainingSettingsForm';
 
 type CharMode = 'koch' | 'digits' | 'custom' | 'mixed';
 
+export type AutoLevelAdjustProfileMode = 'group' | 'echo';
+
+type ProfileVariant = AutoLevelAdjustProfileMode;
+
 interface AutoLevelAdjustProfilesProps {
   readonly settings: FormTrainingSettings;
   readonly setSettings: (
     settings: FormTrainingSettings | ((prev: FormTrainingSettings) => FormTrainingSettings),
   ) => void;
   readonly charMode: CharMode;
+  /** Which session type these controls apply to (matches the active training mode in the sidebar). */
+  readonly profileMode: ProfileVariant;
   readonly onSaveSettings?: () => void;
   readonly showHelp: boolean;
 }
-
-type ProfileVariant = 'group' | 'echo';
 
 function AutoAdjustProfileBlock({
   variant,
@@ -104,22 +108,6 @@ function AutoAdjustProfileBlock({
         isEcho ? 'border-violet-200 bg-violet-50/40' : 'border-slate-200 bg-slate-50/50'
       }`}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <span
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border shrink-0 ${
-            isEcho
-              ? 'border-violet-200 bg-violet-100 text-violet-800'
-              : 'border-slate-200 bg-slate-100 text-slate-700'
-          }`}
-        >
-          {isEcho ? 'Echo' : 'Group'}
-        </span>
-        <span className="text-xs text-slate-600">
-          {isEcho
-            ? 'Runs after echo sessions; counters are separate from group training.'
-            : 'Runs after group sessions; counters are separate from echo.'}
-        </span>
-      </div>
       <div className="flex items-center gap-2">
         <input
           id={checkboxId}
@@ -172,9 +160,11 @@ export function AutoLevelAdjustProfiles({
   settings,
   setSettings,
   charMode,
+  profileMode,
   onSaveSettings,
   showHelp,
 }: AutoLevelAdjustProfilesProps): JSX.Element {
+  const modeLabel = profileMode === 'echo' ? 'Echo' : 'Group';
   return (
     <>
       {showHelp && (
@@ -182,9 +172,9 @@ export function AutoLevelAdjustProfiles({
           <div className="font-semibold text-slate-800 mb-1">Auto level adjustment</div>
           <ul className="list-disc ml-4 space-y-1">
             <li>
-              <span className="font-medium">Two profiles</span>: Group (copy sessions) and Echo (key
-              practice) each have their own enable switch, thresholds, and session counters in
-              storage.
+              <span className="font-medium">{modeLabel} sessions</span>: These options apply only to{' '}
+              {profileMode === 'echo' ? 'echo (send-back)' : 'group copy'} practice. They use the
+              alphabet / digits level from the character set section above.
             </li>
             <li>
               <span className="font-medium">Accuracy threshold</span>: Minimum session accuracy (%) to
@@ -205,22 +195,13 @@ export function AutoLevelAdjustProfiles({
           </ul>
         </div>
       )}
-      <div className="space-y-3">
-        <AutoAdjustProfileBlock
-          variant="group"
-          settings={settings}
-          setSettings={setSettings}
-          charMode={charMode}
-          {...(onSaveSettings !== undefined ? { onSaveSettings } : {})}
-        />
-        <AutoAdjustProfileBlock
-          variant="echo"
-          settings={settings}
-          setSettings={setSettings}
-          charMode={charMode}
-          {...(onSaveSettings !== undefined ? { onSaveSettings } : {})}
-        />
-      </div>
+      <AutoAdjustProfileBlock
+        variant={profileMode}
+        settings={settings}
+        setSettings={setSettings}
+        charMode={charMode}
+        {...(onSaveSettings !== undefined ? { onSaveSettings } : {})}
+      />
     </>
   );
 }

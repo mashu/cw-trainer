@@ -7,7 +7,10 @@ import { LCWO_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
 import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
 import { computeCharPool } from '@/lib/trainingUtils';
 
-import { AutoLevelAdjustProfiles } from './AutoLevelAdjustProfiles';
+import {
+  AutoLevelAdjustProfiles,
+  type AutoLevelAdjustProfileMode,
+} from './AutoLevelAdjustProfiles';
 import { CustomAlphabetEditor } from './CustomAlphabetEditor';
 import { LinkedRangeInput } from './LinkedRangeInput';
 import { ToneEnvelopeSection } from './sections/ToneEnvelopeSection';
@@ -63,12 +66,59 @@ interface TrainingSettingsFormProps {
     settings: FormTrainingSettings | ((prev: FormTrainingSettings) => FormTrainingSettings),
   ) => void;
   onSaveSettings?: () => void;
+  /** Auto level adjustment profile shown in the sidebar (group vs echo). Defaults to group. */
+  autoAdjustProfile?: AutoLevelAdjustProfileMode;
+}
+
+function AutoAdjustProfileIcon({
+  profile,
+}: {
+  readonly profile: AutoLevelAdjustProfileMode;
+}): JSX.Element {
+  if (profile === 'echo') {
+    return (
+      <svg
+        className="w-4 h-4 text-violet-700 shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M12 3a9 9 0 0 1 9 9" />
+        <path d="M12 3a9 9 0 0 0-9 9" />
+        <path d="M12 21a9 9 0 0 0 9-9" />
+        <path d="M12 21a9 9 0 0 1-9-9" />
+        <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      className="w-4 h-4 text-slate-600 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="3" y="4" width="7" height="7" rx="1" />
+      <rect x="14" y="4" width="7" height="7" rx="1" />
+      <rect x="14" y="13" width="7" height="7" rx="1" />
+      <rect x="3" y="13" width="7" height="7" rx="1" />
+    </svg>
+  );
 }
 
 export function TrainingSettingsForm({
   settings,
   setSettings,
   onSaveSettings,
+  autoAdjustProfile = 'group',
 }: TrainingSettingsFormProps): JSX.Element {
   const charMode = settings.charSetMode || 'koch';
 
@@ -900,12 +950,15 @@ export function TrainingSettingsForm({
           <div className="mt-4 pt-4 border-t border-gray-200">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="min-w-0">
-                <h5 className="text-sm font-semibold text-slate-700">
-                  Auto Sequence Level Adjustment
+                <h5 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                  <AutoAdjustProfileIcon profile={autoAdjustProfile} />
+                  <span>
+                    Auto Sequence Level Adjustment
+                    <span className="sr-only">
+                      {autoAdjustProfile === 'echo' ? ' (Echo mode)' : ' (Group mode)'}
+                    </span>
+                  </span>
                 </h5>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Configure group and echo separately; both use the same alphabet/digits level above.
-                </p>
               </div>
               <button
                 type="button"
@@ -925,6 +978,7 @@ export function TrainingSettingsForm({
               settings={settings}
               setSettings={setSettings}
               charMode={charMode}
+              profileMode={autoAdjustProfile}
               {...(onSaveSettings ? { onSaveSettings } : {})}
               showHelp={showAutoAdjustHelp}
             />

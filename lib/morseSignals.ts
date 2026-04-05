@@ -47,3 +47,16 @@ export function isMorsePrefix(expectedPattern: string, receivedPattern: string):
 export function decodeMorsePattern(pattern: string): string | null {
   return MORSE_REVERSE[pattern] ?? null;
 }
+
+/** True if `pattern` is empty or matches the start of at least one character in {@link MORSE_CODE}. */
+export function isMorseCodePrefix(pattern: string): boolean {
+  if (pattern.length === 0) {
+    return true;
+  }
+  for (const code of Object.values(MORSE_CODE)) {
+    if (code.startsWith(pattern)) {
+      return true;
+    }
+  }
+  return false;
+}
