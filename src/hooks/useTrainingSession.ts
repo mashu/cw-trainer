@@ -311,16 +311,24 @@ export function useTrainingSession({
       }
       setIsTraining(false);
       isTrainingRef.current = false;
-      setTrainingSessionActive(false);
       audio.stopAudio();
-      if (!(audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) && !resultsProcessedRef.current) {
-        const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map((a) => (a || '').trim().toUpperCase());
+      const shouldProcessResults =
+        !(audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) &&
+        !resultsProcessedRef.current;
+      if (shouldProcessResults) {
+        const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map((a) =>
+          (a || '').trim().toUpperCase(),
+        );
         try {
           await processResults(answers, groups);
         } catch (error) {
           console.error('[Training] Error processing results:', error);
           showToast({ message: `Failed to process results: ${ensureAppError(error).message}`, type: 'error' });
+        } finally {
+          setTrainingSessionActive(false);
         }
+      } else {
+        setTrainingSessionActive(false);
       }
     } catch (error) {
       console.error('[Training] Unexpected training error:', error);
@@ -337,13 +345,18 @@ export function useTrainingSession({
     audio.trainingAbortRef.current = true;
     setIsTraining(false);
     isTrainingRef.current = false;
-    setTrainingSessionActive(false);
     audio.stopAudio();
-    const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map((a) => (a || '').trim().toUpperCase());
-    processResults(answers, activeSentGroupsRef.current).catch((error) => {
-      console.error('[Training] Error processing results:', error);
-      showToast({ message: `Failed to process results: ${ensureAppError(error).message}`, type: 'error' });
-    });
+    const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map((a) =>
+      (a || '').trim().toUpperCase(),
+    );
+    void processResults(answers, activeSentGroupsRef.current)
+      .catch((error) => {
+        console.error('[Training] Error processing results:', error);
+        showToast({ message: `Failed to process results: ${ensureAppError(error).message}`, type: 'error' });
+      })
+      .finally(() => {
+        setTrainingSessionActive(false);
+      });
   };
 
   const stopTraining = (): void => {

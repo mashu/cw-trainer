@@ -104,10 +104,21 @@ export function CWTrainer(): JSX.Element {
   const setTrainingSessionActive = useAppStore((s) => s.setTrainingSessionActive);
   useEffect(() => {
     if (!trainingSessionActive || training.isTraining || echoTraining.isTraining) return;
+    if (training.showResults || echoTraining.showResults) return;
     if ((activeMode !== 'group' && activeMode !== 'echo') || groupTab !== 'train') return;
     setTrainingSessionActive(false);
     showToast({ message: 'Session was interrupted. Start a new one when ready.', type: 'info' });
-  }, [trainingSessionActive, training.isTraining, echoTraining.isTraining, activeMode, groupTab, setTrainingSessionActive, showToast]);
+  }, [
+    trainingSessionActive,
+    training.isTraining,
+    training.showResults,
+    echoTraining.isTraining,
+    echoTraining.showResults,
+    activeMode,
+    groupTab,
+    setTrainingSessionActive,
+    showToast,
+  ]);
 
   const handleLogin = useCallback(async (): Promise<void> => {
     if (!firebaseReady || !firebaseServices) {

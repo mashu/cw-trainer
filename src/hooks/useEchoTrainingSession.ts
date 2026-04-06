@@ -540,14 +540,19 @@ export function useEchoTrainingSession({
 
       isTrainingRef.current = false;
       setIsTraining(false);
-      setTrainingSessionActive(false);
       resetAllKeyerState();
       audio.stopAudio();
       setCurrentCharacterState('idle');
       setCurrentSymbols('');
 
       if (!audio.trainingAbortRef.current && audio.sessionIdRef.current === mySession) {
-        await processResults(groups, receivedGroups, groupResponseTimes, nextCorrect, nextIncorrect);
+        try {
+          await processResults(groups, receivedGroups, groupResponseTimes, nextCorrect, nextIncorrect);
+        } finally {
+          setTrainingSessionActive(false);
+        }
+      } else {
+        setTrainingSessionActive(false);
       }
     } catch (error) {
       console.error('[EchoTraining] Unexpected training error:', error);
