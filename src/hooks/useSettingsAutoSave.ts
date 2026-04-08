@@ -102,6 +102,16 @@ export function useSettingsAutoSave({
 
   // Debounced auto-save when settings change
   useEffect(() => {
+    if (trainingSessionActive) {
+      try {
+        if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      } catch {
+        /* no-op */
+      }
+      debounceRef.current = undefined;
+      return;
+    }
+
     const serialized = serializeForComparison(settings);
     if (serialized === lastSavedRef.current) return;
     try {
@@ -119,7 +129,7 @@ export function useSettingsAutoSave({
         /* no-op */
       }
     };
-  }, [saveSettings, settings]);
+  }, [saveSettings, settings, trainingSessionActive]);
 
   return { saveSettings, latestSettingsRef };
 }

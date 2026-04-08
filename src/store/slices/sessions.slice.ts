@@ -22,6 +22,8 @@ interface CreateSessionsSliceParams {
   set: StoreSetter<SessionsSlice>;
   get: () => Pick<SessionsSlice, 'sessions' | 'sessionsStatus'>;
   getContext: () => StoreContextValue;
+  /** When true, loads must not replace in-memory session lists during training. */
+  readonly isTrainingSessionActive: () => boolean;
   service: SessionService;
 }
 
@@ -43,6 +45,7 @@ export const createSessionsSlice = ({
   set,
   get,
   getContext,
+  isTrainingSessionActive,
   service,
 }: CreateSessionsSliceParams): SessionsSlice => ({
   sessions: [],
@@ -50,6 +53,10 @@ export const createSessionsSlice = ({
   sessionsSyncing: false,
 
   loadSessions: async (): Promise<SessionResult[]> => {
+    if (isTrainingSessionActive()) {
+      return get().sessions;
+    }
+
     const { sessionsStatus } = get();
     const isBackground = sessionsStatus === 'ready';
 
@@ -60,6 +67,12 @@ export const createSessionsSlice = ({
     try {
       const context = getContext();
       const sessions = await service.listSessions(context);
+      if (isTrainingSessionActive()) {
+        if (!isBackground) {
+          set({ sessionsStatus: 'ready', sessionsSyncing: false });
+        }
+        return get().sessions;
+      }
       applySuccessState(set, sessions);
       return sessions;
     } catch (error) {

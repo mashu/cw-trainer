@@ -47,6 +47,8 @@ export const createAppStore = ({
       },
     };
 
+    const isTrainingSessionActive = (): boolean => get().trainingSessionActive;
+
     const trainingSettingsSlice = createTrainingSettingsSlice({
       service: trainingSettingsService,
       getContext: () => get().context,
@@ -54,6 +56,7 @@ export const createAppStore = ({
         trainingSettings: get().trainingSettings,
         trainingSettingsStatus: get().trainingSettingsStatus,
       }),
+      isTrainingSessionActive,
       set: (partial, replace) => set(partial as Partial<AppStore>, replace),
     });
 
@@ -61,11 +64,14 @@ export const createAppStore = ({
       service: sessionService,
       getContext: () => get().context,
       get: () => ({ sessions: get().sessions, sessionsStatus: get().sessionsStatus }),
+      isTrainingSessionActive,
       set: (partial, replace) => set(partial as Partial<AppStore>, replace),
     });
 
     const icrSessionsSlice = createIcrSessionsSlice({
       service: icrSessionService,
+      get: () => ({ icrSessions: get().icrSessions, icrSessionsStatus: get().icrSessionsStatus }),
+      isTrainingSessionActive,
       set: (partial, replace) => set(partial as Partial<AppStore>, replace),
     });
 

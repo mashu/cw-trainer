@@ -25,6 +25,8 @@ interface CreateTrainingSettingsSliceParams {
   set: StoreSetter<TrainingSettingsSlice>;
   getContext: () => StoreContextValue;
   get: () => { trainingSettings: TrainingSettings; trainingSettingsStatus: AsyncStatus };
+  /** When true, loads must not replace in-memory settings (group/echo training may be mid-flow). */
+  readonly isTrainingSessionActive: () => boolean;
   service: TrainingSettingsService;
 }
 
@@ -37,6 +39,7 @@ export const createTrainingSettingsSlice = ({
   set,
   getContext,
   get,
+  isTrainingSessionActive,
   service,
 }: CreateTrainingSettingsSliceParams): TrainingSettingsSlice => ({
   trainingSettings: DEFAULT_TRAINING_SETTINGS,
@@ -44,6 +47,11 @@ export const createTrainingSettingsSlice = ({
   trainingSettingsSaving: false,
 
   loadTrainingSettings: async (): Promise<TrainingSettings> => {
+    if (isTrainingSessionActive()) {
+      console.debug('[settings-slice] loadTrainingSettings skipped (training session active)');
+      return get().trainingSettings;
+    }
+
     const { trainingSettingsStatus } = get();
     // When already ready, treat as background load (no loading state, keep current on failure)
     const isBackground = trainingSettingsStatus === 'ready';
@@ -67,6 +75,13 @@ export const createTrainingSettingsSlice = ({
         getContext: (): StoreContextValue => getContext(),
       };
       const settings = await service.getSettings(contextWithGetter);
+      if (isTrainingSessionActive()) {
+        console.debug('[settings-slice] loadTrainingSettings result discarded (training session active)');
+        if (!isBackground) {
+          set({ trainingSettingsStatus: 'ready' });
+        }
+        return get().trainingSettings;
+      }
       if (!isBackground) {
         console.debug('[settings-slice] Settings loaded:', { kochLevel: settings.kochLevel });
       }

@@ -17,6 +17,9 @@ export interface IcrSessionsSlice {
 
 interface CreateIcrSessionsSliceParams {
   set: StoreSetter<IcrSessionsSlice>;
+  get: () => Pick<IcrSessionsSlice, 'icrSessions' | 'icrSessionsStatus'>;
+  /** When true, loads must not replace ICR lists during training. */
+  readonly isTrainingSessionActive: () => boolean;
   service: IcrSessionService;
 }
 
@@ -35,6 +38,8 @@ const applySuccessState = (set: StoreSetter<IcrSessionsSlice>, sessions: IcrSess
 
 export const createIcrSessionsSlice = ({
   set,
+  get,
+  isTrainingSessionActive,
   service,
 }: CreateIcrSessionsSliceParams): IcrSessionsSlice => ({
   icrSessions: [],
@@ -42,10 +47,18 @@ export const createIcrSessionsSlice = ({
   icrSessionsSaving: false,
 
   loadIcrSessions: async (): Promise<IcrSessionResult[]> => {
+    if (isTrainingSessionActive()) {
+      return get().icrSessions;
+    }
+
     set({ icrSessionsStatus: 'loading' });
 
     try {
       const sessions = await service.listSessions();
+      if (isTrainingSessionActive()) {
+        set({ icrSessionsStatus: 'ready', icrSessionsSaving: false });
+        return get().icrSessions;
+      }
       applySuccessState(set, sessions);
       return sessions;
     } catch (error) {
