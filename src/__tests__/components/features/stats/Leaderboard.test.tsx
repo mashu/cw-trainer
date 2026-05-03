@@ -35,8 +35,6 @@ describe('Leaderboard', (): void => {
 
   beforeEach((): void => {
     jest.clearAllMocks();
-    // Get the mocked getDocs function
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const firestore = require('firebase/firestore');
     mockGetDocs = firestore.getDocs as jest.Mock;
     // Reset getDocs mock to default
@@ -110,7 +108,6 @@ describe('Leaderboard', (): void => {
   });
 
   it('should display loading state', async (): Promise<void> => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mockInitFirebase = require('@/lib/firebaseClient').initFirebase;
     mockInitFirebase.mockReturnValue({
       db: {},
@@ -130,7 +127,6 @@ describe('Leaderboard', (): void => {
   });
 
   it('should display error message when loading fails', async (): Promise<void> => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mockInitFirebase = require('@/lib/firebaseClient').initFirebase;
     mockInitFirebase.mockReturnValue({
       db: {},
@@ -150,7 +146,6 @@ describe('Leaderboard', (): void => {
   });
 
   it('should display top scores when available', async (): Promise<void> => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mockInitFirebase = require('@/lib/firebaseClient').initFirebase;
     const mockDb = {};
     mockInitFirebase.mockReturnValue({
@@ -223,7 +218,6 @@ describe('Leaderboard', (): void => {
   });
 
   it('should display empty state when no scores', async (): Promise<void> => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mockInitFirebase = require('@/lib/firebaseClient').initFirebase;
     mockInitFirebase.mockReturnValue({
       db: {},

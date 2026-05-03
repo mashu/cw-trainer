@@ -211,7 +211,6 @@ async function writeLeaderboardForSessions(
             updatePayload.callSign = null;
           }
           await setDoc(ref, updatePayload, { merge: true });
-          // eslint-disable-next-line no-console
           console.log('[Leaderboard] Updated callSign for entry:', r.timestamp, 'from', existingCallSign, 'to', newCallSign);
         }
         return; // Don't overwrite the rest of the entry
@@ -398,7 +397,7 @@ export async function deleteSessionPersisted(services: FirebaseServicesLite, use
             if (!querySnapshot.empty) {
               docId = querySnapshot.docs[0].id;
             }
-          } catch (queryError) {
+          } catch (_queryError) {
             // Ignore query errors, fall back to String(timestamp)
           }
         }

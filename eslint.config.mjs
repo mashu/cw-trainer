@@ -1,37 +1,38 @@
+/**
+ * ESLint 9 flat config. Next.js 16 ships `eslint-config-next` as a flat config array
+ * — do not wrap with FlatCompat.
+ */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FlatCompat } from '@eslint/eslintrc';
+import { createRequire } from 'node:module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+const nextCoreWebVitals = require('eslint-config-next/core-web-vitals');
+const eslintConfigPrettier = require('eslint-config-prettier/flat');
 
 export default [
   {
-    ignores: ['node_modules/**', '.next/**', 'out/**', 'dist/**', 'next-env.d.ts', 'docs/**'],
-  },
-  ...compat.config({
-    extends: [
-      'next/core-web-vitals',
-      'plugin:@typescript-eslint/recommended',
-      'plugin:import/recommended',
-      'plugin:import/typescript',
-      'prettier',
+    ignores: [
+      'node_modules/**',
+      '.next/**',
+      'out/**',
+      'dist/**',
+      'next-env.d.ts',
+      'docs/**',
     ],
-    parser: '@typescript-eslint/parser',
-    parserOptions: {
-      project: './tsconfig.json',
-      tsconfigRootDir: __dirname,
-    },
-    plugins: ['@typescript-eslint', 'import'],
-    settings: {
-      'import/resolver': {
-        typescript: {
-          project: './tsconfig.json',
-        },
+  },
+  ...nextCoreWebVitals,
+  eslintConfigPrettier,
+  {
+    name: 'cw-trainer/typescript-strict',
+    files: ['app/**/*.{ts,tsx}', 'src/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+    languageOptions: {
+      parserOptions: {
+        project: './tsconfig.json',
+        tsconfigRootDir: __dirname,
       },
     },
     rules: {
@@ -76,26 +77,31 @@ export default [
           unnamedComponents: 'function-expression',
         },
       ],
+      // eslint-plugin-react-hooks@7 (React Compiler–style) — keep rules-of-hooks + exhaustive-deps; disable preview rules
+      'react-hooks/refs': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
     },
-    overrides: [
-      {
-        files: [
-          'app/**/{layout,page,default,template,error,loading,not-found}.tsx',
-          'src/app/**/{layout,page,default,template,error,loading,not-found}.tsx',
-        ],
-        rules: {
-          'import/no-default-export': 'off',
-          '@typescript-eslint/explicit-function-return-type': 'off',
-        },
-      },
-      {
-        files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
-        excludedFiles: ['src/**/*'],
-        rules: {
-          'import/no-default-export': 'off',
-          '@typescript-eslint/explicit-function-return-type': 'off',
-        },
-      },
+  },
+  {
+    name: 'cw-trainer/next-app-router-entry-files',
+    files: [
+      'app/**/{layout,page,default,template,error,loading,not-found}.tsx',
+      'src/app/**/{layout,page,default,template,error,loading,not-found}.tsx',
     ],
-  }),
+    rules: {
+      'import/no-default-export': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
+  {
+    name: 'cw-trainer/root-app-lib-relaxed',
+    files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+    rules: {
+      'import/no-default-export': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
 ];

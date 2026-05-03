@@ -23,14 +23,9 @@ const cleanAuthDomain = (value: string | undefined) => trim(value).replace(/^htt
 let localConfig: FirebaseConfig | undefined;
 try {
   // Use dynamic require path to avoid build-time module resolution warnings
-  // The path is constructed dynamically so bundlers don't statically analyze it
-  // webpackIgnore comment tells webpack to ignore this require
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-  // eslint-disable-next-line
   const localModule = require(/* webpackIgnore: true */ './firebase' + '.local');
   if (localModule?.firebaseConfig) {
     localConfig = localModule.firebaseConfig;
-    // eslint-disable-next-line no-console
     console.log('[Firebase] Using local configuration from firebase.local.ts');
   }
 } catch {

@@ -133,7 +133,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
                     } else {
                       callSignMap.set(uid, null);
                     }
-                  } catch (e) {
+                  } catch (_e) {
                     // If we can't read the profile, use null (will fall back to entry's call-sign if available)
                     callSignMap.set(uid, null);
                   }
@@ -181,7 +181,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
               limit(limitN),
             ),
           );
-        } catch (error) {
+        } catch (_error) {
           ok = false;
         }
 
@@ -195,7 +195,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
                 limit(limitN),
               ),
             );
-          } catch (error) {
+          } catch (_error) {
             ok = false;
           }
         }
@@ -211,7 +211,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
                 limit(limitN),
               ),
             );
-          } catch (error) {
+          } catch (_error) {
             ok = false;
           }
         }
