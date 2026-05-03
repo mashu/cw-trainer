@@ -9,6 +9,7 @@ import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
 import { useVAD, type VADConfig } from '@/hooks/useVAD';
 import {
   pickRandomChar,
+  calibratedReactionMs,
   getReactionTextClass,
   micErrorMessage,
 } from '@/lib/icrHelpers';
@@ -23,6 +24,8 @@ import type { IcrSettings } from '@/types';
 
 import { IcrBucketLegend } from './IcrBucketLegend';
 import { IcrSessionChart, type LetterBarPoint, type ReactionScatterPoint } from './IcrSessionChart';
+import { IcrCountdownStrip } from './IcrCountdownStrip';
+import { IcrTrainingVoiceHud } from './IcrTrainingVoiceHud';
 import { IcrTrialList } from './IcrTrialList';
 
 type ICRTrial = {
@@ -44,7 +47,8 @@ interface ICRTrainerProps {
 
 // ── Sub-component: replaces IIFE at line 913 ──────────────────────────
 
-function LastTrialDisplay({
+/** Compact current-trial line under the answer field */
+function TrialStatusStrip({
   trial,
   currentInput,
   buckets,
@@ -54,35 +58,39 @@ function LastTrialDisplay({
   buckets: { greenMax: number; yellowMax: number; orangeMax: number };
 }): JSX.Element | null {
   if (!trial) return null;
-  const lastReactionMs = trial.reactionMs ?? null;
+  const rx = trial.reactionMs;
   const isCorrect = typeof trial.correct === 'boolean' ? trial.correct : null;
+  const letter = currentInput || trial.typed;
   return (
-    <div className="mt-3 text-sm">
-      {trial.durationMs != null && trial.durationMs > 0 && (
-        <div className="text-slate-500 text-xs mb-0.5">
-          Character {trial.target} played in ~{trial.durationMs} ms (reaction is from end)
-        </div>
-      )}
-      <div>
-        Last Reaction:{' '}
-        <span className={getReactionTextClass(lastReactionMs, buckets)}>
-          {lastReactionMs != null ? `${lastReactionMs} ms` : '—'}
+    <div className="mt-3 flex items-center justify-center gap-6 border-t border-slate-100/90 pt-3 text-xs sm:text-sm">
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-slate-400">Rx</span>
+        <span className={`font-semibold tabular-nums ${getReactionTextClass(rx ?? null, buckets)}`}>
+          {rx != null && rx >= 0 ? `${rx} ms` : '—'}
         </span>
       </div>
-      <div>
-        Answer:{' '}
-        {(currentInput || trial.typed) ? (
-          <span className={trial.typed
-            ? (isCorrect === true ? 'text-emerald-600 font-medium' : isCorrect === false ? 'text-rose-600 font-medium' : 'text-slate-600')
-            : 'text-slate-700 font-medium'
-          }>
-            {currentInput || trial.typed}
+      <div className="h-3 w-px bg-slate-200" aria-hidden />
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-slate-400">Key</span>
+        {letter ? (
+          <span
+            className={
+              trial.typed
+                ? isCorrect === true
+                  ? 'font-bold text-emerald-600'
+                  : isCorrect === false
+                    ? 'font-bold text-rose-600'
+                    : 'font-semibold text-slate-700'
+                : 'text-lg font-bold text-slate-800'
+            }
+          >
+            {letter}
+            {trial.typed && isCorrect === true && <span className="text-emerald-500"> ✓</span>}
+            {trial.typed && isCorrect === false && <span className="text-rose-500"> ✗</span>}
           </span>
         ) : (
-          '—'
-        )}{' '}
-        {trial.typed && isCorrect === true && <span className="text-emerald-600">✓</span>}
-        {trial.typed && isCorrect === false && <span className="text-rose-600">✗</span>}
+          <span className="text-slate-300">—</span>
+        )}
       </div>
     </div>
   );
@@ -101,7 +109,6 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentInput, setCurrentInput] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const focusTrapRef = useRef<HTMLDivElement | null>(null);
 
   // Ref-based double-start guard (state alone races on rapid clicks)
   const isRunningRef = useRef(false);
@@ -123,10 +130,11 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     vadEnabled: icrSettings.vadEnabled,
     vadThreshold: icrSettings.vadThreshold,
     vadHoldMs: icrSettings.vadHoldMs,
-    calibrationLatencyMs: icrSettings.calibrationLatencyMs,
-  }), [icrSettings.vadEnabled, icrSettings.vadThreshold, icrSettings.vadHoldMs, icrSettings.calibrationLatencyMs]);
+  }), [icrSettings.vadEnabled, icrSettings.vadThreshold, icrSettings.vadHoldMs]);
 
   const vad = useVAD(vadConfig, mic.measureInputLevel, audioEndAtRef, currentTrialHeardAtRef);
+  const vadApiRef = useRef(vad);
+  vadApiRef.current = vad;
 
   // ── Focus on mount ───────────────────────────────────────────────────
 
@@ -204,7 +212,6 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     sessionTokenRef.current += 1;
     setCurrentIndex(0);
     currentIndexRef.current = 0;
-    setIsRunning(true);
     sessionActiveRef.current = true;
     takeIcrSessionLock();
 
@@ -219,9 +226,8 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
       if (icrSettings.vadEnabled) {
         await mic.setupMic(icrSettings.micDeviceId);
       }
-      requestAnimationFrame(() => {
-        try { inputRef.current?.focus(); } catch { /* no-op */ }
-      });
+      // Start session (and VAD rAF) only after mic → analyser exists, or measureInputLevel stays 0.
+      setIsRunning(true);
 
       // Countdown 3..2..1
       for (let c = 3; c >= 1; c--) {
@@ -306,7 +312,8 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
         if (stopResult.stopAt !== undefined) {
           const stopAt = stopResult.stopAt;
           const base = currentTrialHeardAtRef.current ?? trialsRef.current.find(t => t.id === trialId)?.heardAt ?? stopAt;
-          const reactionMs = Math.max(0, Math.round(stopAt - base));
+          const rawMs = Math.max(0, Math.round(stopAt - base));
+          const reactionMs = calibratedReactionMs(rawMs, icrSettings.calibrationLatencyMs);
           setTrials((prev) => {
             const copy = prev.slice();
             const idx = copy.findIndex(t => t.id === trialId);
@@ -318,7 +325,6 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
           });
           stopRef.current = false;
         }
-        requestAnimationFrame(() => { try { inputRef.current?.focus(); } catch { /* no-op */ } });
 
         // Wait for typed answer
         await new Promise<void>((resolve) => {
@@ -336,7 +342,6 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
           setCurrentIndex(i + 1);
           currentIndexRef.current = i + 1;
         }
-        requestAnimationFrame(() => { try { inputRef.current?.focus(); } catch { /* no-op */ } });
       }
     } catch (err) {
       showToast?.({ message: micErrorMessage(err), type: 'error' });
@@ -360,12 +365,16 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     }
   }, [icrSettings, sharedAudio, mic, playChar, vad, showToast, takeIcrSessionLock, releaseIcrSessionLock]);
 
-  // Start VAD loop when running
+  // Start VAD loop once when session runs — do NOT depend on `vad` object identity (new each render).
+  // Otherwise every trials/currentIndex update stops/restarts the loop and start() clears armedRef,
+  // so vad.arm() never sticks and voice never stops the timer.
   useEffect(() => {
     if (!isRunning) return;
-    vad.start();
-    return (): void => { vad.stop(); };
-  }, [isRunning, vad]);
+    vadApiRef.current.start();
+    return (): void => {
+      vadApiRef.current.stop();
+    };
+  }, [isRunning]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -468,14 +477,16 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     setCurrentInput(letter);
     if (!letter) return;
 
-    const activeTrial = trials.find(t => !t.typed);
+    const activeTrial = trialsRef.current.find(t => !t.typed);
     if (!activeTrial) return;
 
     const correct = letter === activeTrial.target.toUpperCase();
     const typedAt = Date.now();
     const base = currentTrialHeardAtRef.current ?? activeTrial.heardAt ?? 0;
     let reactionMs: number = activeTrial.reactionMs ?? 0;
-    if (reactionMs === 0 && base > 0) reactionMs = Math.max(0, Math.round(typedAt - base));
+    if (reactionMs === 0 && base > 0) {
+      reactionMs = calibratedReactionMs(typedAt - base, icrSettings.calibrationLatencyMs);
+    }
     if (!correct && reactionMs > 0) {
       reactionMs = Math.max(reactionMs * 2.0, icrSettings.bucketOrangeMaxMs || 800);
     }
@@ -495,114 +506,259 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     const inputResolver = inputEventResolversRef.current[activeTrial.id];
     if (inputResolver) { try { inputResolver(); } catch { /* no-op */ } }
     setCurrentInput('');
-    requestAnimationFrame(() => { try { inputRef.current?.focus(); } catch { /* no-op */ } });
-  }, [trials, icrSettings.bucketOrangeMaxMs]);
+  }, [icrSettings.bucketOrangeMaxMs, icrSettings.calibrationLatencyMs]);
 
-  // ── Focus trap during session ────────────────────────────────────────
+  // ── Focus answer field once when session starts (no rAF refocus during trials — steals keys)
 
   const sessionActive = isRunning || countdown !== null;
+  const wasRunningRef = useRef(false);
+
+  useEffect(() => {
+    if (isRunning && !wasRunningRef.current) {
+      wasRunningRef.current = true;
+      const id = window.setTimeout(() => {
+        try { inputRef.current?.focus(); } catch { /* no-op */ }
+      }, 0);
+      return (): void => clearTimeout(id);
+    }
+    if (!isRunning) wasRunningRef.current = false;
+  }, [isRunning]);
 
   useEffect(() => {
     if (!sessionActive) return;
-    const trap = focusTrapRef.current;
-    const input = inputRef.current;
-    if (!trap || !input) return;
-
-    const handleFocusIn = (e: FocusEvent): void => {
-      if (trap.contains(e.target as Node)) return;
-      requestAnimationFrame(() => { input.focus(); });
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') { e.preventDefault(); stopSession(); }
     };
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') { e.preventDefault(); stopSession(); return; }
-      if (e.key === 'Tab' && trap.contains(document.activeElement)) { e.preventDefault(); input.focus(); }
-    };
-
-    document.addEventListener('focusin', handleFocusIn, true);
-    document.addEventListener('keydown', handleKeyDown, true);
-    return (): void => {
-      document.removeEventListener('focusin', handleFocusIn, true);
-      document.removeEventListener('keydown', handleKeyDown, true);
-    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return (): void => document.removeEventListener('keydown', onKeyDown, true);
   }, [sessionActive, stopSession]);
 
   // ── Stats toggle ─────────────────────────────────────────────────────
 
   const [showStats, setShowStats] = useState(false);
+
+  const activeUntypedTrial = useMemo(
+    () => trials.find((t) => !t.typed),
+    [trials],
+  );
+  const voiceReactionLocked =
+    activeUntypedTrial != null && activeUntypedTrial.stopAt != null;
+  const lockedReactionMs =
+    activeUntypedTrial != null && activeUntypedTrial.stopAt != null
+      ? activeUntypedTrial.reactionMs ?? null
+      : null;
+
   if (showStats) return <ICRStats embedded onBack={() => setShowStats(false)} />;
 
   // ── Render ───────────────────────────────────────────────────────────
 
   const lastTrial = trials[currentIndex] ?? trials[trials.length - 1];
 
-  return (
-    <div className="max-w-6xl mx-auto p-4" ref={focusTrapRef} tabIndex={-1}>
-      <div className="mb-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Instant Character Recognition (ICR)</h1>
-          <div className="flex gap-2">
-            <button
-              className={`px-3 py-2 rounded ${isRunning ? 'bg-gray-300 text-gray-600' : 'bg-emerald-600 text-white'}`}
-              onClick={() => { if (!isRunning) { setCurrentIndex(0); currentIndexRef.current = 0; void runSession(); } }}
-              disabled={isRunning}
-            >Start</button>
-            <button className="px-3 py-2 rounded bg-gray-100" onClick={stopSession}>Stop</button>
-            <button className="px-3 py-2 rounded bg-blue-600 text-white" onClick={() => setShowStats(true)}>📊 Stats</button>
-          </div>
-        </div>
-        {icrSettings.calibrationLatencyMs != null && icrSettings.calibrationLatencyMs > 0 && (
-          <p className="mt-1.5 text-xs text-emerald-600 font-medium" aria-label="Mic calibrated">
-            Mic calibrated ({icrSettings.calibrationLatencyMs} ms)
-          </p>
-        )}
-      </div>
+  const trialProgressPct =
+    icrSettings.trialsPerSession > 0
+      ? (Math.min(currentIndex + 1, icrSettings.trialsPerSession) / icrSettings.trialsPerSession) * 100
+      : 0;
 
-      <div className="grid grid-cols-1 gap-4 mb-4">
-        <div className="p-6 border rounded flex flex-col items-center justify-center min-h-[220px] relative">
-          {countdown !== null && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-100/90 rounded z-10" aria-live="polite" aria-atomic="true">
-              <span className="text-8xl font-bold text-slate-700 tabular-nums">{countdown}</span>
-            </div>
+  const panelClass =
+    'rounded-2xl border border-slate-200/90 bg-white shadow-sm shadow-slate-900/5';
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <header className="mb-8 flex flex-col gap-4 border-b border-slate-100 pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Instant Character Recognition
+          </h1>
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-slate-500">
+            Copy the character you hear. With voice enabled, speaking locks your reaction time; then type the letter.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {icrSettings.calibrationLatencyMs != null && icrSettings.calibrationLatencyMs > 0 && (
+            <span
+              className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800"
+              aria-label={`Mic calibrated ${icrSettings.calibrationLatencyMs} ms`}
+            >
+              Calibrated {icrSettings.calibrationLatencyMs} ms
+            </span>
           )}
-          <p className="text-sm text-slate-600 mb-2">Say the letter as soon as you recognize it, then type it.</p>
-          <div className="text-sm text-slate-600">Trial {Math.min(currentIndex + 1, icrSettings.trialsPerSession)} / {icrSettings.trialsPerSession}</div>
-          <div className="mt-2 text-xs text-slate-500">Voice above your threshold stops the timer; typing records your answer.</div>
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              className="border rounded px-3 py-2 w-28 text-center text-xl tracking-widest caret-transparent"
-              placeholder="?" value={currentInput} maxLength={1}
-              aria-label="Type the letter you heard"
-              onChange={handleInput}
-              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-              ref={inputRef} disabled={!isRunning}
+          <button
+            type="button"
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+              isRunning ? 'cursor-not-allowed bg-slate-200 text-slate-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'
+            }`}
+            onClick={() => {
+              if (!isRunning) {
+                setCurrentIndex(0);
+                currentIndexRef.current = 0;
+                void runSession();
+              }
+            }}
+            disabled={isRunning}
+          >
+            Start
+          </button>
+          <button
+            type="button"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            onClick={stopSession}
+          >
+            Stop
+          </button>
+          <button
+            type="button"
+            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            onClick={() => setShowStats(true)}
+          >
+            Stats
+          </button>
+        </div>
+      </header>
+
+      <div className="flex flex-col gap-6">
+        {/* 1. Training run */}
+        <div className={`${panelClass} flex flex-col p-5 sm:p-6`}>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Session</h2>
+              <p className="mt-0.5 text-base font-semibold text-slate-900">Training run</p>
+            </div>
+            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold tabular-nums text-slate-700">
+              {Math.min(currentIndex + 1, icrSettings.trialsPerSession)} / {icrSettings.trialsPerSession}
+            </span>
+          </div>
+
+          <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-[width] duration-500 ease-out"
+              style={{ width: `${trialProgressPct}%` }}
             />
           </div>
+
+          {countdown !== null && <IcrCountdownStrip value={countdown} />}
+
+          {icrSettings.vadEnabled && isRunning && (
+            <IcrTrainingVoiceHud
+              active={isRunning && icrSettings.vadEnabled}
+              measureInputLevel={mic.measureInputLevel}
+              armedRef={vad.armedRef}
+              vadThreshold={icrSettings.vadThreshold}
+              vadHoldMs={icrSettings.vadHoldMs}
+              listeningPaused={countdown !== null}
+              reactionLocked={voiceReactionLocked}
+              lockedReactionMs={lockedReactionMs}
+            />
+          )}
+
+          <div className={icrSettings.vadEnabled && isRunning ? 'mt-4' : 'mt-1'}>
+            <label
+              htmlFor="icr-letter-input"
+              className="mb-1.5 block text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"
+            >
+              Your answer
+            </label>
+            <div className="flex justify-center">
+              <input
+                id="icr-letter-input"
+                className="w-[5.5rem] rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 px-3 py-3 text-center text-3xl font-bold tracking-[0.2em] text-slate-900 shadow-inner shadow-slate-900/5 ring-1 ring-slate-900/5 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 disabled:opacity-50"
+                placeholder="·"
+                value={currentInput}
+                maxLength={1}
+                aria-label="Type the letter you heard"
+                onChange={handleInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.preventDefault();
+                }}
+                ref={inputRef}
+                disabled={!isRunning}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
+          </div>
+
           {!isRunning && trials.length > 0 && (
-            <div className="mt-3 text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded">
-              Session complete. Press Start to run another session.
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/90 px-3 py-2.5 text-center text-xs font-medium text-emerald-900">
+              Session finished — press Start for another run.
             </div>
           )}
-          {trials.length > 0 && <LastTrialDisplay trial={lastTrial} currentInput={currentInput} buckets={buckets} />}
-        </div>
-      </div>
 
-      <div className="p-4 border rounded">
-        <h3 className="font-semibold mb-3">Summary</h3>
-        <div className="grid grid-cols-2 gap-4 mb-4 max-w-md">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-center">
-            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-0.5">Average Reaction</div>
-            <div className={`text-2xl font-bold tabular-nums ${averageReaction ? getReactionTextClass(averageReaction, buckets) : 'text-slate-400'}`}>
-              {averageReaction ? `${averageReaction} ms` : '—'}
+          {trials.length > 0 && (
+            <TrialStatusStrip trial={lastTrial} currentInput={currentInput} buckets={buckets} />
+          )}
+        </div>
+
+        {/* 2. Session summary (under training) */}
+        <div className={`${panelClass} min-w-0 p-5 sm:p-6`}>
+          <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Summary</h2>
+          <p className="mt-0.5 text-base font-semibold text-slate-900">This session</p>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-4">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-center sm:px-4 sm:py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Avg reaction</div>
+              <div
+                className={`mt-1 text-xl font-bold tabular-nums sm:text-2xl ${
+                  averageReaction ? getReactionTextClass(averageReaction, buckets) : 'text-slate-400'
+                }`}
+              >
+                {averageReaction ? `${averageReaction} ms` : '—'}
+              </div>
+            </div>
+            <div
+              className={`rounded-xl border px-3 py-3 text-center sm:px-4 sm:py-4 ${
+                accuracyPercent >= 80
+                  ? 'border-emerald-200 bg-emerald-50/80'
+                  : accuracyPercent >= 50
+                    ? 'border-amber-200 bg-amber-50/80'
+                    : 'border-rose-200 bg-rose-50/80'
+              }`}
+            >
+              <div
+                className={`text-[10px] font-semibold uppercase tracking-wide ${
+                  accuracyPercent >= 80
+                    ? 'text-emerald-600'
+                    : accuracyPercent >= 50
+                      ? 'text-amber-700'
+                      : 'text-rose-600'
+                }`}
+              >
+                Accuracy
+              </div>
+              <div
+                className={`mt-1 text-xl font-bold tabular-nums sm:text-2xl ${
+                  accuracyPercent >= 80
+                    ? 'text-emerald-800'
+                    : accuracyPercent >= 50
+                      ? 'text-amber-800'
+                      : 'text-rose-800'
+                }`}
+              >
+                {accuracyPercent}%
+              </div>
             </div>
           </div>
-          <div className={`rounded-xl border px-4 py-3 text-center ${accuracyPercent >= 80 ? 'bg-emerald-50 border-emerald-200' : accuracyPercent >= 50 ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200'}`}>
-            <div className={`text-xs font-medium uppercase tracking-wide mb-0.5 ${accuracyPercent >= 80 ? 'text-emerald-600' : accuracyPercent >= 50 ? 'text-amber-700' : 'text-rose-600'}`}>Accuracy</div>
-            <div className={`text-2xl font-bold tabular-nums ${accuracyPercent >= 80 ? 'text-emerald-700' : accuracyPercent >= 50 ? 'text-amber-700' : 'text-rose-700'}`}>{accuracyPercent}%</div>
+
+          <div className="mt-6 space-y-4">
+            <IcrBucketLegend buckets={buckets} />
+            <IcrSessionChart
+              bars={perLetterCharts.bars}
+              dotsCorrectCat={perLetterCharts.dotsCorrectCat}
+              dotsWrongCat={perLetterCharts.dotsWrongCat}
+              icrSettings={icrSettings}
+            />
           </div>
         </div>
-        <IcrBucketLegend buckets={buckets} />
-        <IcrSessionChart bars={perLetterCharts.bars} dotsCorrectCat={perLetterCharts.dotsCorrectCat} dotsWrongCat={perLetterCharts.dotsWrongCat} icrSettings={icrSettings} />
+
+        {/* 3. Trial history (last) */}
+        <div className={`${panelClass} p-5 sm:p-6`}>
+          <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Trials</h2>
+          <p className="mt-0.5 text-base font-semibold text-slate-900">History</p>
+          <div className="mt-4">
+            <IcrTrialList trials={trials} buckets={buckets} />
+          </div>
+        </div>
       </div>
-      <IcrTrialList trials={trials} buckets={buckets} />
     </div>
   );
 }

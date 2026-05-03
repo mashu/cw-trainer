@@ -156,8 +156,8 @@ describe('ICRTrainer', (): void => {
       // Look for Summary or input field or any component text
       const summary = screen.queryByText(/Summary/i);
       const input = screen.queryByRole('textbox');
-      const trialText = screen.queryByText(/Trial/i);
-      expect(summary || input || trialText).toBeTruthy();
+      const training = screen.queryByText(/Training/i);
+      expect(summary || input || training).toBeTruthy();
     });
   });
 
@@ -242,7 +242,7 @@ describe('ICRTrainer', (): void => {
     await waitForInitialLoads();
 
     await waitFor(() => {
-      const trialText = screen.queryByText(/Trial.*\/.*30/i);
+      const trialText = screen.queryByText(/1\s*\/\s*30/);
       expect(trialText).toBeInTheDocument();
     });
   });
@@ -470,7 +470,7 @@ describe('ICRTrainer', (): void => {
 
     await waitFor(() => {
       // Should show trial counter
-      const trialText = screen.queryByText(/Trial/i);
+      const trialText = screen.queryByText(/1\s*\/\s*30/);
       expect(trialText).toBeInTheDocument();
     });
   });

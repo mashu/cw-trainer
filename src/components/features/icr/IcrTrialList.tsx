@@ -16,7 +16,7 @@ interface IcrTrialListProps {
 
 export function IcrTrialList({ trials, buckets }: IcrTrialListProps): JSX.Element {
   return (
-    <div className="mt-3 max-h-60 overflow-y-auto text-sm">
+    <div className="max-h-60 overflow-y-auto text-sm">
       {trials.map((t, i) => (
         <div key={i} className="flex gap-3 py-1 border-b">
           <div className="w-10">{t.target}</div>

@@ -13,7 +13,6 @@ export interface VADConfig {
   readonly vadEnabled: boolean;
   readonly vadThreshold: number;
   readonly vadHoldMs: number;
-  readonly calibrationLatencyMs?: number | null | undefined;
 }
 
 export interface VADStopEvent {
@@ -127,11 +126,10 @@ export function useVAD(
           if (held >= config.vadHoldMs) {
             const stopAt = Date.now();
             const heardAt = currentTrialHeardAtRef.current;
-            const minReactionMs =
-              config.calibrationLatencyMs != null && config.calibrationLatencyMs > 0
-                ? config.calibrationLatencyMs
-                : MIN_PLAUSIBLE_REACTION_MS;
-            if (heardAt != null && stopAt - heardAt < minReactionMs) {
+            // Echo / speaker→bleed: only reject *implausibly fast* stops. Do not use
+            // calibrationLatencyMs here — that value is often 100s of ms and would block
+            // every real voice stop from ever firing the resolver.
+            if (heardAt != null && stopAt - heardAt < MIN_PLAUSIBLE_REACTION_MS) {
               vadStartTimeRef.current = null;
               frameIdRef.current = requestAnimationFrame(tick);
               return;
@@ -163,15 +161,7 @@ export function useVAD(
       frameIdRef.current = requestAnimationFrame(tick);
     };
     frameIdRef.current = requestAnimationFrame(tick);
-  }, [
-    config.vadEnabled,
-    config.vadThreshold,
-    config.vadHoldMs,
-    config.calibrationLatencyMs,
-    measureInputLevel,
-    audioEndAtRef,
-    currentTrialHeardAtRef,
-  ]);
+  }, [config.vadEnabled, config.vadThreshold, config.vadHoldMs, measureInputLevel, audioEndAtRef, currentTrialHeardAtRef]);
 
   return {
     start,

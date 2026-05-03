@@ -31,6 +31,8 @@ export function useICRMicrophone(): ICRMicrophoneEngine {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioContextBaseTimeRef = useRef<number | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const silentGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
 
   const setupAudioContext = useCallback(async (): Promise<AudioContext> => {
@@ -49,39 +51,82 @@ export function useICRMicrophone(): ICRMicrophoneEngine {
 
   const setupMic = useCallback(
     async (deviceId?: string): Promise<void> => {
-      // Tear down previous stream
+      // Tear down previous graph + stream
+      try {
+        mediaStreamSourceRef.current?.disconnect();
+      } catch {
+        /* no-op */
+      }
+      mediaStreamSourceRef.current = null;
+      try {
+        silentGainRef.current?.disconnect();
+      } catch {
+        /* no-op */
+      }
+      silentGainRef.current = null;
+      try {
+        analyserRef.current?.disconnect();
+      } catch {
+        /* no-op */
+      }
+      analyserRef.current = null;
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
       }
+      // Prefer `ideal` so a stale saved deviceId still yields a working stream (exact often fails silently / errors).
       const constraints: MediaStreamConstraints = {
-        audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+        audio: deviceId ? { deviceId: { ideal: deviceId } } : true,
         video: false,
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       mediaStreamRef.current = stream;
       const ctx = await setupAudioContext();
       const source = ctx.createMediaStreamSource(stream);
+      mediaStreamSourceRef.current = source;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.8;
       source.connect(analyser);
+      // Some browsers only pull samples through the graph when it reaches the destination; keep output silent.
+      const silent = ctx.createGain();
+      silent.gain.value = 0;
+      silentGainRef.current = silent;
+      analyser.connect(silent);
+      silent.connect(ctx.destination);
       analyserRef.current = analyser;
+      await ensureContext(ctx);
     },
     [setupAudioContext],
   );
 
   const stopMic = useCallback((): void => {
     try {
+      mediaStreamSourceRef.current?.disconnect();
+    } catch {
+      /* no-op */
+    }
+    mediaStreamSourceRef.current = null;
+    try {
+      silentGainRef.current?.disconnect();
+    } catch {
+      /* no-op */
+    }
+    silentGainRef.current = null;
+    try {
+      analyserRef.current?.disconnect();
+    } catch {
+      /* no-op */
+    }
+    analyserRef.current = null;
+    try {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
       }
-    } catch { /* no-op */ }
-    try {
-      analyserRef.current?.disconnect();
-    } catch { /* no-op */ }
-    analyserRef.current = null;
+    } catch {
+      /* no-op */
+    }
   }, []);
 
   const measureInputLevel = useCallback((): number => {

@@ -32,6 +32,18 @@ export const pickRandomChar = (opts: {
 /**
  * Get the Tailwind text color class for a reaction time bucket.
  */
+/**
+ * Subtract speaker→mic calibration so stored reactions reflect perception, not peak arrival at the mic.
+ */
+export function calibratedReactionMs(
+  rawMs: number,
+  calibrationLatencyMs: number | null | undefined,
+): number {
+  const raw = Math.max(0, Math.round(rawMs));
+  if (calibrationLatencyMs == null || calibrationLatencyMs <= 0) return raw;
+  return Math.max(0, raw - Math.round(calibrationLatencyMs));
+}
+
 export const getReactionTextClass = (
   ms: number | undefined | null,
   buckets: { greenMax: number; yellowMax: number; orangeMax: number },
