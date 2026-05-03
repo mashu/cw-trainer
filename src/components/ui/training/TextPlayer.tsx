@@ -11,6 +11,7 @@ import {
 } from '@/lib/morseAudio';
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
+import { useAppStore } from '@/store';
 
 interface TextPlayerProps {
   settings: FormTrainingSettings;
@@ -38,6 +39,22 @@ type NavigatorWithWakeLock = Navigator & {
 };
 
 export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Element {
+  const acquireTrainingSessionLock = useAppStore((state) => state.acquireTrainingSessionLock);
+  const releaseTrainingSessionLock = useAppStore((state) => state.releaseTrainingSessionLock);
+  const textPlayerSessionLockHeldRef = useRef(false);
+  const takeTextPlayerLock = (): void => {
+    if (!textPlayerSessionLockHeldRef.current) {
+      acquireTrainingSessionLock();
+      textPlayerSessionLockHeldRef.current = true;
+    }
+  };
+  const releaseTextPlayerLock = (): void => {
+    if (textPlayerSessionLockHeldRef.current) {
+      releaseTrainingSessionLock();
+      textPlayerSessionLockHeldRef.current = false;
+    }
+  };
+
   const [text, setText] = useState<string>(initialText || 'CQ CQ DE TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [durationSec, setDurationSec] = useState<number>(0);
@@ -195,22 +212,31 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
   useEffect(() => {
     return (): void => {
       abortRef.current = true;
+      releaseTextPlayerLock();
       try {
         stopRef.current?.();
-      } catch {}
+      } catch {
+        /* no-op */
+      }
       stopRef.current = null;
       try {
         if (timerRef.current != null) window.clearTimeout(timerRef.current);
-      } catch {}
+      } catch {
+        /* no-op */
+      }
       timerRef.current = null;
       try {
         if (continuousTimeoutRef.current != null) window.clearTimeout(continuousTimeoutRef.current);
-      } catch {}
+      } catch {
+        /* no-op */
+      }
       continuousTimeoutRef.current = null;
-      releaseWakeLock();
+      void releaseWakeLock();
       try {
         audioContextRef.current?.close();
-      } catch {}
+      } catch {
+        /* no-op */
+      }
       audioContextRef.current = null;
     };
   }, []);
@@ -235,14 +261,16 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     abortRef.current = false;
     isPlayingRef.current = true;
     setIsPlaying(true);
+    takeTextPlayerLock();
     continuousIndexRef.current = 0;
     setCurrentLetterIndex(0);
-    
+
     const playNextLetter = async (): Promise<void> => {
       if (abortRef.current || !isPlayingRef.current) {
         if (!isContinuousMode) {
           await releaseWakeLock();
         }
+        releaseTextPlayerLock();
         return;
       }
 
@@ -251,6 +279,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         isPlayingRef.current = false;
         setIsPlaying(false);
         await releaseWakeLock();
+        releaseTextPlayerLock();
         return;
       }
 
@@ -263,6 +292,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
           isPlayingRef.current = false;
           setIsPlaying(false);
           await releaseWakeLock();
+          releaseTextPlayerLock();
           return;
         }
       }
@@ -316,6 +346,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         isPlayingRef.current = false;
         setIsPlaying(false);
         await releaseWakeLock();
+        releaseTextPlayerLock();
       }
     };
 
@@ -334,6 +365,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     }
     abortRef.current = false;
     setIsPlaying(true);
+    takeTextPlayerLock();
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
@@ -366,6 +398,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       timerRef.current = window.setTimeout(
         () => {
           setIsPlaying(false);
+          releaseTextPlayerLock();
           stopRef.current = null;
           timerRef.current = null;
         },
@@ -373,6 +406,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       ) as unknown as number;
     } catch {
       setIsPlaying(false);
+      releaseTextPlayerLock();
     }
   };
 
@@ -394,6 +428,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     continuousIndexRef.current = 0;
     setCurrentLetterIndex(0);
     setIsPlaying(false);
+    releaseTextPlayerLock();
     await releaseWakeLock();
   };
 

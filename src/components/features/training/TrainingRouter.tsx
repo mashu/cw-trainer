@@ -1,4 +1,6 @@
-import React, { Suspense } from 'react';
+'use client';
+
+import React, { Suspense, useState } from 'react';
 
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
@@ -11,6 +13,9 @@ import type { HeatmapSession, IcrSettings, SessionResult, TrainingMode, Training
 const ICRTrainer = React.lazy(() => import('@/components/features/icr/ICRTrainer').then(m => ({ default: m.ICRTrainer })));
 const GroupTrainingStats = React.lazy(() => import('@/components/features/stats/GroupTrainingStats').then(m => ({ default: m.GroupTrainingStats })));
 const TextPlayer = React.lazy(() => import('@/components/ui/training/TextPlayer').then(m => ({ default: m.TextPlayer })));
+const TextPlayerModal = React.lazy(() =>
+  import('@/components/ui/training/TextPlayerModal').then((m) => ({ default: m.TextPlayerModal })),
+);
 
 function LazyFallback(): JSX.Element {
   return (
@@ -70,6 +75,8 @@ export function TrainingRouter({
   showToast,
   handleMoveMode,
 }: TrainingRouterProps): JSX.Element | null {
+  const [playerModalOpen, setPlayerModalOpen] = useState(false);
+
   // ── Group mode: results screen ──
   if (
     training.showResults &&
@@ -94,7 +101,7 @@ export function TrainingRouter({
   }
 
   // ── Group mode: home screen ──
-  if (!training.isTraining && activeMode === 'group' && groupTab === 'train') {
+  if (!training.isTraining && !training.isCompletingSession && activeMode === 'group' && groupTab === 'train') {
     return (
       <TrainingHomeView
         sessions={groupHeatmapSessions}
@@ -135,7 +142,7 @@ export function TrainingRouter({
   }
 
   // ── Echo mode: home screen ──
-  if (!echoTraining.isTraining && activeMode === 'echo') {
+  if (!echoTraining.isTraining && !echoTraining.isCompletingSession && activeMode === 'echo') {
     return (
       <TrainingHomeView
         sessions={echoHeatmapSessions}
@@ -183,7 +190,8 @@ export function TrainingRouter({
   }
 
   // ── Group mode: active training ──
-  if (training.isTraining && activeMode === 'group') {
+  if ((training.isTraining || training.isCompletingSession) && activeMode === 'group') {
+    const sessionUiLocked = training.isTraining || training.isCompletingSession;
     return (
       <ActiveTrainingView
         currentGroup={training.currentGroup}
@@ -192,13 +200,13 @@ export function TrainingRouter({
         userInput={training.userInput}
         confirmedGroups={training.confirmedGroups}
         currentFocusedGroup={training.currentFocusedGroup}
-        isTraining={training.isTraining}
+        isTraining={sessionUiLocked}
         inputRefs={training.inputRefs}
         inputRefCallback={training.inputRefCallback}
         onChange={training.handleAnswerChange}
         onConfirm={training.confirmGroupAnswer}
         onFocus={(idx) => {
-          if (!training.isTraining || idx === training.currentGroup) {
+          if (!sessionUiLocked || idx === training.currentGroup) {
             training.setCurrentFocusedGroup(idx);
           }
         }}
@@ -209,7 +217,7 @@ export function TrainingRouter({
   }
 
   // ── Echo mode: active training ──
-  if (echoTraining.isTraining && activeMode === 'echo') {
+  if ((echoTraining.isTraining || echoTraining.isCompletingSession) && activeMode === 'echo') {
     return (
       <EchoTrainingView
         currentGroup={echoTraining.currentGroup}
@@ -249,13 +257,37 @@ export function TrainingRouter({
     return (
       <SwipeContainer onSwipeRight={() => handleMoveMode(-1)}>
         <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPlayerModalOpen(true)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Pop-out player
+            </button>
+          </div>
           <Suspense fallback={<LazyFallback />}>
             <TextPlayer settings={formSettings} />
+          </Suspense>
+          <Suspense fallback={null}>
+            <TextPlayerModal
+              open={playerModalOpen}
+              onClose={() => setPlayerModalOpen(false)}
+              settings={formSettings}
+            />
           </Suspense>
         </div>
       </SwipeContainer>
     );
   }
 
-  return null;
+  return (
+    <div
+      className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+      role="alert"
+    >
+      Unable to match a training view for the current mode and session state. Try switching mode with
+      the carousel or reloading the page.
+    </div>
+  );
 }

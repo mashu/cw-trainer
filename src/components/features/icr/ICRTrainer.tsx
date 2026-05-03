@@ -18,6 +18,7 @@ import {
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
 import type { SharedAudioFromSettings } from '@/lib/settingsToSharedAudioProps';
 import { formatSession } from '@/lib/utils/icrSessionFormatter';
+import { useAppStore } from '@/store';
 import type { IcrSettings } from '@/types';
 
 import { IcrBucketLegend } from './IcrBucketLegend';
@@ -90,6 +91,10 @@ function LastTrialDisplay({
 // ── Main component ────────────────────────────────────────────────────
 
 export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerProps): JSX.Element {
+  const acquireTrainingSessionLock = useAppStore((state) => state.acquireTrainingSessionLock);
+  const releaseTrainingSessionLock = useAppStore((state) => state.releaseTrainingSessionLock);
+  const icrSessionLockHeldRef = useRef(false);
+
   const [isRunning, setIsRunning] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const { saveIcrSession } = useIcrSessionsActions();
@@ -202,6 +207,10 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     currentIndexRef.current = 0;
     setIsRunning(true);
     sessionActiveRef.current = true;
+    if (!icrSessionLockHeldRef.current) {
+      acquireTrainingSessionLock();
+      icrSessionLockHeldRef.current = true;
+    }
 
     try {
       if (!mic.audioContextRef.current) {
@@ -337,6 +346,10 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
       showToast?.({ message: micErrorMessage(err), type: 'error' });
       return;
     } finally {
+      if (icrSessionLockHeldRef.current) {
+        releaseTrainingSessionLock();
+        icrSessionLockHeldRef.current = false;
+      }
       setCountdown(null);
       setIsRunning(false);
       isRunningRef.current = false;
@@ -352,7 +365,7 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
       vad.clearAllResolvers();
       inputEventResolversRef.current = {};
     }
-  }, [icrSettings, sharedAudio, mic, playChar, vad, showToast]);
+  }, [icrSettings, sharedAudio, mic, playChar, vad, showToast, acquireTrainingSessionLock, releaseTrainingSessionLock]);
 
   // Start VAD loop when running
   useEffect(() => {
@@ -373,7 +386,12 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
       vad.stop();
       sessionActiveRef.current = false;
       stopRef.current = true;
+      if (icrSessionLockHeldRef.current) {
+        releaseTrainingSessionLock();
+        icrSessionLockHeldRef.current = false;
+      }
     };
+  // Unmount-only: use latest store setter; do not re-bind mic/vad
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

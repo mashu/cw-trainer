@@ -33,8 +33,25 @@ export const createAppStore = ({
       context,
       lastSyncCompletedAt: undefined,
       setLastSyncCompletedAt: (t: number) => set({ lastSyncCompletedAt: t }),
+      trainingSessionLockCount: 0,
       trainingSessionActive: false,
-      setTrainingSessionActive: (active: boolean) => set({ trainingSessionActive: active }),
+      acquireTrainingSessionLock: (): void => {
+        set((s) => {
+          const trainingSessionLockCount = s.trainingSessionLockCount + 1;
+          return { trainingSessionLockCount, trainingSessionActive: true };
+        });
+      },
+      releaseTrainingSessionLock: (): void => {
+        set((s) => {
+          const trainingSessionLockCount = Math.max(0, s.trainingSessionLockCount - 1);
+          return {
+            trainingSessionLockCount,
+            trainingSessionActive: trainingSessionLockCount > 0,
+          };
+        });
+      },
+      resetTrainingSessionLocks: (): void =>
+        set({ trainingSessionLockCount: 0, trainingSessionActive: false }),
 
       setContext: (nextContext: StoreContextValue) => {
         const previousContext = get().context;

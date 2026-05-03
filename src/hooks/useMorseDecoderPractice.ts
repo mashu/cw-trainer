@@ -128,8 +128,8 @@ export function useMorseDecoderPractice({
         {
           charWpmMin: Math.max(1, settings.charWpmMin),
           charWpmMax: Math.max(1, settings.charWpmMax),
-          effectiveWpmMin: Math.max(1, settings.charWpmMin),
-          effectiveWpmMax: Math.max(1, settings.charWpmMax),
+          effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
+          effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
           extraWordSpaceMultiplier: 1,
           sideTone: settings.sideToneMin,
           steepness: settings.steepness,

@@ -101,24 +101,43 @@ export function CWTrainer(): JSX.Element {
   }, [lastSyncCompletedAt, showToast]);
 
   const trainingSessionActive = useAppStore((s) => s.trainingSessionActive);
-  const setTrainingSessionActive = useAppStore((s) => s.setTrainingSessionActive);
+  const resetTrainingSessionLocks = useAppStore((s) => s.resetTrainingSessionLocks);
+
+  /** Snapshot used only for interrupt guard — keeps useEffect deps a fixed-length tuple (avoids React dev/HMR “deps changed size” warnings). */
+  const interruptedSessionGuardInputs = useMemo(
+    () => ({
+      trainingSessionActive,
+      trainingIsTraining: training.isTraining,
+      trainingCompletingSession: training.isCompletingSession,
+      trainingShowResults: training.showResults,
+      echoIsTraining: echoTraining.isTraining,
+      echoCompletingSession: echoTraining.isCompletingSession,
+      echoShowResults: echoTraining.showResults,
+      activeMode,
+      groupTab,
+    }),
+    [
+      trainingSessionActive,
+      training.isTraining,
+      training.isCompletingSession,
+      training.showResults,
+      echoTraining.isTraining,
+      echoTraining.isCompletingSession,
+      echoTraining.showResults,
+      activeMode,
+      groupTab,
+    ],
+  );
+
   useEffect(() => {
-    if (!trainingSessionActive || training.isTraining || echoTraining.isTraining) return;
-    if (training.showResults || echoTraining.showResults) return;
-    if ((activeMode !== 'group' && activeMode !== 'echo') || groupTab !== 'train') return;
-    setTrainingSessionActive(false);
+    const s = interruptedSessionGuardInputs;
+    if (!s.trainingSessionActive || s.trainingIsTraining || s.echoIsTraining) return;
+    if (s.trainingCompletingSession || s.echoCompletingSession) return;
+    if (s.trainingShowResults || s.echoShowResults) return;
+    if ((s.activeMode !== 'group' && s.activeMode !== 'echo') || s.groupTab !== 'train') return;
+    resetTrainingSessionLocks();
     showToast({ message: 'Session was interrupted. Start a new one when ready.', type: 'info' });
-  }, [
-    trainingSessionActive,
-    training.isTraining,
-    training.showResults,
-    echoTraining.isTraining,
-    echoTraining.showResults,
-    activeMode,
-    groupTab,
-    setTrainingSessionActive,
-    showToast,
-  ]);
+  }, [interruptedSessionGuardInputs, resetTrainingSessionLocks, showToast]);
 
   const handleLogin = useCallback(async (): Promise<void> => {
     if (!firebaseReady || !firebaseServices) {

@@ -22,7 +22,7 @@ interface CreateSessionsSliceParams {
   set: StoreSetter<SessionsSlice>;
   get: () => Pick<SessionsSlice, 'sessions' | 'sessionsStatus'>;
   getContext: () => StoreContextValue;
-  /** When true, loads must not replace in-memory session lists during training. */
+  /** When true, loads and bulk mutations must not replace in-memory session lists during training. */
   readonly isTrainingSessionActive: () => boolean;
   service: SessionService;
 }
@@ -113,6 +113,11 @@ export const createSessionsSlice = ({
   },
 
   replaceSessions: async (inputs: readonly SessionResultInput[]): Promise<SessionResult[]> => {
+    if (isTrainingSessionActive()) {
+      console.debug('[sessions.slice] replaceSessions skipped (training session active)');
+      return get().sessions;
+    }
+
     set({ sessionsSyncing: true });
 
     try {
@@ -130,6 +135,11 @@ export const createSessionsSlice = ({
   },
 
   removeSessionByTimestamp: async (timestamp: number): Promise<SessionResult[]> => {
+    if (isTrainingSessionActive()) {
+      console.debug('[sessions.slice] removeSessionByTimestamp skipped (training session active)');
+      return get().sessions;
+    }
+
     set({ sessionsSyncing: true });
 
     try {
@@ -147,6 +157,11 @@ export const createSessionsSlice = ({
   },
 
   syncPendingSessions: async (): Promise<SessionResult[]> => {
+    if (isTrainingSessionActive()) {
+      console.debug('[sessions.slice] syncPendingSessions skipped (training session active)');
+      return get().sessions;
+    }
+
     set({ sessionsSyncing: true });
 
     try {

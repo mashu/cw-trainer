@@ -42,6 +42,8 @@ export interface UseTrainingSessionOptions {
 
 export interface UseTrainingSessionReturn {
   readonly isTraining: boolean;
+  /** True while playback stopped but results UI / persistence are still being prepared — avoids a routing flash to home. */
+  readonly isCompletingSession: boolean;
   readonly currentGroup: number;
   readonly sentGroups: string[];
   readonly userInput: string[];
@@ -71,7 +73,22 @@ export function useTrainingSession({
 }: UseTrainingSessionOptions): UseTrainingSessionReturn {
   type TimeoutId = number;
 
-  const setTrainingSessionActive = useAppStore((s) => s.setTrainingSessionActive);
+  const acquireTrainingSessionLock = useAppStore((s) => s.acquireTrainingSessionLock);
+  const releaseTrainingSessionLock = useAppStore((s) => s.releaseTrainingSessionLock);
+  /** One refcounted lock per group-training invocation — avoids imbalanced release if paths overlap. */
+  const sessionLockHeldRef = useRef(false);
+  const takeSessionLock = (): void => {
+    if (!sessionLockHeldRef.current) {
+      acquireTrainingSessionLock();
+      sessionLockHeldRef.current = true;
+    }
+  };
+  const dropSessionLock = (): void => {
+    if (sessionLockHeldRef.current) {
+      releaseTrainingSessionLock();
+      sessionLockHeldRef.current = false;
+    }
+  };
 
   // ── Shared audio engine ──────────────────────────────────────────────
   const audio = useTrainingAudio(settings);
@@ -85,6 +102,7 @@ export function useTrainingSession({
   const [currentFocusedGroup, setCurrentFocusedGroup] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [lastSessionResult, setLastSessionResult] = useState<SessionResultSummary | null>(null);
+  const [isCompletingSession, setIsCompletingSession] = useState(false);
 
   // ── Refs ─────────────────────────────────────────────────────────────
   const isTrainingRef = useRef(false);
@@ -177,7 +195,10 @@ export function useTrainingSession({
         : activeSentGroupsRef.current?.length
           ? activeSentGroupsRef.current
           : sentGroups;
-    if (!Array.isArray(sentSource) || sentSource.length === 0) return;
+    if (!Array.isArray(sentSource) || sentSource.length === 0) {
+      resultsProcessedRef.current = false;
+      return;
+    }
 
     const groupTimings = sentSource.map((_sent, idx) => {
       const endAt = groupEndAtRef.current[idx] || 0;
@@ -250,6 +271,7 @@ export function useTrainingSession({
       audio.trainingAbortRef.current = false;
       resultsProcessedRef.current = false;
       activeSentGroupsRef.current = [];
+      setIsCompletingSession(false);
 
       Object.values(confirmTimeoutRef.current).forEach((id) => {
         if (id !== undefined) { try { window.clearTimeout(id); } catch { /* no-op */ } }
@@ -263,7 +285,7 @@ export function useTrainingSession({
       audio.sessionIdRef.current = mySession;
       setIsTraining(true);
       isTrainingRef.current = true;
-      setTrainingSessionActive(true);
+      takeSessionLock();
       setShowResults(false);
       setLastSessionResult(null);
       setCurrentGroup(0);
@@ -309,12 +331,15 @@ export function useTrainingSession({
         }
         try { audio.stopAudio(); } catch { /* no-op */ }
       }
-      setIsTraining(false);
-      isTrainingRef.current = false;
-      audio.stopAudio();
       const shouldProcessResults =
         !(audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) &&
         !resultsProcessedRef.current;
+      if (shouldProcessResults) {
+        setIsCompletingSession(true);
+      }
+      setIsTraining(false);
+      isTrainingRef.current = false;
+      audio.stopAudio();
       if (shouldProcessResults) {
         const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map((a) =>
           (a || '').trim().toUpperCase(),
@@ -325,17 +350,18 @@ export function useTrainingSession({
           console.error('[Training] Error processing results:', error);
           showToast({ message: `Failed to process results: ${ensureAppError(error).message}`, type: 'error' });
         } finally {
-          setTrainingSessionActive(false);
+          dropSessionLock();
+          setIsCompletingSession(false);
         }
       } else {
-        setTrainingSessionActive(false);
+        dropSessionLock();
       }
     } catch (error) {
       console.error('[Training] Unexpected training error:', error);
       showToast({ message: `Training error: ${ensureAppError(error).message}`, type: 'error' });
       setIsTraining(false);
       isTrainingRef.current = false;
-      setTrainingSessionActive(false);
+      dropSessionLock();
       audio.trainingAbortRef.current = true;
       audio.stopAudio();
     }
@@ -343,6 +369,7 @@ export function useTrainingSession({
 
   const submitAnswer = (): void => {
     audio.trainingAbortRef.current = true;
+    setIsCompletingSession(true);
     setIsTraining(false);
     isTrainingRef.current = false;
     audio.stopAudio();
@@ -355,7 +382,8 @@ export function useTrainingSession({
         showToast({ message: `Failed to process results: ${ensureAppError(error).message}`, type: 'error' });
       })
       .finally(() => {
-        setTrainingSessionActive(false);
+        dropSessionLock();
+        setIsCompletingSession(false);
       });
   };
 
@@ -363,7 +391,7 @@ export function useTrainingSession({
     audio.trainingAbortRef.current = true;
     setIsTraining(false);
     isTrainingRef.current = false;
-    setTrainingSessionActive(false);
+    dropSessionLock();
     audio.stopAudio();
   };
 
@@ -481,7 +509,9 @@ export function useTrainingSession({
   }
 
   return {
-    isTraining, currentGroup, sentGroups, userInput, confirmedGroups, currentFocusedGroup,
+    isTraining,
+    isCompletingSession,
+    currentGroup, sentGroups, userInput, confirmedGroups, currentFocusedGroup,
     showResults, lastSessionResult, startTraining, submitAnswer, stopTraining,
     confirmGroupAnswer, handleAnswerChange, setCurrentFocusedGroup, dismissResults,
     inputRefs, inputRefCallback,

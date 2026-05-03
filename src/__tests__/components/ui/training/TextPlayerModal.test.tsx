@@ -1,8 +1,54 @@
 import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
 
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { TextPlayerModal } from '@/components/ui/training/TextPlayerModal';
+import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
+import type { IcrSessionService } from '@/lib/services/icr-session.service';
+import type { SessionService } from '@/lib/services/session.service';
+import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
+import { AppStoreProvider } from '@/store/providers/app-store-provider';
+
+const mockTrainingSettingsService = {
+  getSettings: jest.fn().mockResolvedValue(DEFAULT_TRAINING_SETTINGS),
+  saveSettings: jest.fn(),
+  patchSettings: jest.fn(),
+  resetSettings: jest.fn(),
+} as unknown as TrainingSettingsService;
+
+const mockSessionService = {
+  listSessions: jest.fn().mockResolvedValue([]),
+  upsertSession: jest.fn(),
+  replaceAll: jest.fn(),
+  deleteSession: jest.fn(),
+  syncPending: jest.fn(),
+  processRetryQueue: jest.fn(),
+} as unknown as SessionService;
+
+const mockIcrSessionService = {
+  listSessions: jest.fn().mockResolvedValue([]),
+  saveSession: jest.fn(),
+  clearSessions: jest.fn(),
+  deleteSession: jest.fn(),
+} as unknown as IcrSessionService;
+
+function TestWrapper({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <AppStoreProvider
+      user={null}
+      sessionService={mockSessionService}
+      trainingSettingsService={mockTrainingSettingsService}
+      icrSessionService={mockIcrSessionService}
+    >
+      {children}
+    </AppStoreProvider>
+  );
+}
+
+function renderWithStore(ui: React.ReactElement): ReturnType<typeof render> {
+  return render(ui, { wrapper: TestWrapper });
+}
 
 // Mock morseAudio functions
 jest.mock('@/lib/morseAudio', () => ({
@@ -51,20 +97,20 @@ describe('TextPlayerModal', (): void => {
   });
 
   it('should not render when closed', (): void => {
-    render(<TextPlayerModal open={false} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={false} onClose={onClose} settings={defaultSettings} />);
 
     expect(screen.queryByDisplayValue(/CQ CQ TEST/i)).not.toBeInTheDocument();
   });
 
   it('should render when open', (): void => {
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     expect(screen.getByDisplayValue(/CQ CQ TEST/i)).toBeInTheDocument();
   });
 
   it('should call onClose when close button is clicked', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const closeButton = screen.getByRole('button', { name: /close|×|✕/i });
     await act(async () => {
@@ -75,7 +121,7 @@ describe('TextPlayerModal', (): void => {
   });
 
   it('should render with initial text', (): void => {
-    render(
+    renderWithStore(
       <TextPlayerModal
         open={true}
         onClose={onClose}
@@ -89,7 +135,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should allow text input changes', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const textarea = screen.getByDisplayValue(/CQ CQ TEST/i);
     await user.clear(textarea);
@@ -99,14 +145,14 @@ describe('TextPlayerModal', (): void => {
   });
 
   it('should show play button', (): void => {
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     expect(screen.getByRole('button', { name: /Play/i })).toBeInTheDocument();
   });
 
   it('should show stop button when playing', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const playButton = screen.getByRole('button', { name: /Play/i });
     await act(async () => {
@@ -123,7 +169,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should call onClose when backdrop is clicked and not playing', async (): Promise<void> => {
     const user = userEvent.setup();
-    const { container } = render(
+    const { container } = renderWithStore(
       <TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />,
     );
 
@@ -139,7 +185,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should not call onClose when backdrop is clicked while playing', async (): Promise<void> => {
     const user = userEvent.setup();
-    const { container } = render(
+    const { container } = renderWithStore(
       <TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />,
     );
 
@@ -166,7 +212,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should pre-fill text when pre-fill button is clicked', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const prefillButton = screen.getByRole('button', { name: /Pre-fill/i });
     
@@ -184,7 +230,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should clear text when clear button is clicked', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const clearButton = screen.getByRole('button', { name: /Clear/i });
     await act(async () => {
@@ -196,7 +242,7 @@ describe('TextPlayerModal', (): void => {
   });
 
   it('should disable play button when text is empty', (): void => {
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const playButton = screen.getByRole('button', { name: /Play/i });
     expect(playButton).not.toBeDisabled();
@@ -204,7 +250,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should disable buttons when playing', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const playButton = screen.getByRole('button', { name: /Play/i });
     await act(async () => {
@@ -224,7 +270,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should generate line of groups when Enter is pressed', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const textarea = screen.getByPlaceholderText(/Type text here/i);
     
@@ -239,7 +285,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should display duration when available', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const playButton = screen.getByRole('button', { name: /Play/i });
     await act(async () => {
@@ -257,7 +303,7 @@ describe('TextPlayerModal', (): void => {
   });
 
   it('should display settings information', (): void => {
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     expect(screen.getByText(/Char WPM:/i)).toBeInTheDocument();
     expect(screen.getByText(/Eff WPM:/i)).toBeInTheDocument();
@@ -266,7 +312,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should stop playback when stop button is clicked', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     const playButton = screen.getByRole('button', { name: /Play/i });
     await act(async () => {
@@ -290,7 +336,7 @@ describe('TextPlayerModal', (): void => {
 
   it('should not close when close button is clicked while playing', async (): Promise<void> => {
     const user = userEvent.setup();
-    render(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
+    renderWithStore(<TextPlayerModal open={true} onClose={onClose} settings={defaultSettings} />);
 
     // Start playing
     const playButton = screen.getByRole('button', { name: /Play/i });

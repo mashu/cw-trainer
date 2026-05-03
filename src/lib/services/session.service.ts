@@ -116,12 +116,15 @@ export class SessionService {
 
     const allSessions = sortSessions(Array.from(byTimestamp.values()));
 
-    for (const session of readySessions) {
-      try {
-        await this.repository.saveAll(context, allSessions);
+    try {
+      await this.repository.saveAll(context, allSessions);
+      this.cachedSessions = allSessions;
+      for (const session of readySessions) {
         recordRetryAttempt(session.timestamp, true);
-      } catch (error) {
-        console.warn('[SessionService] Retry failed for session:', session.timestamp, error);
+      }
+    } catch (error) {
+      console.warn('[SessionService] Retry failed for queued sessions:', error);
+      for (const session of readySessions) {
         recordRetryAttempt(session.timestamp, false);
       }
     }

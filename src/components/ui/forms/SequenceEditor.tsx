@@ -4,6 +4,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 
 import { MORSE_CODE } from '@/lib/morseConstants';
 import { getPresetById, SEQUENCE_PRESETS } from '@/lib/sequencePresets';
+import { shuffleArray } from '@/lib/utils/shuffleArray';
 
 interface SequenceEditorProps {
   sequence: string[];
@@ -161,7 +162,7 @@ export function SequenceEditor({
   }, [sequence, onChange]);
 
   const handleShuffle = useCallback(() => {
-    const shuffled = [...sequence].sort(() => Math.random() - 0.5);
+    const shuffled = shuffleArray(sequence);
     onChange(shuffled);
     setIsCustom(true);
   }, [sequence, onChange]);

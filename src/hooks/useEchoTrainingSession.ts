@@ -59,6 +59,8 @@ export interface UseEchoTrainingSessionOptions {
 
 export interface UseEchoTrainingSessionReturn {
   readonly isTraining: boolean;
+  /** True while playback stopped but results UI / persistence are still being prepared — avoids a routing flash to home. */
+  readonly isCompletingSession: boolean;
   readonly currentGroup: number;
   readonly sentGroups: string[];
   readonly currentCharacterIndex: number;
@@ -104,7 +106,21 @@ export function useEchoTrainingSession({
   setTrainingSettingsState,
   showToast,
 }: UseEchoTrainingSessionOptions): UseEchoTrainingSessionReturn {
-  const setTrainingSessionActive = useAppStore((state) => state.setTrainingSessionActive);
+  const acquireTrainingSessionLock = useAppStore((state) => state.acquireTrainingSessionLock);
+  const releaseTrainingSessionLock = useAppStore((state) => state.releaseTrainingSessionLock);
+  const sessionLockHeldRef = useRef(false);
+  const takeSessionLock = (): void => {
+    if (!sessionLockHeldRef.current) {
+      acquireTrainingSessionLock();
+      sessionLockHeldRef.current = true;
+    }
+  };
+  const dropSessionLock = (): void => {
+    if (sessionLockHeldRef.current) {
+      releaseTrainingSessionLock();
+      sessionLockHeldRef.current = false;
+    }
+  };
   const audio = useTrainingAudio(settings);
 
   const settingsRef = useRef(settings);
@@ -128,6 +144,7 @@ export function useEchoTrainingSession({
   const [incorrectCharacters, setIncorrectCharacters] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [lastSessionResult, setLastSessionResult] = useState<EchoSessionResultSummary | null>(null);
+  const [isCompletingSession, setIsCompletingSession] = useState(false);
 
   const isTrainingRef = useRef(false);
   const startedAtRef = useRef<number | null>(null);
@@ -220,8 +237,8 @@ export function useEchoTrainingSession({
         {
           charWpmMin: Math.max(1, settings.charWpmMin),
           charWpmMax: Math.max(1, settings.charWpmMax),
-          effectiveWpmMin: Math.max(1, settings.charWpmMin),
-          effectiveWpmMax: Math.max(1, settings.charWpmMax),
+          effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
+          effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
           extraWordSpaceMultiplier: 1,
           sideTone: settings.sideToneMin,
           steepness: settings.steepness,
@@ -451,11 +468,11 @@ export function useEchoTrainingSession({
     isTrainingRef.current = false;
     resetAllKeyerState();
     setIsTraining(false);
-    setTrainingSessionActive(false);
+    dropSessionLock();
     settleActiveAttempt({ outcome: 'aborted', receivedCharacter: '', durationMs: 0 });
     audio.stopAudio();
     setCurrentCharacterState('idle');
-  }, [resetAllKeyerState, setTrainingSessionActive, settleActiveAttempt, audio]);
+  }, [resetAllKeyerState, settleActiveAttempt, audio]);
 
   const dismissResults = useCallback((): void => {
     setShowResults(false);
@@ -469,6 +486,7 @@ export function useEchoTrainingSession({
       audio.stopAudio();
       audio.trainingAbortRef.current = false;
       resetAllKeyerState();
+      setIsCompletingSession(false);
       setShowResults(false); setLastSessionResult(null);
       setCurrentGroup(0); setCurrentCharacterIndex(0); setCurrentCharacterState('idle');
       setCurrentSymbols(''); setRevealedCharacter(null); setCurrentGroupProgress([]);
@@ -481,7 +499,7 @@ export function useEchoTrainingSession({
       startedAtRef.current = Date.now();
       isTrainingRef.current = true;
       setIsTraining(true);
-      setTrainingSessionActive(true);
+      takeSessionLock();
 
       const groups = Array.from({ length: settings.numGroups }, () =>
         generateTrainingGroup(settings, historicalSessions),
@@ -538,6 +556,11 @@ export function useEchoTrainingSession({
         groupResponseTimes.push(groupTimeMs);
       }
 
+      const willProcessResults =
+        !audio.trainingAbortRef.current && audio.sessionIdRef.current === mySession;
+      if (willProcessResults) {
+        setIsCompletingSession(true);
+      }
       isTrainingRef.current = false;
       setIsTraining(false);
       resetAllKeyerState();
@@ -545,24 +568,27 @@ export function useEchoTrainingSession({
       setCurrentCharacterState('idle');
       setCurrentSymbols('');
 
-      if (!audio.trainingAbortRef.current && audio.sessionIdRef.current === mySession) {
+      if (willProcessResults) {
         try {
           await processResults(groups, receivedGroups, groupResponseTimes, nextCorrect, nextIncorrect);
         } finally {
-          setTrainingSessionActive(false);
+          dropSessionLock();
+          setIsCompletingSession(false);
         }
       } else {
-        setTrainingSessionActive(false);
+        dropSessionLock();
       }
     } catch (error) {
       console.error('[EchoTraining] Unexpected training error:', error);
       showToast({ message: `Echo training error: ${ensureAppError(error).message}`, type: 'error' });
       stopTraining();
     }
-  }, [historicalSessions, playCharacter, processResults, resetAllKeyerState, settings, showToast, audio, stopTraining, waitForAttempt, setTrainingSessionActive]);
+  }, [historicalSessions, playCharacter, processResults, resetAllKeyerState, settings, showToast, audio, stopTraining, waitForAttempt]);
 
   return {
-    isTraining, currentGroup, sentGroups, currentCharacterIndex, currentCharacterState,
+    isTraining,
+    isCompletingSession,
+    currentGroup, sentGroups, currentCharacterIndex, currentCharacterState,
     currentSymbols, revealedCharacter, currentGroupProgress, correctCharacters, incorrectCharacters,
     sendingScore: correctCharacters - incorrectCharacters,
     showResults, lastSessionResult, startTraining, stopTraining, dismissResults,

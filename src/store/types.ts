@@ -15,11 +15,16 @@ export interface ContextSlice {
   lastSyncCompletedAt: number | undefined;
   setLastSyncCompletedAt: (t: number) => void;
   /**
-   * True while a group training session is active. Stored in the store so it survives remounts.
-   * If the component tree remounts, we show "Session interrupted" instead of the main page.
+   * True while any feature holds a training-session lock (group, echo, ICR, text player, letter preview).
+   * Implemented as a refcount so overlapping UI cannot clear another feature’s lock by mistake.
    */
   trainingSessionActive: boolean;
-  setTrainingSessionActive: (active: boolean) => void;
+  /** Number of active acquireTrainingSessionLock calls not yet released. */
+  trainingSessionLockCount: number;
+  acquireTrainingSessionLock: () => void;
+  releaseTrainingSessionLock: () => void;
+  /** Clears all locks — forced interrupt / stale recovery (e.g. CWTrainer guard). */
+  resetTrainingSessionLocks: () => void;
 }
 
 export type StoreSetter<TState> = (

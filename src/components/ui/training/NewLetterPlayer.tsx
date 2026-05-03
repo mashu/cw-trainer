@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { playMorseCodeControlled } from '@/lib/morseAudio';
 import { computeCharPool } from '@/lib/trainingUtils';
+import { useAppStore } from '@/store';
 import type { CharacterSetMode, TrainingSettings } from '@/types';
 
 interface NewLetterPlayerProps {
@@ -18,9 +19,41 @@ interface NewLetterPlayerProps {
 }
 
 export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element | null {
+  const acquireTrainingSessionLock = useAppStore((state) => state.acquireTrainingSessionLock);
+  const releaseTrainingSessionLock = useAppStore((state) => state.releaseTrainingSessionLock);
+  const sessionLockHeldRef = useRef(false);
+
+  const takeLock = (): void => {
+    if (!sessionLockHeldRef.current) {
+      acquireTrainingSessionLock();
+      sessionLockHeldRef.current = true;
+    }
+  };
+  const releaseLock = (): void => {
+    if (sessionLockHeldRef.current) {
+      releaseTrainingSessionLock();
+      sessionLockHeldRef.current = false;
+    }
+  };
+
   const [isPlaying, setIsPlaying] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
+  const durationDoneTimeoutRef = useRef<number | undefined>(undefined);
+
+  const clearDurationDoneTimeout = useCallback((): void => {
+    if (durationDoneTimeoutRef.current !== undefined) {
+      window.clearTimeout(durationDoneTimeoutRef.current);
+      durationDoneTimeoutRef.current = undefined;
+    }
+  }, []);
+
+  useEffect(() => {
+    return (): void => {
+      clearDurationDoneTimeout();
+      releaseLock();
+    };
+  }, [clearDurationDoneTimeout]);
 
   const charPool = computeCharPool({
     kochLevel: settings.kochLevel,
@@ -97,12 +130,14 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
 
   const handlePlay = useCallback(async () => {
     if (isPlaying) {
+      clearDurationDoneTimeout();
       // Stop if already playing
       if (stopRef.current) {
         stopRef.current();
         stopRef.current = null;
       }
       setIsPlaying(false);
+      releaseLock();
       return;
     }
 
@@ -113,6 +148,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
 
     try {
       setIsPlaying(true);
+      takeLock();
       // Determine what to play based on level
       let lettersToPlay: string[];
       if (settings.kochLevel === 1) {
@@ -144,19 +180,32 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
         () => false, // Don't stop unless user clicks
       );
       stopRef.current = stop;
-      
+
       // Wait for playback to finish based on actual duration
       const durationMs = Math.ceil((durationSec || 0) * 1000) + 100; // Add small buffer
-      setTimeout(() => {
+      clearDurationDoneTimeout();
+      durationDoneTimeoutRef.current = window.setTimeout(() => {
+        durationDoneTimeoutRef.current = undefined;
         setIsPlaying(false);
+        releaseLock();
         stopRef.current = null;
       }, durationMs);
     } catch (error) {
       console.error('Error playing letters:', error);
+      clearDurationDoneTimeout();
       setIsPlaying(false);
+      releaseLock();
       stopRef.current = null;
     }
-  }, [isPlaying, selectedLetter, settings, charPool, isFirstLevelPair, pickToneHz]);
+  }, [
+    isPlaying,
+    selectedLetter,
+    settings,
+    charPool,
+    isFirstLevelPair,
+    pickToneHz,
+    clearDurationDoneTimeout,
+  ]);
 
   const handlePrevious = useCallback(() => {
     if (isPlaying) return;

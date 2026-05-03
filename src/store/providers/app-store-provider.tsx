@@ -104,6 +104,7 @@ export function AppStoreProvider({
 
   const storeRef = useRef<AppStoreApi>();
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tryRetryQueuedSessionsRef = useRef<(() => Promise<void>) | null>(null);
 
   if (!storeRef.current) {
     const context: StoreContextValue = {
@@ -167,6 +168,35 @@ export function AppStoreProvider({
     }, 50);
   };
 
+  tryRetryQueuedSessionsRef.current = async (): Promise<void> => {
+    const store = storeRef.current;
+    const services = servicesRef.current;
+    if (!store || !services) return;
+
+    const queuedCount = getQueuedSessionCount();
+    if (queuedCount === 0) return;
+
+    if (store.getState().trainingSessionActive) {
+      console.debug('[app-store-provider] Skipping retry queue while training session is active');
+      return;
+    }
+
+    const context = store.getState().context;
+    if (!context.firebase?.db || !context.user) {
+      return;
+    }
+
+    console.debug('[app-store-provider] Retrying queued sessions:', queuedCount);
+    try {
+      await services.sessionService.processRetryQueue({
+        firebase: context.firebase,
+        user: context.user,
+      });
+    } catch (error) {
+      console.warn('[app-store-provider] Retry queue processing failed:', error);
+    }
+  };
+
   // Update context when props change and trigger loads
   useEffect(() => {
     const store = storeRef.current;
@@ -223,6 +253,7 @@ export function AppStoreProvider({
         // processResults/auto-adjust and autosave; a settings load would race
         // and replace the store with stale remote state.
         triggerLoads({ skipTrainingSettings: true });
+        void tryRetryQueuedSessionsRef.current?.();
       }
       previousTrainingSessionActive = currentTrainingSessionActive;
     });
@@ -281,40 +312,15 @@ export function AppStoreProvider({
   // Periodic retry of queued sessions
   useEffect(() => {
     const RETRY_INTERVAL_MS = 30000; // Check every 30 seconds
-    
-    const tryRetryQueue = async (): Promise<void> => {
-      const store = storeRef.current;
-      const services = servicesRef.current;
-      if (!store || !services) return;
-      
-      const queuedCount = getQueuedSessionCount();
-      if (queuedCount === 0) return;
-      
-      const context = store.getState().context;
-      if (!context.firebase?.db || !context.user) {
-        // No Firebase or user - can't retry
-        return;
-      }
-      
-      console.debug('[app-store-provider] Retrying queued sessions:', queuedCount);
-      try {
-        await services.sessionService.processRetryQueue({
-          firebase: context.firebase,
-          user: context.user,
-        });
-      } catch (error) {
-        console.warn('[app-store-provider] Retry queue processing failed:', error);
-      }
-    };
-    
+
     // Initial retry attempt after a short delay
     const initialTimeout = setTimeout(() => {
-      void tryRetryQueue();
+      void tryRetryQueuedSessionsRef.current?.();
     }, 5000);
-    
+
     // Periodic retry
     const intervalId = setInterval(() => {
-      void tryRetryQueue();
+      void tryRetryQueuedSessionsRef.current?.();
     }, RETRY_INTERVAL_MS);
     
     return (): void => {

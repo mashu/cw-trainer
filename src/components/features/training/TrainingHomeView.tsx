@@ -23,6 +23,9 @@ function TrainingTipsCarousel({
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
+    if (tips.length === 0) {
+      return;
+    }
     const id = setInterval(() => {
       setIndex((i) => (i + 1) % tips.length);
     }, ROTATE_MS);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import {
@@ -9,6 +9,7 @@ import {
 } from '@/lib/morseAudio';
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
+import { useAppStore } from '@/store';
 
 interface TextPlayerModalProps {
   open: boolean;
@@ -23,13 +24,41 @@ export function TextPlayerModal({
   settings,
   initialText,
 }: TextPlayerModalProps): JSX.Element | null {
+  const acquireTrainingSessionLock = useAppStore((state) => state.acquireTrainingSessionLock);
+  const releaseTrainingSessionLock = useAppStore((state) => state.releaseTrainingSessionLock);
+  const modalSessionLockHeldRef = useRef(false);
+  const takeModalLock = (): void => {
+    if (!modalSessionLockHeldRef.current) {
+      acquireTrainingSessionLock();
+      modalSessionLockHeldRef.current = true;
+    }
+  };
+  const releaseModalLock = (): void => {
+    if (modalSessionLockHeldRef.current) {
+      releaseTrainingSessionLock();
+      modalSessionLockHeldRef.current = false;
+    }
+  };
+
   const [text, setText] = useState<string>(initialText || 'CQ CQ TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [durationSec, setDurationSec] = useState<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const abortRef = useRef<boolean>(false);
+  const tickTimeoutRef = useRef<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const clearPlaybackTick = useCallback((): void => {
+    if (tickTimeoutRef.current != null) {
+      try {
+        window.clearTimeout(tickTimeoutRef.current);
+      } catch {
+        /* no-op */
+      }
+      tickTimeoutRef.current = null;
+    }
+  }, []);
 
   const toneHz = useMemo(() => {
     const min = Math.max(100, settings.sideToneMin);
@@ -112,36 +141,48 @@ export function TextPlayerModal({
 
   useEffect(() => {
     if (!open) {
+      abortRef.current = true;
+      clearPlaybackTick();
       try {
         stopRef.current?.();
-      } catch {}
+      } catch {
+        /* no-op */
+      }
       stopRef.current = null;
       setIsPlaying(false);
       setDurationSec(0);
-      abortRef.current = true;
-      abortRef.current = false;
+      releaseModalLock();
     }
-  }, [open]);
+  }, [open, clearPlaybackTick]);
 
   useEffect(() => {
     return (): void => {
+      abortRef.current = true;
+      releaseModalLock();
+      clearPlaybackTick();
       try {
         stopRef.current?.();
-      } catch {}
+      } catch {
+        /* no-op */
+      }
       stopRef.current = null;
       try {
         audioContextRef.current?.close();
-      } catch {}
+      } catch {
+        /* no-op */
+      }
       audioContextRef.current = null;
     };
-  }, []);
+  }, [clearPlaybackTick]);
 
   const handlePlay = async (): Promise<void> => {
     if (!open || !text.trim()) {
       return;
     }
     abortRef.current = false;
+    clearPlaybackTick();
     setIsPlaying(true);
+    takeModalLock();
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
@@ -173,25 +214,35 @@ export function TextPlayerModal({
         if (abortRef.current) return;
         const remaining = endAt - Date.now();
         if (remaining <= 0) {
+          tickTimeoutRef.current = null;
           setIsPlaying(false);
+          releaseModalLock();
           stopRef.current = null;
           return;
         }
-        window.setTimeout(tick, Math.min(250, Math.max(50, remaining)));
+        tickTimeoutRef.current = window.setTimeout(
+          tick,
+          Math.min(250, Math.max(50, remaining)),
+        ) as unknown as number;
       };
-      window.setTimeout(tick, 50);
+      tickTimeoutRef.current = window.setTimeout(tick, 50) as unknown as number;
     } catch {
       setIsPlaying(false);
+      releaseModalLock();
     }
   };
 
   const handleStop = (): void => {
     abortRef.current = true;
+    clearPlaybackTick();
     try {
       stopRef.current?.();
-    } catch {}
+    } catch {
+      /* no-op */
+    }
     stopRef.current = null;
     setIsPlaying(false);
+    releaseModalLock();
   };
 
   if (!open) return null;
