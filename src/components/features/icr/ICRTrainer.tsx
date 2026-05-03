@@ -23,8 +23,8 @@ import { formatSession } from '@/lib/utils/icrSessionFormatter';
 import type { IcrSettings } from '@/types';
 
 import { IcrBucketLegend } from './IcrBucketLegend';
-import { IcrSessionChart, type LetterBarPoint, type ReactionScatterPoint } from './IcrSessionChart';
 import { IcrCountdownStrip } from './IcrCountdownStrip';
+import { IcrSessionChart, type LetterBarPoint, type ReactionScatterPoint } from './IcrSessionChart';
 import { IcrTrainingVoiceHud } from './IcrTrainingVoiceHud';
 import { IcrTrialList } from './IcrTrialList';
 
