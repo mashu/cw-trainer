@@ -3,13 +3,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
-import {
-  playMorseCodeControlled,
-  resumeAudioContextFromUserGesture,
-} from '@/lib/morseAudio';
+import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
+import { playMorseCodeControlled, resumeAudioContextFromUserGesture } from '@/lib/morseAudio';
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
-import { useAppStore } from '@/store';
 
 interface TextPlayerModalProps {
   open: boolean;
@@ -24,21 +21,7 @@ export function TextPlayerModal({
   settings,
   initialText,
 }: TextPlayerModalProps): JSX.Element | null {
-  const acquireTrainingSessionLock = useAppStore((state) => state.acquireTrainingSessionLock);
-  const releaseTrainingSessionLock = useAppStore((state) => state.releaseTrainingSessionLock);
-  const modalSessionLockHeldRef = useRef(false);
-  const takeModalLock = (): void => {
-    if (!modalSessionLockHeldRef.current) {
-      acquireTrainingSessionLock();
-      modalSessionLockHeldRef.current = true;
-    }
-  };
-  const releaseModalLock = (): void => {
-    if (modalSessionLockHeldRef.current) {
-      releaseTrainingSessionLock();
-      modalSessionLockHeldRef.current = false;
-    }
-  };
+  const { takeLock: takeModalLock, releaseLock: releaseModalLock } = useTrainingSessionLock();
 
   const [text, setText] = useState<string>(initialText || 'CQ CQ TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -72,10 +55,18 @@ export function TextPlayerModal({
       kochLevel: settings.kochLevel,
       ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
       ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
-      ...(settings.customSet && settings.customSet.length > 0 ? { customSet: [...settings.customSet] } : {}),
-      ...(settings.customSequence && settings.customSequence.length > 0 ? { customSequence: [...settings.customSequence] } : {}),
-      ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
-      ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
+      ...(settings.customSet && settings.customSet.length > 0
+        ? { customSet: [...settings.customSet] }
+        : {}),
+      ...(settings.customSequence && settings.customSequence.length > 0
+        ? { customSequence: [...settings.customSequence] }
+        : {}),
+      ...(settings.slidingWindowStart !== undefined
+        ? { slidingWindowStart: settings.slidingWindowStart }
+        : {}),
+      ...(settings.slidingWindowEnd !== undefined
+        ? { slidingWindowEnd: settings.slidingWindowEnd }
+        : {}),
     });
     const safePool =
       Array.isArray(charPool) && charPool.length > 0
@@ -153,7 +144,7 @@ export function TextPlayerModal({
       setDurationSec(0);
       releaseModalLock();
     }
-  }, [open, clearPlaybackTick]);
+  }, [open, clearPlaybackTick, releaseModalLock]);
 
   useEffect(() => {
     return (): void => {
@@ -173,7 +164,7 @@ export function TextPlayerModal({
       }
       audioContextRef.current = null;
     };
-  }, [clearPlaybackTick]);
+  }, [clearPlaybackTick, releaseModalLock]);
 
   const handlePlay = async (): Promise<void> => {
     if (!open || !text.trim()) {
@@ -299,8 +290,14 @@ export function TextPlayerModal({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="text-xs text-slate-600">
               <div>
-                Char WPM: {settings.charWpmMin === settings.charWpmMax ? settings.charWpmMin : `${settings.charWpmMin}-${settings.charWpmMax}`} • Eff WPM:{' '}
-                {settings.effectiveWpmMin === settings.effectiveWpmMax ? settings.effectiveWpmMin : `${settings.effectiveWpmMin}-${settings.effectiveWpmMax}`}
+                Char WPM:{' '}
+                {settings.charWpmMin === settings.charWpmMax
+                  ? settings.charWpmMin
+                  : `${settings.charWpmMin}-${settings.charWpmMax}`}{' '}
+                • Eff WPM:{' '}
+                {settings.effectiveWpmMin === settings.effectiveWpmMax
+                  ? settings.effectiveWpmMin
+                  : `${settings.effectiveWpmMin}-${settings.effectiveWpmMax}`}
               </div>
               <div>
                 Tone: {toneHz} Hz • Extra Word Space: ×

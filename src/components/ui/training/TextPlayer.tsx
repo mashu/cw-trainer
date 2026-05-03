@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
 import {
   playMorseCodeControlled,
   renderMorseToWavBlob,
@@ -11,7 +12,6 @@ import {
 } from '@/lib/morseAudio';
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
-import { useAppStore } from '@/store';
 
 interface TextPlayerProps {
   settings: FormTrainingSettings;
@@ -39,21 +39,8 @@ type NavigatorWithWakeLock = Navigator & {
 };
 
 export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Element {
-  const acquireTrainingSessionLock = useAppStore((state) => state.acquireTrainingSessionLock);
-  const releaseTrainingSessionLock = useAppStore((state) => state.releaseTrainingSessionLock);
-  const textPlayerSessionLockHeldRef = useRef(false);
-  const takeTextPlayerLock = (): void => {
-    if (!textPlayerSessionLockHeldRef.current) {
-      acquireTrainingSessionLock();
-      textPlayerSessionLockHeldRef.current = true;
-    }
-  };
-  const releaseTextPlayerLock = (): void => {
-    if (textPlayerSessionLockHeldRef.current) {
-      releaseTrainingSessionLock();
-      textPlayerSessionLockHeldRef.current = false;
-    }
-  };
+  const { takeLock: takeTextPlayerLock, releaseLock: releaseTextPlayerLock } =
+    useTrainingSessionLock();
 
   const [text, setText] = useState<string>(initialText || 'CQ CQ DE TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -86,10 +73,18 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       kochLevel: settings.kochLevel,
       ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
       ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
-      ...(settings.customSet && settings.customSet.length > 0 ? { customSet: [...settings.customSet] } : {}),
-      ...(settings.customSequence && settings.customSequence.length > 0 ? { customSequence: [...settings.customSequence] } : {}),
-      ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
-      ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
+      ...(settings.customSet && settings.customSet.length > 0
+        ? { customSet: [...settings.customSet] }
+        : {}),
+      ...(settings.customSequence && settings.customSequence.length > 0
+        ? { customSequence: [...settings.customSequence] }
+        : {}),
+      ...(settings.slidingWindowStart !== undefined
+        ? { slidingWindowStart: settings.slidingWindowStart }
+        : {}),
+      ...(settings.slidingWindowEnd !== undefined
+        ? { slidingWindowEnd: settings.slidingWindowEnd }
+        : {}),
     });
     const safePool =
       Array.isArray(charPool) && charPool.length > 0
@@ -184,7 +179,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       const sentinel = await nav.wakeLock!.request('screen');
       wakeLockRef.current = sentinel;
       setWakeLockActive(true);
-      
+
       // Handle release events (e.g., user switches tabs)
       sentinel.addEventListener('release', () => {
         setWakeLockActive(false);
@@ -239,7 +234,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       }
       audioContextRef.current = null;
     };
-  }, []);
+  }, [releaseTextPlayerLock]);
 
   // Continuous mode: play letters one at a time with TTL delay
   const playContinuous = async (): Promise<void> => {
@@ -332,11 +327,11 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         );
         stopRef.current = stop;
         setDurationSec(d);
-        
+
         continuousIndexRef.current++;
-        
+
         // Schedule next letter after current letter finishes + TTL delay
-        const totalDelay = Math.ceil(d * 1000) + (ttlSeconds * 1000);
+        const totalDelay = Math.ceil(d * 1000) + ttlSeconds * 1000;
         continuousTimeoutRef.current = window.setTimeout(
           playNextLetter,
           totalDelay,
@@ -516,16 +511,16 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
           </div>
           {isContinuousMode && (
             <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-600">
-                TTL (delay between letters):
-              </label>
+              <label className="text-xs text-slate-600">TTL (delay between letters):</label>
               <input
                 type="number"
                 min="0"
                 max="60"
                 step="0.1"
                 value={ttlSeconds}
-                onChange={(e) => setTtlSeconds(Math.max(0, Math.min(60, parseFloat(e.target.value) || 0)))}
+                onChange={(e) =>
+                  setTtlSeconds(Math.max(0, Math.min(60, parseFloat(e.target.value) || 0)))
+                }
                 disabled={isPlaying}
                 className="w-20 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
@@ -537,8 +532,14 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="text-xs text-slate-600">
             <div>
-              Char WPM: {settings.charWpmMin === settings.charWpmMax ? settings.charWpmMin : `${settings.charWpmMin}-${settings.charWpmMax}`} • Eff WPM:{' '}
-              {settings.effectiveWpmMin === settings.effectiveWpmMax ? settings.effectiveWpmMin : `${settings.effectiveWpmMin}-${settings.effectiveWpmMax}`}
+              Char WPM:{' '}
+              {settings.charWpmMin === settings.charWpmMax
+                ? settings.charWpmMin
+                : `${settings.charWpmMin}-${settings.charWpmMax}`}{' '}
+              • Eff WPM:{' '}
+              {settings.effectiveWpmMin === settings.effectiveWpmMax
+                ? settings.effectiveWpmMin
+                : `${settings.effectiveWpmMin}-${settings.effectiveWpmMax}`}
             </div>
             <div>
               Tone: {toneHz} Hz • Extra Word Space: ×

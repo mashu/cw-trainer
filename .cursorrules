@@ -241,7 +241,7 @@ src/lib/
 ## Common Pitfalls in This Codebase
 
 1. **AudioContext must be created from a user gesture.** Always call `resumeAudioContextFromUserGesture()` in the click/touch handler path, not in a `useEffect`.
-2. **Training session active guard.** When `trainingSessionActive` is true in the store, skip data loads and store updates that could cause the component tree to re-render and lose training state.
+2. **Training session active guard.** When `trainingSessionActive` is true (any `acquireTrainingSessionLock` not yet released), skip data loads and store updates that could re-render the tree and lose in-progress training or audio.
 3. **`sleepCancelable` pattern.** The project uses polled sleeps (check abort flag every 50ms) rather than `AbortController` because `setTimeout` cannot be cancelled from outside. If refactoring, preserve this pattern or switch to `AbortSignal` with care.
 4. **Firebase is optional.** All code paths must handle the case where Firebase is not configured. The app works as a local-only trainer without sign-in.
 5. **Static export constraints.** No `getServerSideProps`, no API routes, no `headers()`, no `cookies()`. Everything must be client-renderable at build time or lazy-loaded in a `useEffect`.

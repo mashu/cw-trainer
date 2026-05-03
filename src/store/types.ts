@@ -15,8 +15,8 @@ export interface ContextSlice {
   lastSyncCompletedAt: number | undefined;
   setLastSyncCompletedAt: (t: number) => void;
   /**
-   * True while any feature holds a training-session lock (group, echo, ICR, text player, letter preview).
-   * Implemented as a refcount so overlapping UI cannot clear another feature’s lock by mistake.
+   * True while `trainingSessionLockCount > 0` — any feature may acquire a lock (group, echo, ICR,
+   * text player, letter preview). Refcounted so one UI cannot clear another’s lock by mistake.
    */
   trainingSessionActive: boolean;
   /** Number of active acquireTrainingSessionLock calls not yet released. */

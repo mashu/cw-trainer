@@ -10,11 +10,11 @@ import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import { computeTrainingGroupGapMs } from '@/lib/trainingSessionPlayback';
 import type { SessionResultInput } from '@/lib/validators';
-import { useAppStore } from '@/store';
 import type { SessionResult, TrainingSettings } from '@/types';
 
 import type { Toast } from './useToast';
 import { useTrainingAudio } from './useTrainingAudio';
+import { useTrainingSessionLock } from './useTrainingSessionLock';
 
 // ── Public types ───────────────────────────────────────────────────────
 
@@ -73,22 +73,7 @@ export function useTrainingSession({
 }: UseTrainingSessionOptions): UseTrainingSessionReturn {
   type TimeoutId = number;
 
-  const acquireTrainingSessionLock = useAppStore((s) => s.acquireTrainingSessionLock);
-  const releaseTrainingSessionLock = useAppStore((s) => s.releaseTrainingSessionLock);
-  /** One refcounted lock per group-training invocation — avoids imbalanced release if paths overlap. */
-  const sessionLockHeldRef = useRef(false);
-  const takeSessionLock = (): void => {
-    if (!sessionLockHeldRef.current) {
-      acquireTrainingSessionLock();
-      sessionLockHeldRef.current = true;
-    }
-  };
-  const dropSessionLock = (): void => {
-    if (sessionLockHeldRef.current) {
-      releaseTrainingSessionLock();
-      sessionLockHeldRef.current = false;
-    }
-  };
+  const { takeLock: takeSessionLock, releaseLock: dropSessionLock } = useTrainingSessionLock();
 
   // ── Shared audio engine ──────────────────────────────────────────────
   const audio = useTrainingAudio(settings);
@@ -119,10 +104,18 @@ export function useTrainingSession({
   const saveSessionRef = useRef(saveSession);
   const showToastRef = useRef(showToast);
   const setTrainingSettingsStateRef = useRef(setTrainingSettingsState);
-  useEffect(() => { settingsRef.current = settings; }, [settings]);
-  useEffect(() => { saveSessionRef.current = saveSession; }, [saveSession]);
-  useEffect(() => { showToastRef.current = showToast; }, [showToast]);
-  useEffect(() => { setTrainingSettingsStateRef.current = setTrainingSettingsState; }, [setTrainingSettingsState]);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+  useEffect(() => {
+    saveSessionRef.current = saveSession;
+  }, [saveSession]);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
+  useEffect(() => {
+    setTrainingSettingsStateRef.current = setTrainingSettingsState;
+  }, [setTrainingSettingsState]);
   const groupStartAtRef = useRef<number[]>([]);
   const groupEndAtRef = useRef<number[]>([]);
   const groupAnswerAtRef = useRef<number[]>([]);
@@ -140,21 +133,29 @@ export function useTrainingSession({
       }
       Object.values(confirmTimeoutRef.current).forEach((id) => {
         if (id !== undefined) {
-          try { window.clearTimeout(id); } catch { /* no-op */ }
+          try {
+            window.clearTimeout(id);
+          } catch {
+            /* no-op */
+          }
         }
       });
       confirmTimeoutRef.current = {};
       groupCompletionResolversRef.current = {};
       audio.stopAudio();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Keep the focused group centered
   useEffect(() => {
     const target = inputRefs.current[currentFocusedGroup];
     if (target) {
-      try { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* no-op */ }
+      try {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch {
+        /* no-op */
+      }
     }
   }, [currentFocusedGroup]);
 
@@ -173,7 +174,9 @@ export function useTrainingSession({
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return (): void => { window.removeEventListener('keydown', handleKeyDown); };
+    return (): void => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showResults, isTraining, lastSessionResult]);
 
@@ -242,14 +245,17 @@ export function useTrainingSession({
       const charSetMode = currentSettings.charSetMode ?? 'koch';
       const mode: AutoAdjustMode =
         charSetMode === 'digits' ? 'digits' : charSetMode === 'mixed' ? 'mixed' : 'koch';
-      const currentLevel = mode === 'digits' ? (currentSettings.digitsLevel ?? 10) : currentSettings.kochLevel;
+      const currentLevel =
+        mode === 'digits' ? (currentSettings.digitsLevel ?? 10) : currentSettings.kochLevel;
       const maxLevel = mode === 'digits' ? 10 : 40;
       const adjustment = evaluateAutoLevelAdjust(result.accuracy, {
-        enabled: currentSettings.autoAdjustKoch, mode,
+        enabled: currentSettings.autoAdjustKoch,
+        mode,
         threshold: currentSettings.autoAdjustThreshold ?? 90,
         aboveThresholdCount: Math.max(0, currentSettings.autoAdjustAboveThresholdCount ?? 0),
         belowThresholdCount: Math.max(0, currentSettings.autoAdjustBelowThresholdCount ?? 0),
-        currentLevel, maxLevel,
+        currentLevel,
+        maxLevel,
       });
       if (adjustment) {
         const field = mode === 'digits' ? 'digitsLevel' : 'kochLevel';
@@ -274,7 +280,13 @@ export function useTrainingSession({
       setIsCompletingSession(false);
 
       Object.values(confirmTimeoutRef.current).forEach((id) => {
-        if (id !== undefined) { try { window.clearTimeout(id); } catch { /* no-op */ } }
+        if (id !== undefined) {
+          try {
+            window.clearTimeout(id);
+          } catch {
+            /* no-op */
+          }
+        }
       });
       confirmTimeoutRef.current = {};
       groupCompletionResolversRef.current = {};
@@ -313,7 +325,14 @@ export function useTrainingSession({
         setCurrentFocusedGroup(i);
         requestAnimationFrame(() => {
           const el = inputRefs.current[i];
-          if (el) { try { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* no-op */ } }
+          if (el) {
+            try {
+              el.focus();
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch {
+              /* no-op */
+            }
+          }
         });
         const delayMs = Math.max(0, computeTrainingGroupGapMs(settings));
         if (delayMs > 0) await audio.sleepCancelable(delayMs, mySession);
@@ -329,7 +348,11 @@ export function useTrainingSession({
         if (timedOut && !confirmedGroupsRef.current[i]) {
           autoConfirmOnTimeout(i, groups);
         }
-        try { audio.stopAudio(); } catch { /* no-op */ }
+        try {
+          audio.stopAudio();
+        } catch {
+          /* no-op */
+        }
       }
       const shouldProcessResults =
         !(audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) &&
@@ -341,14 +364,17 @@ export function useTrainingSession({
       isTrainingRef.current = false;
       audio.stopAudio();
       if (shouldProcessResults) {
-        const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map((a) =>
-          (a || '').trim().toUpperCase(),
+        const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map(
+          (a) => (a || '').trim().toUpperCase(),
         );
         try {
           await processResults(answers, groups);
         } catch (error) {
           console.error('[Training] Error processing results:', error);
-          showToast({ message: `Failed to process results: ${ensureAppError(error).message}`, type: 'error' });
+          showToast({
+            message: `Failed to process results: ${ensureAppError(error).message}`,
+            type: 'error',
+          });
         } finally {
           dropSessionLock();
           setIsCompletingSession(false);
@@ -379,7 +405,10 @@ export function useTrainingSession({
     void processResults(answers, activeSentGroupsRef.current)
       .catch((error) => {
         console.error('[Training] Error processing results:', error);
-        showToast({ message: `Failed to process results: ${ensureAppError(error).message}`, type: 'error' });
+        showToast({
+          message: `Failed to process results: ${ensureAppError(error).message}`,
+          type: 'error',
+        });
       })
       .finally(() => {
         dropSessionLock();
@@ -408,7 +437,10 @@ export function useTrainingSession({
     if (!groupAnswerAtRef.current[index]) groupAnswerAtRef.current[index] = Date.now();
 
     const resolver = groupCompletionResolversRef.current[index];
-    if (resolver) { resolver({ timedOut: false }); delete groupCompletionResolversRef.current[index]; }
+    if (resolver) {
+      resolver({ timedOut: false });
+      delete groupCompletionResolversRef.current[index];
+    }
 
     const nextIndex = index + 1;
     if (nextIndex < sentGroups.length) {
@@ -417,8 +449,12 @@ export function useTrainingSession({
       focusInput(nextIndex);
     }
 
-    const allAnswered = nextAnswers.length === sentGroups.length &&
-      nextAnswers.every((a, i) => { const sg = sentGroups[i]; return a && sg && a.length === sg.length; });
+    const allAnswered =
+      nextAnswers.length === sentGroups.length &&
+      nextAnswers.every((a, i) => {
+        const sg = sentGroups[i];
+        return a && sg && a.length === sg.length;
+      });
     if (allAnswered) submitAnswer();
   };
 
@@ -428,12 +464,20 @@ export function useTrainingSession({
     setUserInput(nextAnswers);
     userInputRef.current = nextAnswers;
 
-    if (value.length === sentGroups[index]?.length && value.length > 0 && !groupAnswerAtRef.current[index]) {
+    if (
+      value.length === sentGroups[index]?.length &&
+      value.length > 0 &&
+      !groupAnswerAtRef.current[index]
+    ) {
       groupAnswerAtRef.current[index] = Date.now();
     }
 
     if (confirmTimeoutRef.current[index] !== undefined) {
-      try { window.clearTimeout(confirmTimeoutRef.current[index]!); } catch { /* no-op */ }
+      try {
+        window.clearTimeout(confirmTimeoutRef.current[index]!);
+      } catch {
+        /* no-op */
+      }
       delete confirmTimeoutRef.current[index];
     }
 
@@ -445,18 +489,23 @@ export function useTrainingSession({
     }
   };
 
-  const dismissResults = (): void => { setShowResults(false); setLastSessionResult(null); };
+  const dismissResults = (): void => {
+    setShowResults(false);
+    setLastSessionResult(null);
+  };
 
-  const inputRefCallback = useCallback(
-    (idx: number, el: HTMLInputElement | null) => { inputRefs.current[idx] = el; },
-    [],
-  );
+  const inputRefCallback = useCallback((idx: number, el: HTMLInputElement | null) => {
+    inputRefs.current[idx] = el;
+  }, []);
 
   // ── Internal helpers ─────────────────────────────────────────────────
 
   function waitForGroupCompletion(i: number): Promise<{ timedOut: boolean }> {
     return new Promise((resolve) => {
-      if (confirmedGroupsRef.current[i]) { resolve({ timedOut: false }); return; }
+      if (confirmedGroupsRef.current[i]) {
+        resolve({ timedOut: false });
+        return;
+      }
       let resolver: ((r: { timedOut: boolean }) => void) | null = null;
       let timeoutId: TimeoutId | undefined;
       if (settings.groupTimeout && settings.groupTimeout > 0) {
@@ -467,7 +516,13 @@ export function useTrainingSession({
         }, settings.groupTimeout * 1000) as TimeoutId;
       }
       resolver = (result): void => {
-        if (timeoutId !== undefined) { try { window.clearTimeout(timeoutId); } catch { /* no-op */ } }
+        if (timeoutId !== undefined) {
+          try {
+            window.clearTimeout(timeoutId);
+          } catch {
+            /* no-op */
+          }
+        }
         resolve(result);
         delete groupCompletionResolversRef.current[i];
       };
@@ -477,7 +532,11 @@ export function useTrainingSession({
 
   function autoConfirmOnTimeout(i: number, groups: string[]): void {
     if (confirmTimeoutRef.current[i] !== undefined) {
-      try { window.clearTimeout(confirmTimeoutRef.current[i]!); } catch { /* no-op */ }
+      try {
+        window.clearTimeout(confirmTimeoutRef.current[i]!);
+      } catch {
+        /* no-op */
+      }
       delete confirmTimeoutRef.current[i];
     }
     const currentValue = (userInputRef.current[i] || '').trim().toUpperCase();
@@ -489,7 +548,10 @@ export function useTrainingSession({
     setConfirmedGroups(nextConfirmed);
     confirmedGroupsRef.current = nextConfirmed;
     const nextIndex = i + 1;
-    if (nextIndex < groups.length) { setCurrentFocusedGroup(nextIndex); focusInput(nextIndex); }
+    if (nextIndex < groups.length) {
+      setCurrentFocusedGroup(nextIndex);
+      focusInput(nextIndex);
+    }
   }
 
   function focusInput(index: number): void {
@@ -503,7 +565,9 @@ export function useTrainingSession({
           el.focus();
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           if (wasDisabled) el.disabled = wasDisabled;
-        } catch { /* no-op */ }
+        } catch {
+          /* no-op */
+        }
       });
     });
   }
@@ -511,9 +575,21 @@ export function useTrainingSession({
   return {
     isTraining,
     isCompletingSession,
-    currentGroup, sentGroups, userInput, confirmedGroups, currentFocusedGroup,
-    showResults, lastSessionResult, startTraining, submitAnswer, stopTraining,
-    confirmGroupAnswer, handleAnswerChange, setCurrentFocusedGroup, dismissResults,
-    inputRefs, inputRefCallback,
+    currentGroup,
+    sentGroups,
+    userInput,
+    confirmedGroups,
+    currentFocusedGroup,
+    showResults,
+    lastSessionResult,
+    startTraining,
+    submitAnswer,
+    stopTraining,
+    confirmGroupAnswer,
+    handleAnswerChange,
+    setCurrentFocusedGroup,
+    dismissResults,
+    inputRefs,
+    inputRefCallback,
   };
 }

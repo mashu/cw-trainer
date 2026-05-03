@@ -2,13 +2,27 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
 import { playMorseCodeControlled } from '@/lib/morseAudio';
 import { computeCharPool } from '@/lib/trainingUtils';
-import { useAppStore } from '@/store';
 import type { CharacterSetMode, TrainingSettings } from '@/types';
 
 interface NewLetterPlayerProps {
-  settings: Pick<TrainingSettings, 'kochLevel' | 'charWpmMin' | 'charWpmMax' | 'effectiveWpmMin' | 'effectiveWpmMax' | 'sideToneMin' | 'sideToneMax' | 'volumeMin' | 'volumeMax' | 'linkVolume' | 'steepness' | 'envelopeSmoothing'> & {
+  settings: Pick<
+    TrainingSettings,
+    | 'kochLevel'
+    | 'charWpmMin'
+    | 'charWpmMax'
+    | 'effectiveWpmMin'
+    | 'effectiveWpmMax'
+    | 'sideToneMin'
+    | 'sideToneMax'
+    | 'volumeMin'
+    | 'volumeMax'
+    | 'linkVolume'
+    | 'steepness'
+    | 'envelopeSmoothing'
+  > & {
     charSetMode?: CharacterSetMode;
     digitsLevel?: number;
     customSet?: readonly string[];
@@ -19,22 +33,7 @@ interface NewLetterPlayerProps {
 }
 
 export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element | null {
-  const acquireTrainingSessionLock = useAppStore((state) => state.acquireTrainingSessionLock);
-  const releaseTrainingSessionLock = useAppStore((state) => state.releaseTrainingSessionLock);
-  const sessionLockHeldRef = useRef(false);
-
-  const takeLock = (): void => {
-    if (!sessionLockHeldRef.current) {
-      acquireTrainingSessionLock();
-      sessionLockHeldRef.current = true;
-    }
-  };
-  const releaseLock = (): void => {
-    if (sessionLockHeldRef.current) {
-      releaseTrainingSessionLock();
-      sessionLockHeldRef.current = false;
-    }
-  };
+  const { takeLock, releaseLock } = useTrainingSessionLock();
 
   const [isPlaying, setIsPlaying] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -53,16 +52,24 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
       clearDurationDoneTimeout();
       releaseLock();
     };
-  }, [clearDurationDoneTimeout]);
+  }, [clearDurationDoneTimeout, releaseLock]);
 
   const charPool = computeCharPool({
     kochLevel: settings.kochLevel,
     ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
     ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
-    ...(settings.customSet && settings.customSet.length > 0 ? { customSet: [...settings.customSet] } : {}),
-    ...(settings.customSequence && settings.customSequence.length > 0 ? { customSequence: [...settings.customSequence] } : {}),
-    ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
-    ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
+    ...(settings.customSet && settings.customSet.length > 0
+      ? { customSet: [...settings.customSet] }
+      : {}),
+    ...(settings.customSequence && settings.customSequence.length > 0
+      ? { customSequence: [...settings.customSequence] }
+      : {}),
+    ...(settings.slidingWindowStart !== undefined
+      ? { slidingWindowStart: settings.slidingWindowStart }
+      : {}),
+    ...(settings.slidingWindowEnd !== undefined
+      ? { slidingWindowEnd: settings.slidingWindowEnd }
+      : {}),
   });
 
   // Get the previous level's pool to determine what's new
@@ -72,12 +79,28 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
       kochLevel: settings.kochLevel - 1,
       ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
       ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
-      ...(settings.customSet && settings.customSet.length > 0 ? { customSet: [...settings.customSet] } : {}),
-      ...(settings.customSequence && settings.customSequence.length > 0 ? { customSequence: [...settings.customSequence] } : {}),
-      ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
-      ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
+      ...(settings.customSet && settings.customSet.length > 0
+        ? { customSet: [...settings.customSet] }
+        : {}),
+      ...(settings.customSequence && settings.customSequence.length > 0
+        ? { customSequence: [...settings.customSequence] }
+        : {}),
+      ...(settings.slidingWindowStart !== undefined
+        ? { slidingWindowStart: settings.slidingWindowStart }
+        : {}),
+      ...(settings.slidingWindowEnd !== undefined
+        ? { slidingWindowEnd: settings.slidingWindowEnd }
+        : {}),
     });
-  }, [settings.kochLevel, settings.charSetMode, settings.digitsLevel, settings.customSet, settings.customSequence, settings.slidingWindowStart, settings.slidingWindowEnd]);
+  }, [
+    settings.kochLevel,
+    settings.charSetMode,
+    settings.digitsLevel,
+    settings.customSet,
+    settings.customSequence,
+    settings.slidingWindowStart,
+    settings.slidingWindowEnd,
+  ]);
 
   // Always compute the latest/newest letter index - no state persistence
   // For level 1: show both letters (K M)
@@ -100,7 +123,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
   // State for navigation - null means "use default", set when user navigates
   // This avoids the flash on initial load since we always use defaultLetterIndex until user navigates
   const [userSelectedIndex, setUserSelectedIndex] = useState<number | null>(null);
-  
+
   // Reset user selection when settings change (so we go back to showing latest letter)
   React.useEffect(() => {
     setUserSelectedIndex(null);
@@ -110,16 +133,13 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
   const selectedLetterIndex = userSelectedIndex ?? defaultLetterIndex;
 
   // Calculate values needed for hooks (handle empty charPool case)
-  const selectedLetter = charPool.length > 0 ? (charPool[selectedLetterIndex] ?? charPool[0] ?? '') : '';
+  const selectedLetter =
+    charPool.length > 0 ? (charPool[selectedLetterIndex] ?? charPool[0] ?? '') : '';
   // For level 2+, treat indices 0 and 1 as the same "K M" pair
   // Navigation: 0 (K M) -> 2 (U) -> 3 (R) -> etc.
   const isFirstLevelPair = settings.kochLevel > 1 && selectedLetterIndex < 2;
-  const canGoPrevious = settings.kochLevel === 1 
-    ? false 
-    : selectedLetterIndex > 0; // Can always go back (from 2->0, from 1->0, from 3->2, etc.)
-  const canGoNext = settings.kochLevel === 1
-    ? false
-    : selectedLetterIndex < charPool.length - 1;
+  const canGoPrevious = settings.kochLevel === 1 ? false : selectedLetterIndex > 0; // Can always go back (from 2->0, from 1->0, from 3->2, etc.)
+  const canGoNext = settings.kochLevel === 1 ? false : selectedLetterIndex < charPool.length - 1;
 
   const pickToneHz = useCallback((): number => {
     const min = Math.max(100, settings.sideToneMin);
@@ -205,6 +225,8 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
     isFirstLevelPair,
     pickToneHz,
     clearDurationDoneTimeout,
+    takeLock,
+    releaseLock,
   ]);
 
   const handlePrevious = useCallback(() => {
@@ -244,16 +266,20 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
 
   // For level 1: display both letters
   // For level 2+: if navigating to first two letters (indices 0 or 1), display "K M", otherwise display selected letter
-  const displayText = settings.kochLevel === 1 
-    ? charPool.join(' ') // K M
-    : isFirstLevelPair
-    ? charPool.slice(0, 2).join(' ') // K M
-    : selectedLetter;
-  const isNewLetter = settings.kochLevel === 1 
-    ? false // Level 1 doesn't have a "new" letter concept
-    : isFirstLevelPair
-    ? false // K M pair is not "new"
-    : selectedLetter ? !previousLevelPool.includes(selectedLetter) : false;
+  const displayText =
+    settings.kochLevel === 1
+      ? charPool.join(' ') // K M
+      : isFirstLevelPair
+        ? charPool.slice(0, 2).join(' ') // K M
+        : selectedLetter;
+  const isNewLetter =
+    settings.kochLevel === 1
+      ? false // Level 1 doesn't have a "new" letter concept
+      : isFirstLevelPair
+        ? false // K M pair is not "new"
+        : selectedLetter
+          ? !previousLevelPool.includes(selectedLetter)
+          : false;
 
   // Level 1: no navigation, just play both letters
   // Level 2+: show navigation and play selected letter
@@ -270,11 +296,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
           title="Previous letter"
           type="button"
         >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
+          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"
               d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
@@ -289,18 +311,16 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
         onClick={handlePlay}
         className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 transition-all duration-200 hover:shadow-sm text-sm font-medium justify-center relative"
         style={{ minWidth: '100px' }} // Fixed width to prevent layout shifts
-        title={settings.kochLevel === 1 
-          ? `Play two letters from level 1: ${displayText}`
-          : `Play letter: ${displayText}${isNewLetter ? ' (new for this level)' : ''}`}
+        title={
+          settings.kochLevel === 1
+            ? `Play two letters from level 1: ${displayText}`
+            : `Play letter: ${displayText}${isNewLetter ? ' (new for this level)' : ''}`
+        }
         type="button"
       >
         {isPlaying ? (
           <>
-            <svg
-              className="w-4 h-4"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"
                 d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
@@ -311,11 +331,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
           </>
         ) : (
           <>
-            <svg
-              className="w-4 h-4"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"
                 d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
@@ -342,11 +358,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
           title="Next letter"
           type="button"
         >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
+          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"
               d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
