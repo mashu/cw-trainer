@@ -18,6 +18,7 @@ import { useTrainingSettingsActions, useTrainingSettingsState } from '@/hooks/us
 import { formSettingsToStoreUpdate } from '@/lib/formSettingsToStore';
 import { settingsToSharedAudioProps } from '@/lib/settingsToSharedAudioProps';
 import { mapSessionsToHeatmap } from '@/lib/utils/mapSessionsToHeatmap';
+import { trainingModeFromSearch } from '@/lib/utils/trainingModeFromUrl';
 import { useAppStore } from '@/store';
 import type { SessionResult, TrainingMode, TrainingSettings } from '@/types';
 
@@ -69,6 +70,11 @@ export function CWTrainer(): JSX.Element {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const fromUrl = trainingModeFromSearch(window.location.search);
+    if (fromUrl) {
+      setActiveMode(fromUrl);
+      return;
+    }
     const savedMode = window.localStorage.getItem(LAST_MODE_STORAGE_KEY);
     if (savedMode === 'group' || savedMode === 'icr' || savedMode === 'echo' || savedMode === 'player') {
       setActiveMode(savedMode);
