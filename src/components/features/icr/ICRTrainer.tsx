@@ -191,6 +191,20 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     [sharedAudio, pickToneHz, mic],
   );
 
+  const handleSessionChartLetterClick = useCallback((letter: string): void => {
+    const ch = letter.slice(0, 1).toUpperCase();
+    if (!ch) return;
+    void (async (): Promise<void> => {
+      try {
+        const ctx = await mic.setupAudioContext();
+        resumeAudioContextFromUserGesture(ctx);
+        await playChar(ch);
+      } catch (error) {
+        console.warn('[ICR] Session chart letter audio failed', error);
+      }
+    })();
+  }, [mic, playChar]);
+
   // ── Session control ──────────────────────────────────────────────────
 
   const stopSession = useCallback((): void => {
@@ -746,6 +760,7 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
               dotsCorrectCat={perLetterCharts.dotsCorrectCat}
               dotsWrongCat={perLetterCharts.dotsWrongCat}
               icrSettings={icrSettings}
+              {...(!isRunning ? { onLetterClick: handleSessionChartLetterClick } : {})}
             />
           </div>
         </div>
