@@ -114,6 +114,7 @@ export function CWTrainer(): JSX.Element {
     () => ({
       trainingSessionActive,
       trainingIsTraining: training.isTraining,
+      trainingHasActiveSession: training.hasActiveSession,
       trainingCompletingSession: training.isCompletingSession,
       trainingShowResults: training.showResults,
       echoIsTraining: echoTraining.isTraining,
@@ -125,6 +126,7 @@ export function CWTrainer(): JSX.Element {
     [
       trainingSessionActive,
       training.isTraining,
+      training.hasActiveSession,
       training.isCompletingSession,
       training.showResults,
       echoTraining.isTraining,
@@ -137,7 +139,7 @@ export function CWTrainer(): JSX.Element {
 
   useEffect(() => {
     const s = interruptedSessionGuardInputs;
-    if (!s.trainingSessionActive || s.trainingIsTraining || s.echoIsTraining) return;
+    if (!s.trainingSessionActive || s.trainingIsTraining || s.trainingHasActiveSession || s.echoIsTraining) return;
     if (s.trainingCompletingSession || s.echoCompletingSession) return;
     if (s.trainingShowResults || s.echoShowResults) return;
     if ((s.activeMode !== 'group' && s.activeMode !== 'echo') || s.groupTab !== 'train') return;
@@ -176,19 +178,19 @@ export function CWTrainer(): JSX.Element {
   }, [firebaseReady, firebaseServices, showToast, switchAccount]);
 
   const stopTrainingIfActive = useCallback((): void => {
-    if (training.isTraining) training.stopTraining();
+    if (training.hasActiveSession) training.stopTraining();
     if (echoTraining.isTraining) echoTraining.stopTraining();
   }, [training, echoTraining]);
 
   const handleChangeMode = useCallback(
     (m: TrainingMode) => {
-      if (training.isTraining && activeMode === 'group') {
-        training.stopTraining();
-        showToast({ message: 'Session stopped.', type: 'info' });
+      if (training.hasActiveSession && activeMode === 'group') {
+        showToast({ message: 'Stop the active session before switching modes.', type: 'info' });
+        return;
       }
       if (echoTraining.isTraining && activeMode === 'echo') {
-        echoTraining.stopTraining();
-        showToast({ message: 'Echo session stopped.', type: 'info' });
+        showToast({ message: 'Stop the active echo session before switching modes.', type: 'info' });
+        return;
       }
       setActiveMode(m);
       if (m !== 'group') setGroupTab('train');
@@ -247,7 +249,7 @@ export function CWTrainer(): JSX.Element {
           const converted = formSettingsToStoreUpdate(nextValue);
           setTrainingSettingsState((prev) => ({ ...prev, ...converted }));
           latestSettingsRef.current = { ...formSettings, ...converted } as TrainingSettings;
-          if ((training.isTraining || echoTraining.isTraining) && !deferredToastShownRef.current) {
+          if ((training.hasActiveSession || echoTraining.isTraining) && !deferredToastShownRef.current) {
             deferredToastShownRef.current = true;
             showToast({ message: 'Changes will apply after the session ends.', type: 'info' });
           }
@@ -255,7 +257,15 @@ export function CWTrainer(): JSX.Element {
         onSaveSettings={() => void saveSettings({ source: 'manual' })}
         isSavingSettings={isSavingSettings}
         sessionResultsCount={sessions.length} latestAccuracyPercent={lastAccuracyPercent}
-        onViewStats={() => { stopTrainingIfActive(); setSidebarOpen(false); setActiveMode('group'); setGroupTab('stats'); }}
+        onViewStats={() => {
+          if (training.hasActiveSession || echoTraining.isTraining) {
+            showToast({ message: 'Stop the active session before opening stats.', type: 'info' });
+            return;
+          }
+          setSidebarOpen(false);
+          setActiveMode('group');
+          setGroupTab('stats');
+        }}
         activeMode={activeMode} onChangeMode={handleChangeMode}
         icrSettings={icrSettings} setIcrSettings={setIcrSettings}
       />

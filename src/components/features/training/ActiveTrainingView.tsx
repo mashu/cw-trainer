@@ -24,6 +24,7 @@ export interface ActiveTrainingViewProps {
   readonly onFocus: (index: number) => void;
   readonly onSubmit: () => void;
   readonly onStop: () => void;
+  readonly statusMessage?: string;
 }
 
 export function ActiveTrainingView({
@@ -41,9 +42,15 @@ export function ActiveTrainingView({
   onFocus,
   onSubmit,
   onStop,
+  statusMessage,
 }: ActiveTrainingViewProps): JSX.Element {
   return (
     <div className="space-y-6">
+      {statusMessage ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          {statusMessage}
+        </div>
+      ) : null}
       <ProgressHeader currentGroup={currentGroup} totalGroups={numGroups} />
 
       <div>

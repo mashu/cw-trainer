@@ -114,6 +114,10 @@ export const createTrainingSettingsSlice = ({
   },
 
   saveTrainingSettings: async (input: TrainingSettingsInput): Promise<TrainingSettings> => {
+    if (isTrainingSessionActive()) {
+      return get().trainingSettings;
+    }
+
     set({ trainingSettingsSaving: true });
 
     try {
@@ -136,6 +140,10 @@ export const createTrainingSettingsSlice = ({
   },
 
   patchTrainingSettings: async (patch: Partial<TrainingSettings>): Promise<TrainingSettings> => {
+    if (isTrainingSessionActive()) {
+      return get().trainingSettings;
+    }
+
     set({ trainingSettingsSaving: true });
 
     try {
@@ -158,6 +166,10 @@ export const createTrainingSettingsSlice = ({
   },
 
   resetTrainingSettings: async (): Promise<TrainingSettings> => {
+    if (isTrainingSessionActive()) {
+      return get().trainingSettings;
+    }
+
     set({ trainingSettingsSaving: true });
 
     try {

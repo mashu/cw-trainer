@@ -8,9 +8,15 @@ import {
 import { pickTrainingToneHz } from '@/lib/trainingSessionPlayback';
 import type { TrainingSettings } from '@/types';
 
+export type TrainingAudioPlaybackResult =
+  | { readonly status: 'played'; readonly durationSec: number }
+  | { readonly status: 'skippedBecauseAborted' }
+  | { readonly status: 'suspended' }
+  | { readonly status: 'failed'; readonly message: string };
+
 export interface TrainingAudioEngine {
-  /** Play morse code for the given text. Returns duration in seconds. */
-  readonly playMorse: (text: string, sessionId: number) => Promise<number>;
+  /** Play morse code for the given text. */
+  readonly playMorse: (text: string, sessionId: number) => Promise<TrainingAudioPlaybackResult>;
   /** Stop any playing audio and tear down the AudioContext. */
   readonly stopAudio: () => void;
   /** Cancelable sleep that checks abort flag every SLEEP_CANCELABLE_STEP_MS. */
@@ -75,15 +81,18 @@ export function useTrainingAudio(
   );
 
   const playMorse = useCallback(
-    async (text: string, sessionId: number): Promise<number> => {
+    async (text: string, sessionId: number): Promise<TrainingAudioPlaybackResult> => {
       if (trainingAbortRef.current || sessionIdRef.current !== sessionId) {
-        return 0;
+        return { status: 'skippedBecauseAborted' };
       }
       try {
         if (!audioContextRef.current) {
           audioContextRef.current = new AudioContext();
         }
         const ctx = audioContextRef.current;
+        if (ctx.state === 'suspended') {
+          resumeAudioContextFromUserGesture(ctx);
+        }
         const { durationSec, stop } = await playMorseCodeControlled(
           ctx,
           text,
@@ -107,10 +116,13 @@ export function useTrainingAudio(
             trainingAbortRef.current || sessionIdRef.current !== sessionId,
         );
         currentStopRef.current = stop;
-        return durationSec;
+        return { status: 'played', durationSec };
       } catch (error) {
         console.error('[TrainingAudio] Playback error:', error);
-        return 0;
+        return {
+          status: 'failed',
+          message: error instanceof Error ? error.message : 'Unable to play Morse audio.',
+        };
       }
     },
     [settings],

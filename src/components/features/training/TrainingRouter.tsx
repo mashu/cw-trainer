@@ -81,7 +81,6 @@ export function TrainingRouter({
   if (
     training.showResults &&
     !training.isTraining &&
-    activeMode === 'group' &&
     training.lastSessionResult
   ) {
     return (
@@ -96,6 +95,36 @@ export function TrainingRouter({
           setGroupTab('stats');
         }}
         onBack={() => training.dismissResults()}
+      />
+    );
+  }
+
+  // ── Group mode: active training ──
+  if (training.hasActiveSession || training.isCompletingSession) {
+    const sessionUiLocked = training.hasActiveSession || training.isCompletingSession;
+    return (
+      <ActiveTrainingView
+        currentGroup={training.currentGroup}
+        numGroups={Math.max(settings.numGroups, training.sentGroups.length)}
+        sentGroups={training.sentGroups}
+        userInput={training.userInput}
+        confirmedGroups={training.confirmedGroups}
+        currentFocusedGroup={training.currentFocusedGroup}
+        isTraining={sessionUiLocked}
+        inputRefs={training.inputRefs}
+        inputRefCallback={training.inputRefCallback}
+        onChange={training.handleAnswerChange}
+        onConfirm={training.confirmGroupAnswer}
+        onFocus={(idx) => {
+          if (!sessionUiLocked || idx === training.currentGroup) {
+            training.setCurrentFocusedGroup(idx);
+          }
+        }}
+        onSubmit={training.submitAnswer}
+        onStop={training.stopTraining}
+        {...(training.sessionIssueMessage !== undefined
+          ? { statusMessage: training.sessionIssueMessage }
+          : {})}
       />
     );
   }
@@ -186,33 +215,6 @@ export function TrainingRouter({
           <GroupTrainingStats embedded onBack={() => setGroupTab('train')} />
         </Suspense>
       </div>
-    );
-  }
-
-  // ── Group mode: active training ──
-  if ((training.isTraining || training.isCompletingSession) && activeMode === 'group') {
-    const sessionUiLocked = training.isTraining || training.isCompletingSession;
-    return (
-      <ActiveTrainingView
-        currentGroup={training.currentGroup}
-        numGroups={settings.numGroups}
-        sentGroups={training.sentGroups}
-        userInput={training.userInput}
-        confirmedGroups={training.confirmedGroups}
-        currentFocusedGroup={training.currentFocusedGroup}
-        isTraining={sessionUiLocked}
-        inputRefs={training.inputRefs}
-        inputRefCallback={training.inputRefCallback}
-        onChange={training.handleAnswerChange}
-        onConfirm={training.confirmGroupAnswer}
-        onFocus={(idx) => {
-          if (!sessionUiLocked || idx === training.currentGroup) {
-            training.setCurrentFocusedGroup(idx);
-          }
-        }}
-        onSubmit={training.submitAnswer}
-        onStop={training.stopTraining}
-      />
     );
   }
 

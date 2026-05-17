@@ -1,15 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
 import { AUTO_CONFIRM_DELAY_MS } from '@/lib/constants';
 import { ensureAppError } from '@/lib/errors';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
+import { isGroupTrainingRuntimeActive } from '@/lib/training/groupSessionMachine';
+import type {
+  GroupSessionResultSummary,
+  GroupTrainingRuntimeState,
+} from '@/lib/training/groupSessionMachine';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import { computeTrainingGroupGapMs } from '@/lib/trainingSessionPlayback';
 import type { SessionResultInput } from '@/lib/validators';
+import { useAppStore } from '@/store';
 import type { SessionResult, TrainingSettings } from '@/types';
 
 import type { Toast } from './useToast';
@@ -19,16 +25,7 @@ import { useTrainingSessionLock } from './useTrainingSessionLock';
 // ── Public types ───────────────────────────────────────────────────────
 
 /** Summarised result shown in the results screen. */
-export interface SessionResultSummary {
-  readonly accuracy: number;
-  readonly groups: ReadonlyArray<{
-    sent: string;
-    received: string;
-    correct: boolean;
-  }>;
-  readonly avgResponseMs: number;
-  readonly score: number;
-}
+export type SessionResultSummary = GroupSessionResultSummary;
 
 export interface UseTrainingSessionOptions {
   readonly settings: TrainingSettings;
@@ -44,6 +41,9 @@ export interface UseTrainingSessionReturn {
   readonly isTraining: boolean;
   /** True while playback stopped but results UI / persistence are still being prepared — avoids a routing flash to home. */
   readonly isCompletingSession: boolean;
+  readonly hasActiveSession: boolean;
+  readonly runtimeStatus: GroupTrainingRuntimeState['status'];
+  readonly sessionIssueMessage?: string;
   readonly currentGroup: number;
   readonly sentGroups: string[];
   readonly userInput: string[];
@@ -56,7 +56,7 @@ export interface UseTrainingSessionReturn {
   readonly stopTraining: () => void;
   readonly confirmGroupAnswer: (index: number, overrideValue?: string) => void;
   readonly handleAnswerChange: (index: number, value: string) => void;
-  readonly setCurrentFocusedGroup: React.Dispatch<React.SetStateAction<number>>;
+  readonly setCurrentFocusedGroup: (index: number) => void;
   readonly dismissResults: () => void;
   readonly inputRefs: React.MutableRefObject<Array<HTMLInputElement | null>>;
   readonly inputRefCallback: (idx: number, el: HTMLInputElement | null) => void;
@@ -78,16 +78,45 @@ export function useTrainingSession({
   // ── Shared audio engine ──────────────────────────────────────────────
   const audio = useTrainingAudio(settings);
 
-  // ── React state ──────────────────────────────────────────────────────
-  const [isTraining, setIsTraining] = useState(false);
-  const [currentGroup, setCurrentGroup] = useState(0);
-  const [sentGroups, setSentGroups] = useState<string[]>([]);
-  const [userInput, setUserInput] = useState<string[]>([]);
-  const [confirmedGroups, setConfirmedGroups] = useState<Record<number, boolean>>({});
-  const [currentFocusedGroup, setCurrentFocusedGroup] = useState(0);
-  const [showResults, setShowResults] = useState(false);
-  const [lastSessionResult, setLastSessionResult] = useState<SessionResultSummary | null>(null);
-  const [isCompletingSession, setIsCompletingSession] = useState(false);
+  // ── Runtime store state ──────────────────────────────────────────────
+  const runtime = useAppStore((state) => state.groupTrainingRuntime);
+  const beginRuntimeSession = useAppStore((state) => state.beginGroupTrainingSession);
+  const setRuntimeGroups = useAppStore((state) => state.setGroupTrainingGroups);
+  const setRuntimeStatus = useAppStore((state) => state.setGroupTrainingStatus);
+  const setRuntimeAudioStatus = useAppStore((state) => state.setGroupTrainingAudioStatus);
+  const setRuntimeCurrentGroup = useAppStore((state) => state.setGroupTrainingCurrentGroup);
+  const setRuntimeFocusedGroup = useAppStore((state) => state.setGroupTrainingFocusedGroup);
+  const updateRuntimeInput = useAppStore((state) => state.updateGroupTrainingInput);
+  const confirmRuntimeAnswer = useAppStore((state) => state.confirmGroupTrainingAnswer);
+  const recordRuntimeGroupStart = useAppStore((state) => state.recordGroupTrainingStart);
+  const recordRuntimeGroupEnd = useAppStore((state) => state.recordGroupTrainingEnd);
+  const recordRuntimeAnswerTime = useAppStore((state) => state.recordGroupTrainingAnswerTime);
+  const completeRuntimeSession = useAppStore((state) => state.completeGroupTrainingSession);
+  const cancelRuntimeSession = useAppStore((state) => state.cancelGroupTrainingSession);
+  const dismissRuntimeResults = useAppStore((state) => state.dismissGroupTrainingResults);
+
+  const hasActiveSession = isGroupTrainingRuntimeActive(runtime);
+  const activeRuntime =
+    runtime.status !== 'idle' && runtime.status !== 'results' ? runtime : null;
+  const isCompletingSession = runtime.status === 'completing';
+  const showResults = runtime.status === 'results';
+  const isTraining = hasActiveSession && !isCompletingSession;
+  const currentGroup = activeRuntime ? activeRuntime.currentGroup : 0;
+  const sentGroups = activeRuntime ? [...activeRuntime.groups] : [];
+  const userInput = activeRuntime ? [...activeRuntime.userInput] : [];
+  const confirmedGroups = activeRuntime ? { ...activeRuntime.confirmedGroups } : {};
+  const currentFocusedGroup = activeRuntime ? activeRuntime.currentFocusedGroup : 0;
+  const lastSessionResult = runtime.status === 'results' ? runtime.result : null;
+  const sessionIssueMessage =
+    runtime.status === 'failed'
+      ? runtime.errorMessage
+      : runtime.status === 'paused'
+        ? runtime.pauseReason
+        : undefined;
+  const hasActiveSessionRef = useRef(hasActiveSession);
+  useEffect(() => {
+    hasActiveSessionRef.current = hasActiveSession;
+  }, [hasActiveSession]);
 
   // ── Refs ─────────────────────────────────────────────────────────────
   const isTrainingRef = useRef(false);
@@ -130,6 +159,8 @@ export function useTrainingSession({
       if (isTrainingRef.current) {
         audio.trainingAbortRef.current = true;
         isTrainingRef.current = false;
+        setRuntimeStatus('paused', { pauseReason: 'Training view was remounted.' });
+        dropSessionLock();
       }
       Object.values(confirmTimeoutRef.current).forEach((id) => {
         if (id !== undefined) {
@@ -142,10 +173,53 @@ export function useTrainingSession({
       });
       confirmTimeoutRef.current = {};
       groupCompletionResolversRef.current = {};
+      setRuntimeAudioStatus('closed');
       audio.stopAudio();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const handleHidden = (): void => {
+      if (!hasActiveSessionRef.current) return;
+      setRuntimeStatus('paused', { pauseReason: 'Training paused while the page was hidden.' });
+      if (audio.audioContextRef.current?.state === 'suspended') {
+        setRuntimeAudioStatus('suspended');
+      }
+    };
+
+    const handleVisible = (): void => {
+      if (!hasActiveSessionRef.current) return;
+      const ctx = audio.audioContextRef.current;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        void ctx.resume().then(
+          () => setRuntimeAudioStatus(ctx.state === 'running' ? 'running' : 'suspended'),
+          () => setRuntimeAudioStatus('suspended'),
+        );
+      } else {
+        setRuntimeAudioStatus(ctx.state === 'closed' ? 'closed' : 'running');
+      }
+    };
+
+    const handleVisibilityChange = (): void => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'visible') {
+        handleVisible();
+      } else {
+        handleHidden();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handleHidden);
+    window.addEventListener('pageshow', handleVisible);
+    return (): void => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handleHidden);
+      window.removeEventListener('pageshow', handleVisible);
+    };
+  }, [audio.audioContextRef, setRuntimeAudioStatus, setRuntimeStatus]);
 
   // Keep the focused group centered
   useEffect(() => {
@@ -167,8 +241,7 @@ export function useTrainingSession({
         const target = e.target as HTMLElement;
         if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
           e.preventDefault();
-          setShowResults(false);
-          setLastSessionResult(null);
+          dismissRuntimeResults();
           void startTraining();
         }
       }
@@ -222,7 +295,7 @@ export function useTrainingSession({
       groupTimings,
     });
 
-    setLastSessionResult({
+    const summary: SessionResultSummary = {
       accuracy: result.accuracy,
       groups: result.groups.map((g, i) => ({
         sent: g.sent,
@@ -231,8 +304,8 @@ export function useTrainingSession({
       })),
       avgResponseMs: result.avgResponseMs,
       score: result.score,
-    });
-    setShowResults(true);
+    };
+    completeRuntimeSession(summary);
 
     try {
       await currentSaveSession(result as SessionResultInput);
@@ -277,7 +350,7 @@ export function useTrainingSession({
       audio.trainingAbortRef.current = false;
       resultsProcessedRef.current = false;
       activeSentGroupsRef.current = [];
-      setIsCompletingSession(false);
+      cancelRuntimeSession();
 
       Object.values(confirmTimeoutRef.current).forEach((id) => {
         if (id !== undefined) {
@@ -295,17 +368,11 @@ export function useTrainingSession({
 
       const mySession = audio.sessionIdRef.current + 1;
       audio.sessionIdRef.current = mySession;
-      setIsTraining(true);
       isTrainingRef.current = true;
       takeSessionLock();
-      setShowResults(false);
-      setLastSessionResult(null);
-      setCurrentGroup(0);
-      setSentGroups([]);
-      setUserInput([]);
-      setConfirmedGroups({});
-      setCurrentFocusedGroup(0);
-      startedAtRef.current = Date.now();
+      const startedAt = Date.now();
+      startedAtRef.current = startedAt;
+      beginRuntimeSession({ sessionId: mySession, startedAt });
       userInputRef.current = [];
       confirmedGroupsRef.current = {};
       groupStartAtRef.current = [];
@@ -316,13 +383,13 @@ export function useTrainingSession({
       for (let i = 0; i < settings.numGroups; i++) {
         groups.push(generateTrainingGroup(settings, historicalSessions));
       }
-      setSentGroups(groups);
+      setRuntimeGroups(groups);
       activeSentGroupsRef.current = groups;
 
       for (let i = 0; i < groups.length; i++) {
         if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
-        setCurrentGroup(i);
-        setCurrentFocusedGroup(i);
+        setRuntimeCurrentGroup(i);
+        setRuntimeStatus('playingGroup');
         requestAnimationFrame(() => {
           const el = inputRefs.current[i];
           if (el) {
@@ -338,12 +405,27 @@ export function useTrainingSession({
         if (delayMs > 0) await audio.sleepCancelable(delayMs, mySession);
         const startTs = Date.now();
         groupStartAtRef.current[i] = startTs;
+        recordRuntimeGroupStart(i, startTs);
         const group = groups[i];
         if (!group) continue;
-        const duration = await audio.playMorse(group, mySession);
-        groupEndAtRef.current[i] = startTs + Math.max(0, Math.round((duration || 0) * 1000));
+        setRuntimeAudioStatus('running');
+        const playback = await audio.playMorse(group, mySession);
+        if (playback.status === 'failed' || playback.status === 'suspended') {
+          const message =
+            playback.status === 'failed'
+              ? playback.message
+              : 'Audio was suspended by the browser. Tap Submit or Stop, or start a new run.';
+          setRuntimeStatus('failed', { errorMessage: message });
+          audio.trainingAbortRef.current = true;
+          break;
+        }
+        const durationSec = playback.status === 'played' ? playback.durationSec : 0;
+        const groupEndedAt = startTs + Math.max(0, Math.round(durationSec * 1000));
+        groupEndAtRef.current[i] = groupEndedAt;
+        recordRuntimeGroupEnd(i, groupEndedAt);
         if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
 
+        setRuntimeStatus('waitingForAnswer');
         const { timedOut } = await waitForGroupCompletion(i);
         if (timedOut && !confirmedGroupsRef.current[i]) {
           autoConfirmOnTimeout(i, groups);
@@ -358,10 +440,10 @@ export function useTrainingSession({
         !(audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) &&
         !resultsProcessedRef.current;
       if (shouldProcessResults) {
-        setIsCompletingSession(true);
+        setRuntimeStatus('completing');
       }
-      setIsTraining(false);
       isTrainingRef.current = false;
+      setRuntimeAudioStatus('closed');
       audio.stopAudio();
       if (shouldProcessResults) {
         const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map(
@@ -377,27 +459,28 @@ export function useTrainingSession({
           });
         } finally {
           dropSessionLock();
-          setIsCompletingSession(false);
         }
       } else {
+        cancelRuntimeSession();
         dropSessionLock();
       }
     } catch (error) {
       console.error('[Training] Unexpected training error:', error);
       showToast({ message: `Training error: ${ensureAppError(error).message}`, type: 'error' });
-      setIsTraining(false);
       isTrainingRef.current = false;
       dropSessionLock();
       audio.trainingAbortRef.current = true;
+      setRuntimeStatus('failed', { errorMessage: ensureAppError(error).message });
+      setRuntimeAudioStatus('failed');
       audio.stopAudio();
     }
   };
 
   const submitAnswer = (): void => {
     audio.trainingAbortRef.current = true;
-    setIsCompletingSession(true);
-    setIsTraining(false);
+    setRuntimeStatus('completing');
     isTrainingRef.current = false;
+    setRuntimeAudioStatus('closed');
     audio.stopAudio();
     const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map((a) =>
       (a || '').trim().toUpperCase(),
@@ -412,15 +495,15 @@ export function useTrainingSession({
       })
       .finally(() => {
         dropSessionLock();
-        setIsCompletingSession(false);
       });
   };
 
   const stopTraining = (): void => {
     audio.trainingAbortRef.current = true;
-    setIsTraining(false);
     isTrainingRef.current = false;
+    cancelRuntimeSession();
     dropSessionLock();
+    setRuntimeAudioStatus('closed');
     audio.stopAudio();
   };
 
@@ -429,12 +512,12 @@ export function useTrainingSession({
     const normalized = (overrideValue ?? userInput[index] ?? '').trim().toUpperCase();
     const nextAnswers = [...userInput];
     nextAnswers[index] = normalized;
-    setUserInput(nextAnswers);
     userInputRef.current = nextAnswers;
     const nextConfirmed = { ...confirmedGroupsRef.current, [index]: true };
-    setConfirmedGroups(nextConfirmed);
     confirmedGroupsRef.current = nextConfirmed;
-    if (!groupAnswerAtRef.current[index]) groupAnswerAtRef.current[index] = Date.now();
+    const answeredAt = Date.now();
+    if (!groupAnswerAtRef.current[index]) groupAnswerAtRef.current[index] = answeredAt;
+    confirmRuntimeAnswer(index, normalized, answeredAt);
 
     const resolver = groupCompletionResolversRef.current[index];
     if (resolver) {
@@ -444,8 +527,7 @@ export function useTrainingSession({
 
     const nextIndex = index + 1;
     if (nextIndex < sentGroups.length) {
-      setCurrentGroup(nextIndex);
-      setCurrentFocusedGroup(nextIndex);
+      setRuntimeFocusedGroup(nextIndex);
       focusInput(nextIndex);
     }
 
@@ -461,15 +543,17 @@ export function useTrainingSession({
   const handleAnswerChange = (index: number, value: string): void => {
     const nextAnswers = [...userInput];
     nextAnswers[index] = value;
-    setUserInput(nextAnswers);
     userInputRef.current = nextAnswers;
+    updateRuntimeInput(index, value);
 
     if (
       value.length === sentGroups[index]?.length &&
       value.length > 0 &&
       !groupAnswerAtRef.current[index]
     ) {
-      groupAnswerAtRef.current[index] = Date.now();
+      const answeredAt = Date.now();
+      groupAnswerAtRef.current[index] = answeredAt;
+      recordRuntimeAnswerTime(index, answeredAt);
     }
 
     if (confirmTimeoutRef.current[index] !== undefined) {
@@ -490,8 +574,7 @@ export function useTrainingSession({
   };
 
   const dismissResults = (): void => {
-    setShowResults(false);
-    setLastSessionResult(null);
+    dismissRuntimeResults();
   };
 
   const inputRefCallback = useCallback((idx: number, el: HTMLInputElement | null) => {
@@ -510,7 +593,11 @@ export function useTrainingSession({
       let timeoutId: TimeoutId | undefined;
       if (settings.groupTimeout && settings.groupTimeout > 0) {
         timeoutId = window.setTimeout(() => {
-          if (!groupAnswerAtRef.current[i]) groupAnswerAtRef.current[i] = Date.now();
+          if (!groupAnswerAtRef.current[i]) {
+            const answeredAt = Date.now();
+            groupAnswerAtRef.current[i] = answeredAt;
+            recordRuntimeAnswerTime(i, answeredAt);
+          }
           if (resolver) resolver({ timedOut: true });
           delete groupCompletionResolversRef.current[i];
         }, settings.groupTimeout * 1000) as TimeoutId;
@@ -542,14 +629,13 @@ export function useTrainingSession({
     const currentValue = (userInputRef.current[i] || '').trim().toUpperCase();
     const nextAnswers = [...userInputRef.current];
     nextAnswers[i] = currentValue;
-    setUserInput(nextAnswers);
     userInputRef.current = nextAnswers;
     const nextConfirmed = { ...confirmedGroupsRef.current, [i]: true };
-    setConfirmedGroups(nextConfirmed);
     confirmedGroupsRef.current = nextConfirmed;
+    confirmRuntimeAnswer(i, currentValue, groupAnswerAtRef.current[i] || Date.now());
     const nextIndex = i + 1;
     if (nextIndex < groups.length) {
-      setCurrentFocusedGroup(nextIndex);
+      setRuntimeFocusedGroup(nextIndex);
       focusInput(nextIndex);
     }
   }
@@ -575,6 +661,8 @@ export function useTrainingSession({
   return {
     isTraining,
     isCompletingSession,
+    hasActiveSession,
+    runtimeStatus: runtime.status,
     currentGroup,
     sentGroups,
     userInput,
@@ -587,9 +675,10 @@ export function useTrainingSession({
     stopTraining,
     confirmGroupAnswer,
     handleAnswerChange,
-    setCurrentFocusedGroup,
+    setCurrentFocusedGroup: setRuntimeFocusedGroup,
     dismissResults,
     inputRefs,
     inputRefCallback,
+    ...(sessionIssueMessage !== undefined ? { sessionIssueMessage } : {}),
   };
 }

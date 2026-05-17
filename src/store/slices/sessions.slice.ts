@@ -95,6 +95,10 @@ export const createSessionsSlice = ({
     try {
       const context = getContext();
       const sessions = await service.upsertSession(context, input);
+      if (isTrainingSessionActive()) {
+        set({ sessionsSyncing: false });
+        return get().sessions;
+      }
       applySuccessState(set, sessions);
       return sessions;
     } catch (error) {

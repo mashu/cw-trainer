@@ -15,6 +15,7 @@ import type { SessionService as SessionServiceType } from '@/lib/services/sessio
 import type { TrainingSettingsService as TrainingSettingsServiceType } from '@/lib/services/training-settings.service';
 import type { FirebaseServicesLite } from '@/lib/sessionPersistence';
 import { getQueuedSessionCount } from '@/lib/sessionQueue';
+import { isGroupTrainingRuntimeBlockingSync } from '@/lib/training/groupSessionMachine';
 import type { AppUser } from '@/types';
 
 import { contextEquals } from '../context-utils';
@@ -134,7 +135,10 @@ export function AppStoreProvider({
     }
     loadTimeoutRef.current = setTimeout(() => {
       const state = store.getState();
-      if (state.trainingSessionActive) {
+      if (
+        state.trainingSessionActive ||
+        isGroupTrainingRuntimeBlockingSync(state.groupTrainingRuntime)
+      ) {
         // Defer all loads until the session ends. The subscription below will
         // call triggerLoads() when trainingSessionActive goes from true to false.
         console.debug('[app-store-provider] Skipping loads while training session is active');
@@ -176,7 +180,11 @@ export function AppStoreProvider({
     const queuedCount = getQueuedSessionCount();
     if (queuedCount === 0) return;
 
-    if (store.getState().trainingSessionActive) {
+    const state = store.getState();
+    if (
+      state.trainingSessionActive ||
+      isGroupTrainingRuntimeBlockingSync(state.groupTrainingRuntime)
+    ) {
       console.debug('[app-store-provider] Skipping retry queue while training session is active');
       return;
     }
@@ -232,7 +240,9 @@ export function AppStoreProvider({
     }
 
     let previousContext: StoreContextValue = store.getState().context;
-    let previousTrainingSessionActive: boolean = store.getState().trainingSessionActive;
+    let previousTrainingBlocked: boolean =
+      store.getState().trainingSessionActive ||
+      isGroupTrainingRuntimeBlockingSync(store.getState().groupTrainingRuntime);
 
     const unsubscribe = store.subscribe((state) => {
       const currentContext = state.context;
@@ -246,8 +256,10 @@ export function AppStoreProvider({
         triggerLoads();
       }
 
-      const currentTrainingSessionActive = state.trainingSessionActive;
-      if (previousTrainingSessionActive && !currentTrainingSessionActive) {
+      const currentTrainingBlocked =
+        state.trainingSessionActive ||
+        isGroupTrainingRuntimeBlockingSync(state.groupTrainingRuntime);
+      if (previousTrainingBlocked && !currentTrainingBlocked) {
         console.debug('[app-store-provider] Training session ended, triggering loads');
         // Do not reload training settings here: session teardown runs before
         // processResults/auto-adjust and autosave; a settings load would race
@@ -255,7 +267,7 @@ export function AppStoreProvider({
         triggerLoads({ skipTrainingSettings: true });
         void tryRetryQueuedSessionsRef.current?.();
       }
-      previousTrainingSessionActive = currentTrainingSessionActive;
+      previousTrainingBlocked = currentTrainingBlocked;
     });
 
     return (): void => {

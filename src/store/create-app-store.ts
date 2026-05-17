@@ -3,17 +3,26 @@ import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { IcrSessionService } from '@/lib/services/icr-session.service';
 import type { SessionService } from '@/lib/services/session.service';
 import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
+import { isGroupTrainingRuntimeBlockingSync } from '@/lib/training/groupSessionMachine';
 
 import { contextEquals } from './context-utils';
 import { createIcrSessionsSlice, type IcrSessionsSlice } from './slices/icr-sessions.slice';
 import { createSessionsSlice, type SessionsSlice } from './slices/sessions.slice';
+import {
+  createTrainingRuntimeSlice,
+  type TrainingRuntimeSlice,
+} from './slices/training-runtime.slice';
 import {
   createTrainingSettingsSlice,
   type TrainingSettingsSlice,
 } from './slices/training-settings.slice';
 import type { ContextSlice, StoreContextValue } from './types';
 
-export type AppStore = TrainingSettingsSlice & SessionsSlice & IcrSessionsSlice & ContextSlice;
+export type AppStore = TrainingRuntimeSlice &
+  TrainingSettingsSlice &
+  SessionsSlice &
+  IcrSessionsSlice &
+  ContextSlice;
 
 export interface CreateAppStoreOptions {
   readonly context: StoreContextValue;
@@ -64,7 +73,13 @@ export const createAppStore = ({
       },
     };
 
-    const isTrainingSessionActive = (): boolean => get().trainingSessionActive;
+    const trainingRuntimeSlice = createTrainingRuntimeSlice({
+      set: (partial, replace) => set(partial as Partial<AppStore>, replace),
+    });
+
+    const isTrainingSessionActive = (): boolean =>
+      get().trainingSessionActive ||
+      isGroupTrainingRuntimeBlockingSync(get().groupTrainingRuntime);
 
     const trainingSettingsSlice = createTrainingSettingsSlice({
       service: trainingSettingsService,
@@ -94,6 +109,7 @@ export const createAppStore = ({
 
     return {
       ...contextSlice,
+      ...trainingRuntimeSlice,
       ...trainingSettingsSlice,
       ...sessionsSlice,
       ...icrSessionsSlice,
