@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, type Dispatch, type SetStateAction 
 
 import { EchoSettingsForm } from '@/components/ui/forms/EchoSettingsForm';
 import { ICRSettingsForm } from '@/components/ui/forms/ICRSettingsForm';
+import { PlayerSettingsForm } from '@/components/ui/forms/PlayerSettingsForm';
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingSettingsForm } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingModeCarousel } from '@/components/ui/navigation/TrainingModeCarousel';
@@ -240,7 +241,7 @@ export function Sidebar({
                     </li>
                     <li>
                       <span className="font-medium">Player</span>: Type any text and play it as
-                      Morse using your tone and speed.
+                      Morse, or run listen-only random letters from your current alphabet.
                     </li>
                   </ul>
                 </div>
@@ -280,6 +281,9 @@ export function Sidebar({
                 )}
                 {activeMode === 'echo' && (
                   <EchoSettingsForm settings={settings} setSettings={setSettings} />
+                )}
+                {activeMode === 'player' && (
+                  <PlayerSettingsForm settings={settings} setSettings={setSettings} />
                 )}
                 <div className="flex justify-end mt-4">
                   <button

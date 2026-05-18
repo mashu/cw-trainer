@@ -55,6 +55,11 @@ export const DEFAULT_TRAINING_SETTINGS: TrainingSettings = {
   echoAutoAdjustBelowThresholdCount: 0,
   echoAutoAdjustAboveThresholdCount: 0,
   errorWeightStrength: 0,
+  playerAnnounceLetters: false,
+  playerLetterRepeatCount: 1,
+  playerRandomizeLetters: false,
+  playerDelaySeconds: 2,
+  playerSpeechVoiceURI: '',
 };
 
 export const DEFAULT_ICR_SETTINGS: IcrSettings = {

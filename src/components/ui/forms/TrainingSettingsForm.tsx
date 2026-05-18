@@ -74,6 +74,11 @@ export interface FormTrainingSettings {
   echoAutoAdjustBelowThresholdCount?: number;
   echoAutoAdjustAboveThresholdCount?: number;
   errorWeightStrength?: number;
+  playerAnnounceLetters?: boolean;
+  playerLetterRepeatCount?: number;
+  playerRandomizeLetters?: boolean;
+  playerDelaySeconds?: number;
+  playerSpeechVoiceURI?: string;
 }
 
 interface TrainingSettingsFormProps {

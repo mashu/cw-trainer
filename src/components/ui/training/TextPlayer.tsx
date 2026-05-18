@@ -47,7 +47,6 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
   const [durationSec, setDurationSec] = useState<number>(0);
   const [isRendering, setIsRendering] = useState<boolean>(false);
   const [isContinuousMode, setIsContinuousMode] = useState<boolean>(false);
-  const [ttlSeconds, setTtlSeconds] = useState<number>(2); // Time between letters in continuous mode
   const [wakeLockSupported, setWakeLockSupported] = useState<boolean>(false);
   const [wakeLockActive, setWakeLockActive] = useState<boolean>(false);
   const [currentLetterIndex, setCurrentLetterIndex] = useState<number>(0);
@@ -60,6 +59,15 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
   const continuousIndexRef = useRef<number>(0);
   const continuousTimeoutRef = useRef<number | null>(null);
   const isPlayingRef = useRef<boolean>(false);
+
+  const playerDelaySeconds = Math.max(0, Math.min(60, settings.playerDelaySeconds ?? 2));
+  const playerLetterRepeatCount = Math.max(
+    1,
+    Math.min(10, Math.trunc(settings.playerLetterRepeatCount ?? 1)),
+  );
+  const playerAnnounceLetters = settings.playerAnnounceLetters ?? false;
+  const playerRandomizeLetters = settings.playerRandomizeLetters ?? false;
+  const playerSpeechVoiceURI = settings.playerSpeechVoiceURI ?? '';
 
   const toneHz = useMemo(() => {
     const min = Math.max(100, settings.sideToneMin);
@@ -148,6 +156,85 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     setText(lines.join('\n'));
   };
 
+  const handlePrefillAlphabet = (): void => {
+    setText('ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+  };
+
+  const getListeningPracticePool = (): readonly string[] => {
+    const charPool = computeCharPool({
+      kochLevel: settings.kochLevel,
+      ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
+      ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
+      ...(settings.customSet && settings.customSet.length > 0
+        ? { customSet: [...settings.customSet] }
+        : {}),
+      ...(settings.customSequence && settings.customSequence.length > 0
+        ? { customSequence: [...settings.customSequence] }
+        : {}),
+      ...(settings.slidingWindowStart !== undefined
+        ? { slidingWindowStart: settings.slidingWindowStart }
+        : {}),
+      ...(settings.slidingWindowEnd !== undefined
+        ? { slidingWindowEnd: settings.slidingWindowEnd }
+        : {}),
+    });
+
+    if (Array.isArray(charPool) && charPool.length > 0) {
+      return charPool;
+    }
+
+    return LCWO_SEQUENCE.slice(0, Math.min((settings.kochLevel || 1) + 1, LCWO_SEQUENCE.length));
+  };
+
+  const pickRandomListeningCharacter = (): string | null => {
+    const pool = getListeningPracticePool();
+    const character = pool[Math.floor(Math.random() * pool.length)];
+    return character ?? null;
+  };
+
+  const speakCharacter = (char: string): Promise<void> => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(char.toUpperCase());
+      const selectedVoice = window.speechSynthesis
+        .getVoices()
+        .find((voice) => voice.voiceURI === playerSpeechVoiceURI);
+      let fallbackTimer: number | null = null;
+      const finish = (): void => {
+        if (fallbackTimer != null) {
+          window.clearTimeout(fallbackTimer);
+          fallbackTimer = null;
+        }
+        resolve();
+      };
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+      utterance.rate = 0.9;
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+      fallbackTimer = window.setTimeout(finish, 2500) as unknown as number;
+    });
+  };
+
+  const sleepDuringContinuousPlayback = (ms: number): Promise<boolean> => {
+    if (ms <= 0) {
+      return Promise.resolve(!abortRef.current && isPlayingRef.current);
+    }
+
+    return new Promise((resolve) => {
+      continuousTimeoutRef.current = window.setTimeout(() => {
+        continuousTimeoutRef.current = null;
+        resolve(!abortRef.current && isPlayingRef.current);
+      }, ms) as unknown as number;
+    });
+  };
+
   // Check for Wake Lock API support
   useEffect(() => {
     const nav = navigator as NavigatorWithWakeLock;
@@ -215,6 +302,11 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       }
       stopRef.current = null;
       try {
+        window.speechSynthesis?.cancel();
+      } catch {
+        /* no-op */
+      }
+      try {
         if (timerRef.current != null) window.clearTimeout(timerRef.current);
       } catch {
         /* no-op */
@@ -236,9 +328,9 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     };
   }, [releaseTextPlayerLock]);
 
-  // Continuous mode: play letters one at a time with TTL delay
+  // Continuous mode: play letters one at a time for listen-only practice.
   const playContinuous = async (): Promise<void> => {
-    if (!text.trim()) {
+    if (!playerRandomizeLetters && !text.trim()) {
       return;
     }
 
@@ -254,6 +346,11 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     }
 
     abortRef.current = false;
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {
+      /* no-op */
+    }
     isPlayingRef.current = true;
     setIsPlaying(true);
     takeTextPlayerLock();
@@ -262,15 +359,12 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
 
     const playNextLetter = async (): Promise<void> => {
       if (abortRef.current || !isPlayingRef.current) {
-        if (!isContinuousMode) {
-          await releaseWakeLock();
-        }
         releaseTextPlayerLock();
         return;
       }
 
       const cleanText = text.replace(/\s+/g, '').trim();
-      if (cleanText.length === 0) {
+      if (!playerRandomizeLetters && cleanText.length === 0) {
         isPlayingRef.current = false;
         setIsPlaying(false);
         await releaseWakeLock();
@@ -278,7 +372,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         return;
       }
 
-      if (continuousIndexRef.current >= cleanText.length) {
+      if (!playerRandomizeLetters && continuousIndexRef.current >= cleanText.length) {
         // Loop back to start in continuous mode
         if (isContinuousMode) {
           continuousIndexRef.current = 0;
@@ -292,50 +386,67 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         }
       }
 
-      const char = cleanText[continuousIndexRef.current];
+      const char = playerRandomizeLetters
+        ? pickRandomListeningCharacter()
+        : cleanText[continuousIndexRef.current];
       if (!char) {
-        continuousIndexRef.current++;
+        if (!playerRandomizeLetters) {
+          continuousIndexRef.current++;
+        }
         setCurrentLetterIndex(continuousIndexRef.current);
-        // Schedule next letter after TTL delay
-        continuousTimeoutRef.current = window.setTimeout(
-          playNextLetter,
-          ttlSeconds * 1000,
-        ) as unknown as number;
+        const shouldContinue = await sleepDuringContinuousPlayback(playerDelaySeconds * 1000);
+        if (shouldContinue) {
+          void playNextLetter();
+        }
         return;
       }
 
       try {
-        await ensureContext(ctx);
         setCurrentLetterIndex(continuousIndexRef.current + 1);
-        const { durationSec: d, stop } = await playMorseCodeControlled(
-          ctx,
-          char,
-          {
-            charWpmMin: Math.max(1, settings.charWpmMin),
-            charWpmMax: Math.max(1, settings.charWpmMax),
-            effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
-            effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
-            extraWordSpaceMultiplier: Math.max(0.1, settings.extraWordSpaceMultiplier ?? 1),
-            sideTone: toneHz,
-            steepness: settings.steepness,
-            envelopeSmoothing: settings.envelopeSmoothing ?? 0,
-            volumeMin: settings.volumeMin ?? 1,
-            volumeMax: settings.volumeMax ?? 1,
-            linkVolume: settings.linkVolume ?? true,
-          },
-          () => abortRef.current,
-        );
-        stopRef.current = stop;
-        setDurationSec(d);
+
+        for (let repeat = 0; repeat < playerLetterRepeatCount; repeat++) {
+          if (abortRef.current || !isPlayingRef.current) {
+            return;
+          }
+          await ensureContext(ctx);
+          const { durationSec: d, stop } = await playMorseCodeControlled(
+            ctx,
+            char,
+            {
+              charWpmMin: Math.max(1, settings.charWpmMin),
+              charWpmMax: Math.max(1, settings.charWpmMax),
+              effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
+              effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
+              extraWordSpaceMultiplier: Math.max(0.1, settings.extraWordSpaceMultiplier ?? 1),
+              sideTone: toneHz,
+              steepness: settings.steepness,
+              envelopeSmoothing: settings.envelopeSmoothing ?? 0,
+              volumeMin: settings.volumeMin ?? 1,
+              volumeMax: settings.volumeMax ?? 1,
+              linkVolume: settings.linkVolume ?? true,
+            },
+            () => abortRef.current,
+          );
+          stopRef.current = stop;
+          setDurationSec(d);
+          const shouldContinue = await sleepDuringContinuousPlayback(Math.ceil(d * 1000));
+          if (!shouldContinue) {
+            return;
+          }
+        }
+
+        if (playerAnnounceLetters) {
+          await speakCharacter(char);
+          if (abortRef.current || !isPlayingRef.current) {
+            return;
+          }
+        }
 
         continuousIndexRef.current++;
-
-        // Schedule next letter after current letter finishes + TTL delay
-        const totalDelay = Math.ceil(d * 1000) + ttlSeconds * 1000;
-        continuousTimeoutRef.current = window.setTimeout(
-          playNextLetter,
-          totalDelay,
-        ) as unknown as number;
+        const shouldContinue = await sleepDuringContinuousPlayback(playerDelaySeconds * 1000);
+        if (shouldContinue) {
+          void playNextLetter();
+        }
       } catch (err) {
         console.error('Error playing letter:', err);
         isPlayingRef.current = false;
@@ -408,6 +519,9 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
   const handleStop = async (): Promise<void> => {
     abortRef.current = true;
     isPlayingRef.current = false;
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
     try {
       stopRef.current?.();
     } catch {}
@@ -483,10 +597,15 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
           className="w-full h-40 sm:h-44 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
-        {/* Continuous Mode Controls */}
-        <div className="mt-3 p-3 bg-slate-100 rounded-lg border border-slate-200">
-          <div className="flex items-center gap-3 mb-2">
-            <label className="flex items-center gap-2 cursor-pointer">
+        <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-white to-indigo-50/40">
+          <div className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <label
+              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-colors ${
+                isContinuousMode
+                  ? 'border-indigo-200 bg-indigo-50 text-indigo-900'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-200'
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={isContinuousMode}
@@ -497,34 +616,31 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
                   }
                 }}
                 disabled={isPlaying}
-                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <span className="text-sm font-medium text-slate-700">
-                Continuous Mode (plays letters one at a time)
-              </span>
+              <span className="text-sm font-semibold">Continuous listening</span>
             </label>
             {wakeLockSupported && (
-              <span className="text-xs text-slate-500">
-                {wakeLockActive ? '🔒 Screen lock active' : '🔓 Screen lock available'}
+              <span
+                className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  wakeLockActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}
+              >
+                {wakeLockActive ? 'Screen lock active' : 'Screen lock available'}
               </span>
             )}
           </div>
           {isContinuousMode && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-600">TTL (delay between letters):</label>
-              <input
-                type="number"
-                min="0"
-                max="60"
-                step="0.1"
-                value={ttlSeconds}
-                onChange={(e) =>
-                  setTtlSeconds(Math.max(0, Math.min(60, parseFloat(e.target.value) || 0)))
-                }
-                disabled={isPlaying}
-                className="w-20 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              <span className="text-xs text-slate-500">seconds</span>
+            <div className="flex flex-wrap gap-1.5 border-t border-slate-200/80 bg-white/65 px-2.5 py-2">
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                {playerRandomizeLetters ? 'Random current alphabet' : 'Typed text'}
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                {playerLetterRepeatCount}x, then {playerDelaySeconds}s pause
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                {playerAnnounceLetters ? 'Spoken after Morse' : 'Morse only'}
+              </span>
             </div>
           )}
         </div>
@@ -552,7 +668,11 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
             )}
             {isContinuousMode && isPlaying && (
               <div className="text-[11px] text-indigo-600 font-medium">
-                Playing letter {currentLetterIndex} of {text.replace(/\s+/g, '').length || 1}
+                {playerRandomizeLetters
+                  ? `Playing random letter ${currentLetterIndex}`
+                  : `Playing letter ${currentLetterIndex} of ${
+                      text.replace(/\s+/g, '').length || 1
+                    }`}
               </div>
             )}
           </div>
@@ -560,7 +680,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
             {!isPlaying ? (
               <button
                 onClick={handlePlay}
-                disabled={!text.trim()}
+                disabled={!text.trim() && !(isContinuousMode && playerRandomizeLetters)}
                 className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ▶ Play
@@ -588,6 +708,14 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
               title="Pre-fill with groups based on current settings"
             >
               Pre-fill
+            </button>
+            <button
+              onClick={handlePrefillAlphabet}
+              disabled={isPlaying}
+              className="px-3 py-2 rounded-lg bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Pre-fill with A-Z for listen-only practice"
+            >
+              Alphabet
             </button>
             <button
               onClick={() => setText('')}

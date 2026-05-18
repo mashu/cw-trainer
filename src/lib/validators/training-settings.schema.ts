@@ -45,6 +45,10 @@ const RECEIVER_OFFSET_MOD_DEPTH_MIN = 0;
 const RECEIVER_OFFSET_MOD_DEPTH_MAX = 1000;
 const RECEIVER_OFFSET_MOD_RATE_MIN = 0;
 const RECEIVER_OFFSET_MOD_RATE_MAX = 20;
+const PLAYER_REPEAT_COUNT_MIN = 1;
+const PLAYER_REPEAT_COUNT_MAX = 10;
+const PLAYER_DELAY_SECONDS_MIN = 0;
+const PLAYER_DELAY_SECONDS_MAX = 60;
 
 const characterSetModeSchema = z.enum(['koch', 'digits', 'custom', 'mixed']);
 const echoKeyerModeSchema = z.enum(['manual', 'iambic-b']);
@@ -141,6 +145,20 @@ export const trainingSettingsSchema = z
       .max(AUTO_ADJUST_COUNT_MAX)
       .default(0),
     errorWeightStrength: z.number().min(0).max(5).default(0),
+    playerAnnounceLetters: z.boolean().default(false),
+    playerLetterRepeatCount: z
+      .number()
+      .int()
+      .min(PLAYER_REPEAT_COUNT_MIN)
+      .max(PLAYER_REPEAT_COUNT_MAX)
+      .default(1),
+    playerRandomizeLetters: z.boolean().default(false),
+    playerDelaySeconds: z
+      .number()
+      .min(PLAYER_DELAY_SECONDS_MIN)
+      .max(PLAYER_DELAY_SECONDS_MAX)
+      .default(2),
+    playerSpeechVoiceURI: z.string().default(''),
   })
   .superRefine((value, ctx) => {
     if (value.sideToneMax < value.sideToneMin) {
@@ -194,4 +212,4 @@ export const trainingSettingsSchema = z
     }
   });
 
-export type TrainingSettingsInput = z.infer<typeof trainingSettingsSchema>;
+export type TrainingSettingsInput = z.input<typeof trainingSettingsSchema>;

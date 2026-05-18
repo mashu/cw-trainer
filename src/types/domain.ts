@@ -177,6 +177,16 @@ export interface TrainingSettings {
   readonly echoAutoAdjustBelowThresholdCount: number;
   readonly echoAutoAdjustAboveThresholdCount: number;
   readonly errorWeightStrength: number;
+  /** Player-only: speak each character after its Morse repeats. */
+  readonly playerAnnounceLetters?: boolean;
+  /** Player-only: Morse repeats for one character before speech. */
+  readonly playerLetterRepeatCount?: number;
+  /** Player-only: choose letters randomly from the current unlocked alphabet instead of typed text. */
+  readonly playerRandomizeLetters?: boolean;
+  /** Player-only: delay after a character has completed Morse/speech. */
+  readonly playerDelaySeconds?: number;
+  /** Player-only: browser speechSynthesis voice URI; empty means browser default. */
+  readonly playerSpeechVoiceURI?: string;
 }
 
 /**

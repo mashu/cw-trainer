@@ -4,7 +4,7 @@ import type {
   TrainingSettingsRepositoryContext,
 } from '@/lib/db/repositories';
 import { TrainingSettingsService } from '@/lib/services';
-import type { TrainingSettingsInput } from '@/lib/validators';
+import { trainingSettingsSchema, type TrainingSettingsInput } from '@/lib/validators';
 import type { TrainingSettings } from '@/types';
 
 class InMemoryTrainingSettingsRepository implements TrainingSettingsRepository {
@@ -111,12 +111,13 @@ describe('TrainingSettingsService', () => {
     const service = new TrainingSettingsService(repo);
 
     const input = buildValidSettingsInput();
+    const expected = trainingSettingsSchema.parse(input);
 
     const saved = await service.saveSettings(context, input);
     const persisted = await service.getSettings(context);
 
-    expect(saved).toEqual(input);
-    expect(persisted).toEqual(input);
+    expect(saved).toEqual(expected);
+    expect(persisted).toEqual(expected);
   });
 
   it('applies partial updates via patchSettings', async () => {

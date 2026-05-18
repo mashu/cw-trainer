@@ -25,6 +25,10 @@ const RECEIVER_OFFSET_MOD_DEPTH_MIN = 0;
 const RECEIVER_OFFSET_MOD_DEPTH_MAX = 1000;
 const RECEIVER_OFFSET_MOD_RATE_MIN = 0;
 const RECEIVER_OFFSET_MOD_RATE_MAX = 20;
+const PLAYER_REPEAT_COUNT_MIN = 1;
+const PLAYER_REPEAT_COUNT_MAX = 10;
+const PLAYER_DELAY_SECONDS_MIN = 0;
+const PLAYER_DELAY_SECONDS_MAX = 60;
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
@@ -296,6 +300,32 @@ export const normalizeTrainingSettings = (
       typeof candidate['linkEffectiveWpm'] === 'boolean' ? candidate['linkEffectiveWpm'] : fallback.linkEffectiveWpm,
     linkGroupSize:
       typeof candidate['linkGroupSize'] === 'boolean' ? candidate['linkGroupSize'] : fallback.linkGroupSize,
+    playerAnnounceLetters:
+      typeof candidate['playerAnnounceLetters'] === 'boolean'
+        ? candidate['playerAnnounceLetters']
+        : fallback.playerAnnounceLetters ?? false,
+    playerLetterRepeatCount: Math.trunc(
+      normalizeFiniteNumber(
+        candidate['playerLetterRepeatCount'],
+        fallback.playerLetterRepeatCount ?? 1,
+        PLAYER_REPEAT_COUNT_MIN,
+        PLAYER_REPEAT_COUNT_MAX,
+      ),
+    ),
+    playerRandomizeLetters:
+      typeof candidate['playerRandomizeLetters'] === 'boolean'
+        ? candidate['playerRandomizeLetters']
+        : fallback.playerRandomizeLetters ?? false,
+    playerDelaySeconds: normalizeFiniteNumber(
+      candidate['playerDelaySeconds'],
+      fallback.playerDelaySeconds ?? 2,
+      PLAYER_DELAY_SECONDS_MIN,
+      PLAYER_DELAY_SECONDS_MAX,
+    ),
+    playerSpeechVoiceURI:
+      typeof candidate['playerSpeechVoiceURI'] === 'string'
+        ? candidate['playerSpeechVoiceURI']
+        : fallback.playerSpeechVoiceURI ?? '',
   };
 
   const parseResult = trainingSettingsSchema.safeParse(repairTrainingSettingsCandidate(merged));
@@ -431,6 +461,30 @@ export const normalizeTrainingSettings = (
   partialResult.linkEffectiveWpm = typeof candidate['linkEffectiveWpm'] === 'boolean' ? candidate['linkEffectiveWpm'] : fallback.linkEffectiveWpm;
   partialResult.linkGroupSize = typeof candidate['linkGroupSize'] === 'boolean' ? candidate['linkGroupSize'] : fallback.linkGroupSize;
   if (typeof candidate['errorWeightStrength'] === 'number') partialResult.errorWeightStrength = candidate['errorWeightStrength'];
+  partialResult.playerAnnounceLetters =
+    typeof candidate['playerAnnounceLetters'] === 'boolean'
+      ? candidate['playerAnnounceLetters']
+      : fallback.playerAnnounceLetters ?? false;
+  if (isFiniteNumber(candidate['playerLetterRepeatCount'])) {
+    partialResult.playerLetterRepeatCount = Math.trunc(
+      clampNumber(candidate['playerLetterRepeatCount'], PLAYER_REPEAT_COUNT_MIN, PLAYER_REPEAT_COUNT_MAX),
+    );
+  }
+  partialResult.playerRandomizeLetters =
+    typeof candidate['playerRandomizeLetters'] === 'boolean'
+      ? candidate['playerRandomizeLetters']
+      : fallback.playerRandomizeLetters ?? false;
+  if (isFiniteNumber(candidate['playerDelaySeconds'])) {
+    partialResult.playerDelaySeconds = clampNumber(
+      candidate['playerDelaySeconds'],
+      PLAYER_DELAY_SECONDS_MIN,
+      PLAYER_DELAY_SECONDS_MAX,
+    );
+  }
+  partialResult.playerSpeechVoiceURI =
+    typeof candidate['playerSpeechVoiceURI'] === 'string'
+      ? candidate['playerSpeechVoiceURI']
+      : fallback.playerSpeechVoiceURI ?? '';
   if (typeof candidate['slidingWindowStart'] === 'number') {
     partialResult.slidingWindowStart = Math.min(SLIDING_WINDOW_INDEX_MAX, Math.max(SLIDING_WINDOW_INDEX_MIN, Math.trunc(candidate['slidingWindowStart'])));
   }

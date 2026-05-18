@@ -94,6 +94,30 @@ describe('TextPlayer', (): void => {
 
   beforeEach((): void => {
     jest.clearAllMocks();
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel: jest.fn(),
+        getVoices: jest.fn(() => [
+          {
+            default: true,
+            lang: 'en-US',
+            localService: true,
+            name: 'Test Actor',
+            voiceURI: 'test-actor',
+          },
+        ]),
+        pause: jest.fn(),
+        paused: false,
+        pending: false,
+        resume: jest.fn(),
+        speak: jest.fn(),
+        speaking: false,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+      } as unknown as SpeechSynthesis,
+    });
   });
 
   it('should render text player with default text', (): void => {
@@ -130,7 +154,7 @@ describe('TextPlayer', (): void => {
     renderWithStore(<TextPlayer settings={defaultSettings} />);
 
     const playButton = screen.getByRole('button', { name: /Play/i });
-    
+
     // Click play button - this triggers async handlePlay
     // handlePlay calls setIsPlaying(true) immediately, then awaits playMorseCodeControlled
     await act(async () => {
@@ -141,7 +165,7 @@ describe('TextPlayer', (): void => {
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
-    
+
     // Now check for stop button - setIsPlaying(true) should have been called immediately
     await waitFor(
       () => {
@@ -156,6 +180,25 @@ describe('TextPlayer', (): void => {
     renderWithStore(<TextPlayer settings={defaultSettings} />);
 
     expect(screen.getByRole('button', { name: /Pre-fill/i })).toBeInTheDocument();
+  });
+
+  it('should prefill text with the alphabet', async (): Promise<void> => {
+    const user = userEvent.setup();
+    renderWithStore(<TextPlayer settings={defaultSettings} />);
+
+    await user.click(screen.getByRole('button', { name: /Alphabet/i }));
+
+    expect(screen.getByDisplayValue('ABCDEFGHIJKLMNOPQRSTUVWXYZ')).toBeInTheDocument();
+  });
+
+  it('should show player listening summary in continuous mode', async (): Promise<void> => {
+    const user = userEvent.setup();
+    renderWithStore(<TextPlayer settings={defaultSettings} />);
+
+    await user.click(screen.getByRole('checkbox', { name: /Continuous listening/i }));
+
+    expect(screen.getByText(/Typed text/i)).toBeInTheDocument();
+    expect(screen.getByText(/1x, then 2s pause/i)).toBeInTheDocument();
   });
 
   it('should prefill text when prefill button is clicked', async (): Promise<void> => {
@@ -180,4 +223,3 @@ describe('TextPlayer', (): void => {
     expect(screen.getByRole('button', { name: /Download WAV/i })).toBeInTheDocument();
   });
 });
-
