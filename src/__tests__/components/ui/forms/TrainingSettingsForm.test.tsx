@@ -39,6 +39,21 @@ describe('TrainingSettingsForm', () => {
     maxGroupSize: 3,
     linkGroupSize: false,
     envelopeSmoothing: 0,
+    qsbEnabled: false,
+    qsbDepth: 0.35,
+    qsbRateHz: 0.12,
+    qrnEnabled: false,
+    qrnLevel: 0.25,
+    qrmEnabled: false,
+    qrmLevel: 0.2,
+    qrmProfile: 'mixed',
+    receiverBackgroundGain: 20,
+    receiverBackgroundExcitationRate: 62,
+    receiverBackgroundResonance: 66,
+    receiverBackgroundDecay: 0.984,
+    receiverBackgroundOffsetHz: 140,
+    receiverBackgroundOffsetModDepthHz: 45,
+    receiverBackgroundOffsetModRateHz: 0.32,
     autoAdjustKoch: false,
     autoAdjustThreshold: 90,
   };
@@ -50,6 +65,9 @@ describe('TrainingSettingsForm', () => {
     expect(screen.getAllByText(/Sequence Level/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Number of Groups/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Character Speed/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Band conditions/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Preview/i })).toBeInTheDocument();
+    expect(screen.getByText(/Advanced receiver tuning/i)).toBeInTheDocument();
   });
 
   it('should display current settings values', () => {
@@ -134,6 +152,32 @@ describe('TrainingSettingsForm', () => {
 
     // The chart should be rendered (Recharts components are mocked)
     expect(screen.getByTestId('line-chart')).toBeInTheDocument();
+  });
+
+  it('should update band condition controls', async () => {
+    const user = userEvent.setup();
+    const setSettings = jest.fn();
+    render(<TrainingSettingsForm settings={defaultSettings} setSettings={setSettings} />);
+
+    const [qsbToggle] = screen.getAllByLabelText(/Off/i, { selector: 'input[type="checkbox"]' });
+    if (!qsbToggle) {
+      throw new Error('Expected QSB toggle to render');
+    }
+    expect(qsbToggle).toBeInTheDocument();
+
+    await user.click(qsbToggle);
+
+    expect(setSettings).toHaveBeenCalledWith(expect.any(Function));
+    const updater = setSettings.mock.calls[0]?.[0] as
+      | ((previous: FormTrainingSettings) => FormTrainingSettings)
+      | undefined;
+    if (!updater) {
+      throw new Error('Expected functional settings update');
+    }
+    expect(updater(defaultSettings)).toEqual({
+      ...defaultSettings,
+      qsbEnabled: true,
+    });
   });
 
   it('should sync effectiveWpm with charWpm when linkCharToEffective is true', async () => {

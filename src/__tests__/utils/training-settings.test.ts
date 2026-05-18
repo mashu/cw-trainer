@@ -103,6 +103,54 @@ describe('normalizeTrainingSettings', () => {
     expect(result4.linkCharWpm).toBe(false);
   });
 
+  it('normalizes band condition fields', () => {
+    const result = normalizeTrainingSettings(
+      {
+        qsbEnabled: true,
+        qsbDepth: 1.4,
+        qsbRateHz: 0.01,
+        qrnEnabled: true,
+        qrnLevel: 0.6,
+        qrmEnabled: true,
+        qrmLevel: -0.5,
+        qrmProfile: 'ringing',
+        receiverBackgroundGain: 50,
+        receiverBackgroundExcitationRate: 0,
+        receiverBackgroundResonance: 500,
+        receiverBackgroundDecay: 1,
+        receiverBackgroundOffsetHz: 5000,
+        receiverBackgroundOffsetModDepthHz: 5000,
+        receiverBackgroundOffsetModRateHz: 50,
+      },
+      DEFAULT_TRAINING_SETTINGS,
+    );
+
+    expect(result.qsbEnabled).toBe(true);
+    expect(result.qsbDepth).toBe(1);
+    expect(result.qsbRateHz).toBe(0.03);
+    expect(result.qrnEnabled).toBe(true);
+    expect(result.qrnLevel).toBe(0.6);
+    expect(result.qrmEnabled).toBe(true);
+    expect(result.qrmLevel).toBe(0);
+    expect(result.qrmProfile).toBe('ringing');
+    expect(result.receiverBackgroundGain).toBe(20);
+    expect(result.receiverBackgroundExcitationRate).toBe(0.1);
+    expect(result.receiverBackgroundResonance).toBe(240);
+    expect(result.receiverBackgroundDecay).toBe(0.9999);
+    expect(result.receiverBackgroundOffsetHz).toBe(1000);
+    expect(result.receiverBackgroundOffsetModDepthHz).toBe(1000);
+    expect(result.receiverBackgroundOffsetModRateHz).toBe(20);
+  });
+
+  it('falls back for invalid QRM profile', () => {
+    const result = normalizeTrainingSettings(
+      { qrmProfile: 'invalid-profile' },
+      DEFAULT_TRAINING_SETTINGS,
+    );
+
+    expect(result.qrmProfile).toBe(DEFAULT_TRAINING_SETTINGS.qrmProfile);
+  });
+
   it('returns fallback when validation fails', () => {
     const invalidInput = {
       charWpm: -10, // Invalid: should be positive

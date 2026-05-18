@@ -34,6 +34,9 @@ export type SessionMode = 'group' | 'echo';
 /** Echo-mode keyer behaviour when sending with paddles. */
 export type EchoKeyerMode = 'manual' | 'iambic-b';
 
+/** Characteristic CW-band interference profiles for QRM simulation. */
+export type QrmProfile = 'whistle' | 'ringing' | 'mixed';
+
 /**
  * Interactive Copy Response (ICR) configuration shared across components.
  */
@@ -69,6 +72,14 @@ export interface IcrAudioSnapshot {
   readonly linkVolume?: boolean;
   readonly steepness: number;
   readonly envelopeSmoothing?: number;
+  readonly qsbEnabled?: boolean;
+  readonly qsbDepth?: number;
+  readonly qsbRateHz?: number;
+  readonly qrnEnabled?: boolean;
+  readonly qrnLevel?: number;
+  readonly qrmEnabled?: boolean;
+  readonly qrmLevel?: number;
+  readonly qrmProfile?: QrmProfile;
 }
 
 /** Per-trial result captured during an ICR session. */
@@ -141,6 +152,21 @@ export interface TrainingSettings {
   readonly maxGroupSize: number;
   readonly linkGroupSize: boolean;
   readonly envelopeSmoothing: number;
+  readonly qsbEnabled: boolean;
+  readonly qsbDepth: number;
+  readonly qsbRateHz: number;
+  readonly qrnEnabled: boolean;
+  readonly qrnLevel: number;
+  readonly qrmEnabled: boolean;
+  readonly qrmLevel: number;
+  readonly qrmProfile: QrmProfile;
+  readonly receiverBackgroundGain: number;
+  readonly receiverBackgroundExcitationRate: number;
+  readonly receiverBackgroundResonance: number;
+  readonly receiverBackgroundDecay: number;
+  readonly receiverBackgroundOffsetHz: number;
+  readonly receiverBackgroundOffsetModDepthHz: number;
+  readonly receiverBackgroundOffsetModRateHz: number;
   readonly autoAdjustKoch: boolean;
   readonly autoAdjustThreshold: number;
   readonly autoAdjustBelowThresholdCount: number;

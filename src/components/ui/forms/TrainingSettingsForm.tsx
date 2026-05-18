@@ -13,6 +13,7 @@ import {
 } from './AutoLevelAdjustProfiles';
 import { CustomAlphabetEditor } from './CustomAlphabetEditor';
 import { LinkedRangeInput } from './LinkedRangeInput';
+import { BandConditionsSection } from './sections/BandConditionsSection';
 import { ToneEnvelopeSection } from './sections/ToneEnvelopeSection';
 import { SequenceEditorModal } from './SequenceEditorModal';
 
@@ -49,6 +50,21 @@ export interface FormTrainingSettings {
   maxGroupSize: number;
   linkGroupSize: boolean;
   envelopeSmoothing?: number;
+  qsbEnabled?: boolean;
+  qsbDepth?: number;
+  qsbRateHz?: number;
+  qrnEnabled?: boolean;
+  qrnLevel?: number;
+  qrmEnabled?: boolean;
+  qrmLevel?: number;
+  qrmProfile?: 'whistle' | 'ringing' | 'mixed';
+  receiverBackgroundGain?: number;
+  receiverBackgroundExcitationRate?: number;
+  receiverBackgroundResonance?: number;
+  receiverBackgroundDecay?: number;
+  receiverBackgroundOffsetHz?: number;
+  receiverBackgroundOffsetModDepthHz?: number;
+  receiverBackgroundOffsetModRateHz?: number;
   autoAdjustKoch?: boolean;
   autoAdjustThreshold?: number;
   autoAdjustBelowThresholdCount?: number;
@@ -1008,6 +1024,11 @@ export function TrainingSettingsForm({
         </div>
 
         <ToneEnvelopeSection
+          settings={settings}
+          setSettings={setSettings}
+          {...(onSaveSettings ? { onSaveSettings } : {})}
+        />
+        <BandConditionsSection
           settings={settings}
           setSettings={setSettings}
           {...(onSaveSettings ? { onSaveSettings } : {})}

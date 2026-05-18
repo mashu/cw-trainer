@@ -32,6 +32,21 @@ const buildValidSettings = (): TrainingSettingsInput => ({
   maxGroupSize: 5,
   linkGroupSize: false,
   envelopeSmoothing: 0.25,
+  qsbEnabled: false,
+  qsbDepth: 0.35,
+  qsbRateHz: 0.12,
+  qrnEnabled: false,
+  qrnLevel: 0.25,
+  qrmEnabled: false,
+  qrmLevel: 0.2,
+  qrmProfile: 'mixed',
+  receiverBackgroundGain: 20,
+  receiverBackgroundExcitationRate: 62,
+  receiverBackgroundResonance: 66,
+  receiverBackgroundDecay: 0.984,
+  receiverBackgroundOffsetHz: 140,
+  receiverBackgroundOffsetModDepthHz: 45,
+  receiverBackgroundOffsetModRateHz: 0.32,
   autoAdjustKoch: true,
   autoAdjustThreshold: 90,
   autoAdjustBelowThresholdCount: 0,
@@ -64,6 +79,45 @@ describe('trainingSettingsSchema', () => {
     expect(result.customSet).toEqual([]);
   });
 
+  it('defaults band condition settings when omitted', () => {
+    const {
+      qsbEnabled: _qsbEnabled,
+      qsbDepth: _qsbDepth,
+      qsbRateHz: _qsbRateHz,
+      qrnEnabled: _qrnEnabled,
+      qrnLevel: _qrnLevel,
+      qrmEnabled: _qrmEnabled,
+      qrmLevel: _qrmLevel,
+      qrmProfile: _qrmProfile,
+      receiverBackgroundGain: _receiverBackgroundGain,
+      receiverBackgroundExcitationRate: _receiverBackgroundExcitationRate,
+      receiverBackgroundResonance: _receiverBackgroundResonance,
+      receiverBackgroundDecay: _receiverBackgroundDecay,
+      receiverBackgroundOffsetHz: _receiverBackgroundOffsetHz,
+      receiverBackgroundOffsetModDepthHz: _receiverBackgroundOffsetModDepthHz,
+      receiverBackgroundOffsetModRateHz: _receiverBackgroundOffsetModRateHz,
+      ...rest
+    } = buildValidSettings();
+
+    const result = trainingSettingsSchema.parse(rest);
+
+    expect(result.qsbEnabled).toBe(false);
+    expect(result.qsbDepth).toBe(0.35);
+    expect(result.qsbRateHz).toBe(0.12);
+    expect(result.qrnEnabled).toBe(false);
+    expect(result.qrnLevel).toBe(0.25);
+    expect(result.qrmEnabled).toBe(false);
+    expect(result.qrmLevel).toBe(0.2);
+    expect(result.qrmProfile).toBe('mixed');
+    expect(result.receiverBackgroundGain).toBe(20);
+    expect(result.receiverBackgroundExcitationRate).toBe(62);
+    expect(result.receiverBackgroundResonance).toBe(66);
+    expect(result.receiverBackgroundDecay).toBe(0.984);
+    expect(result.receiverBackgroundOffsetHz).toBe(140);
+    expect(result.receiverBackgroundOffsetModDepthHz).toBe(45);
+    expect(result.receiverBackgroundOffsetModRateHz).toBe(0.32);
+  });
+
   it('rejects when sideToneMax is less than sideToneMin', () => {
     const candidate = {
       ...buildValidSettings(),
@@ -94,5 +148,16 @@ describe('trainingSettingsSchema', () => {
       const messages = result.error.issues.map((issue) => issue.message);
       expect(messages).toContain('maxGroupSize must be greater than or equal to minGroupSize');
     }
+  });
+
+  it('rejects invalid band condition ranges', () => {
+    const result = trainingSettingsSchema.safeParse({
+      ...buildValidSettings(),
+      qsbDepth: 1.5,
+      qrnLevel: -0.1,
+      qsbRateHz: 2,
+    });
+
+    expect(result.success).toBe(false);
   });
 });

@@ -1,5 +1,9 @@
 import { useCallback, useRef } from 'react';
 
+import {
+  createBandConditionsAudio,
+  type BandConditionsAudio,
+} from '@/lib/audio/bandConditions';
 import { SLEEP_CANCELABLE_STEP_MS } from '@/lib/constants';
 import {
   playMorseCodeControlled,
@@ -19,6 +23,8 @@ export interface TrainingAudioEngine {
   readonly playMorse: (text: string, sessionId: number) => Promise<TrainingAudioPlaybackResult>;
   /** Stop any playing audio and tear down the AudioContext. */
   readonly stopAudio: () => void;
+  /** Stop current Morse playback without tearing down session ambience. */
+  readonly stopCurrentPlayback: () => void;
   /** Cancelable sleep that checks abort flag every SLEEP_CANCELABLE_STEP_MS. */
   readonly sleepCancelable: (ms: number, sessionId: number) => Promise<void>;
   /** Ensure AudioContext is created and resumed (call from user gesture). */
@@ -38,28 +44,52 @@ export function useTrainingAudio(
   const trainingAbortRef = useRef(false);
   const sessionIdRef = useRef(0);
   const currentStopRef = useRef<(() => void) | null>(null);
+  const bandConditionsRef = useRef<BandConditionsAudio | null>(null);
 
-  const stopAudio = useCallback((): void => {
+  const ensureBandConditions = useCallback(
+    (ctx: AudioContext): BandConditionsAudio => {
+      if (!bandConditionsRef.current) {
+        bandConditionsRef.current = createBandConditionsAudio(ctx, settings);
+      } else {
+        bandConditionsRef.current.update(settings);
+      }
+      return bandConditionsRef.current;
+    },
+    [settings],
+  );
+
+  const stopCurrentPlayback = useCallback((): void => {
     try {
       currentStopRef.current?.();
     } catch {
       /* no-op */
     }
     currentStopRef.current = null;
+  }, []);
+
+  const stopAudio = useCallback((): void => {
+    stopCurrentPlayback();
+    try {
+      bandConditionsRef.current?.stop();
+    } catch {
+      /* no-op */
+    }
+    bandConditionsRef.current = null;
     try {
       audioContextRef.current?.close().catch(() => {});
     } catch {
       /* no-op */
     }
     audioContextRef.current = null;
-  }, []);
+  }, [stopCurrentPlayback]);
 
   const ensureAudioReady = useCallback((): void => {
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
     resumeAudioContextFromUserGesture(audioContextRef.current);
-  }, []);
+    ensureBandConditions(audioContextRef.current);
+  }, [ensureBandConditions]);
 
   const sleepCancelable = useCallback(
     async (ms: number, sessionId: number): Promise<void> => {
@@ -93,6 +123,7 @@ export function useTrainingAudio(
         if (ctx.state === 'suspended') {
           resumeAudioContextFromUserGesture(ctx);
         }
+        const bandConditions = ensureBandConditions(ctx);
         const { durationSec, stop } = await playMorseCodeControlled(
           ctx,
           text,
@@ -114,6 +145,7 @@ export function useTrainingAudio(
           },
           () =>
             trainingAbortRef.current || sessionIdRef.current !== sessionId,
+          bandConditions.morseOutput,
         );
         currentStopRef.current = stop;
         return { status: 'played', durationSec };
@@ -125,12 +157,13 @@ export function useTrainingAudio(
         };
       }
     },
-    [settings],
+    [ensureBandConditions, settings],
   );
 
   return {
     playMorse,
     stopAudio,
+    stopCurrentPlayback,
     sleepCancelable,
     ensureAudioReady,
     trainingAbortRef,

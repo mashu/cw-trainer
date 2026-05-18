@@ -431,7 +431,7 @@ export function useTrainingSession({
           autoConfirmOnTimeout(i, groups);
         }
         try {
-          audio.stopAudio();
+          audio.stopCurrentPlayback();
         } catch {
           /* no-op */
         }

@@ -109,7 +109,8 @@ export async function playMorseCodeControlled(
   ctx: AudioContext,
   text: string,
   settings: AudioSettings,
-  shouldStop: () => boolean
+  shouldStop: () => boolean,
+  outputNode?: AudioNode,
 ): Promise<{ durationSec: number; startTime: number; stop: () => void }> {
   if (shouldStop()) return { durationSec: 0, startTime: ctx.currentTime, stop: () => {} };
 
@@ -133,7 +134,7 @@ export async function playMorseCodeControlled(
   // Master group gain to enable fast fade-out stop
   const groupGain = ctx.createGain();
   groupGain.gain.setValueAtTime(1, ctx.currentTime);
-  groupGain.connect(ctx.destination);
+  groupGain.connect(outputNode ?? ctx.destination);
   let stopped = false;
   const stop = () => {
     try {

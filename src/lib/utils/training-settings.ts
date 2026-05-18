@@ -7,9 +7,37 @@ const MIXED_LETTERS_PERCENT_MIN = 0;
 const MIXED_LETTERS_PERCENT_MAX = 100;
 const SLIDING_WINDOW_INDEX_MIN = 1;
 const SLIDING_WINDOW_INDEX_MAX = 40;
+const AUDIO_REALISM_LEVEL_MIN = 0;
+const AUDIO_REALISM_LEVEL_MAX = 1;
+const QSB_RATE_MIN = 0.03;
+const QSB_RATE_MAX = 1.5;
+const RECEIVER_GAIN_MIN = 0;
+const RECEIVER_GAIN_MAX = 20;
+const RECEIVER_EXCITATION_RATE_MIN = 0.1;
+const RECEIVER_EXCITATION_RATE_MAX = 500;
+const RECEIVER_RESONANCE_MIN = 0.5;
+const RECEIVER_RESONANCE_MAX = 240;
+const RECEIVER_DECAY_MIN = 0.5;
+const RECEIVER_DECAY_MAX = 0.9999;
+const RECEIVER_OFFSET_MIN = -1000;
+const RECEIVER_OFFSET_MAX = 1000;
+const RECEIVER_OFFSET_MOD_DEPTH_MIN = 0;
+const RECEIVER_OFFSET_MOD_DEPTH_MAX = 1000;
+const RECEIVER_OFFSET_MOD_RATE_MIN = 0;
+const RECEIVER_OFFSET_MOD_RATE_MAX = 20;
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
+
+const clampNumber = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+const normalizeFiniteNumber = (
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number => (isFiniteNumber(value) ? clampNumber(value, min, max) : fallback);
 
 /**
  * Repairs common "intermediate" invalid states (e.g. max < min) that can be
@@ -125,6 +153,16 @@ const normalizeEchoKeyerMode = (
   return fallback ?? 'manual';
 };
 
+const normalizeQrmProfile = (
+  profile: unknown,
+  fallback: TrainingSettings['qrmProfile'],
+): TrainingSettings['qrmProfile'] => {
+  if (profile === 'whistle' || profile === 'ringing' || profile === 'mixed') {
+    return profile;
+  }
+  return fallback;
+};
+
 export const normalizeTrainingSettings = (
   raw: unknown,
   fallback: TrainingSettings,
@@ -153,6 +191,85 @@ export const normalizeTrainingSettings = (
     customSet: normalizeCustomSet(candidate['customSet'], fallback.customSet),
     customSequence: normalizeCustomSequence(candidate['customSequence'], fallback.customSequence),
     echoKeyerMode: normalizeEchoKeyerMode(candidate['echoKeyerMode'], fallback.echoKeyerMode),
+    qsbEnabled:
+      typeof candidate['qsbEnabled'] === 'boolean'
+        ? candidate['qsbEnabled']
+        : fallback.qsbEnabled,
+    qsbDepth: normalizeFiniteNumber(
+      candidate['qsbDepth'],
+      fallback.qsbDepth,
+      AUDIO_REALISM_LEVEL_MIN,
+      AUDIO_REALISM_LEVEL_MAX,
+    ),
+    qsbRateHz: normalizeFiniteNumber(
+      candidate['qsbRateHz'],
+      fallback.qsbRateHz,
+      QSB_RATE_MIN,
+      QSB_RATE_MAX,
+    ),
+    qrnEnabled:
+      typeof candidate['qrnEnabled'] === 'boolean'
+        ? candidate['qrnEnabled']
+        : fallback.qrnEnabled,
+    qrnLevel: normalizeFiniteNumber(
+      candidate['qrnLevel'],
+      fallback.qrnLevel,
+      AUDIO_REALISM_LEVEL_MIN,
+      AUDIO_REALISM_LEVEL_MAX,
+    ),
+    qrmEnabled:
+      typeof candidate['qrmEnabled'] === 'boolean'
+        ? candidate['qrmEnabled']
+        : fallback.qrmEnabled,
+    qrmLevel: normalizeFiniteNumber(
+      candidate['qrmLevel'],
+      fallback.qrmLevel,
+      AUDIO_REALISM_LEVEL_MIN,
+      AUDIO_REALISM_LEVEL_MAX,
+    ),
+    qrmProfile: normalizeQrmProfile(candidate['qrmProfile'], fallback.qrmProfile),
+    receiverBackgroundGain: normalizeFiniteNumber(
+      candidate['receiverBackgroundGain'],
+      fallback.receiverBackgroundGain,
+      RECEIVER_GAIN_MIN,
+      RECEIVER_GAIN_MAX,
+    ),
+    receiverBackgroundExcitationRate: normalizeFiniteNumber(
+      candidate['receiverBackgroundExcitationRate'],
+      fallback.receiverBackgroundExcitationRate,
+      RECEIVER_EXCITATION_RATE_MIN,
+      RECEIVER_EXCITATION_RATE_MAX,
+    ),
+    receiverBackgroundResonance: normalizeFiniteNumber(
+      candidate['receiverBackgroundResonance'],
+      fallback.receiverBackgroundResonance,
+      RECEIVER_RESONANCE_MIN,
+      RECEIVER_RESONANCE_MAX,
+    ),
+    receiverBackgroundDecay: normalizeFiniteNumber(
+      candidate['receiverBackgroundDecay'],
+      fallback.receiverBackgroundDecay,
+      RECEIVER_DECAY_MIN,
+      RECEIVER_DECAY_MAX,
+    ),
+    receiverBackgroundOffsetHz: normalizeFiniteNumber(
+      candidate['receiverBackgroundOffsetHz'],
+      fallback.receiverBackgroundOffsetHz,
+      RECEIVER_OFFSET_MIN,
+      RECEIVER_OFFSET_MAX,
+    ),
+    receiverBackgroundOffsetModDepthHz: normalizeFiniteNumber(
+      candidate['receiverBackgroundOffsetModDepthHz'],
+      fallback.receiverBackgroundOffsetModDepthHz,
+      RECEIVER_OFFSET_MOD_DEPTH_MIN,
+      RECEIVER_OFFSET_MOD_DEPTH_MAX,
+    ),
+    receiverBackgroundOffsetModRateHz: normalizeFiniteNumber(
+      candidate['receiverBackgroundOffsetModRateHz'],
+      fallback.receiverBackgroundOffsetModRateHz,
+      RECEIVER_OFFSET_MOD_RATE_MIN,
+      RECEIVER_OFFSET_MOD_RATE_MAX,
+    ),
     autoAdjustKoch:
       typeof candidate['autoAdjustKoch'] === 'boolean'
         ? candidate['autoAdjustKoch']
@@ -227,6 +344,59 @@ export const normalizeTrainingSettings = (
   if (typeof candidate['steepness'] === 'number') partialResult.steepness = candidate['steepness'];
   if (typeof candidate['extraWordSpaceMultiplier'] === 'number') partialResult.extraWordSpaceMultiplier = candidate['extraWordSpaceMultiplier'];
   if (typeof candidate['envelopeSmoothing'] === 'number') partialResult.envelopeSmoothing = candidate['envelopeSmoothing'];
+  if (typeof candidate['qsbEnabled'] === 'boolean') partialResult.qsbEnabled = candidate['qsbEnabled'];
+  if (isFiniteNumber(candidate['qsbDepth'])) {
+    partialResult.qsbDepth = clampNumber(candidate['qsbDepth'], AUDIO_REALISM_LEVEL_MIN, AUDIO_REALISM_LEVEL_MAX);
+  }
+  if (isFiniteNumber(candidate['qsbRateHz'])) {
+    partialResult.qsbRateHz = clampNumber(candidate['qsbRateHz'], QSB_RATE_MIN, QSB_RATE_MAX);
+  }
+  if (typeof candidate['qrnEnabled'] === 'boolean') partialResult.qrnEnabled = candidate['qrnEnabled'];
+  if (isFiniteNumber(candidate['qrnLevel'])) {
+    partialResult.qrnLevel = clampNumber(candidate['qrnLevel'], AUDIO_REALISM_LEVEL_MIN, AUDIO_REALISM_LEVEL_MAX);
+  }
+  if (typeof candidate['qrmEnabled'] === 'boolean') partialResult.qrmEnabled = candidate['qrmEnabled'];
+  if (isFiniteNumber(candidate['qrmLevel'])) {
+    partialResult.qrmLevel = clampNumber(candidate['qrmLevel'], AUDIO_REALISM_LEVEL_MIN, AUDIO_REALISM_LEVEL_MAX);
+  }
+  partialResult.qrmProfile = normalizeQrmProfile(candidate['qrmProfile'], fallback.qrmProfile);
+  if (isFiniteNumber(candidate['receiverBackgroundGain'])) {
+    partialResult.receiverBackgroundGain = clampNumber(candidate['receiverBackgroundGain'], RECEIVER_GAIN_MIN, RECEIVER_GAIN_MAX);
+  }
+  if (isFiniteNumber(candidate['receiverBackgroundExcitationRate'])) {
+    partialResult.receiverBackgroundExcitationRate = clampNumber(
+      candidate['receiverBackgroundExcitationRate'],
+      RECEIVER_EXCITATION_RATE_MIN,
+      RECEIVER_EXCITATION_RATE_MAX,
+    );
+  }
+  if (isFiniteNumber(candidate['receiverBackgroundResonance'])) {
+    partialResult.receiverBackgroundResonance = clampNumber(
+      candidate['receiverBackgroundResonance'],
+      RECEIVER_RESONANCE_MIN,
+      RECEIVER_RESONANCE_MAX,
+    );
+  }
+  if (isFiniteNumber(candidate['receiverBackgroundDecay'])) {
+    partialResult.receiverBackgroundDecay = clampNumber(candidate['receiverBackgroundDecay'], RECEIVER_DECAY_MIN, RECEIVER_DECAY_MAX);
+  }
+  if (isFiniteNumber(candidate['receiverBackgroundOffsetHz'])) {
+    partialResult.receiverBackgroundOffsetHz = clampNumber(candidate['receiverBackgroundOffsetHz'], RECEIVER_OFFSET_MIN, RECEIVER_OFFSET_MAX);
+  }
+  if (isFiniteNumber(candidate['receiverBackgroundOffsetModDepthHz'])) {
+    partialResult.receiverBackgroundOffsetModDepthHz = clampNumber(
+      candidate['receiverBackgroundOffsetModDepthHz'],
+      RECEIVER_OFFSET_MOD_DEPTH_MIN,
+      RECEIVER_OFFSET_MOD_DEPTH_MAX,
+    );
+  }
+  if (isFiniteNumber(candidate['receiverBackgroundOffsetModRateHz'])) {
+    partialResult.receiverBackgroundOffsetModRateHz = clampNumber(
+      candidate['receiverBackgroundOffsetModRateHz'],
+      RECEIVER_OFFSET_MOD_RATE_MIN,
+      RECEIVER_OFFSET_MOD_RATE_MAX,
+    );
+  }
   if (typeof candidate['autoAdjustThreshold'] === 'number') partialResult.autoAdjustThreshold = candidate['autoAdjustThreshold'];
   if (typeof candidate['autoAdjustBelowThresholdCount'] === 'number') partialResult.autoAdjustBelowThresholdCount = candidate['autoAdjustBelowThresholdCount'];
   if (typeof candidate['autoAdjustAboveThresholdCount'] === 'number') partialResult.autoAdjustAboveThresholdCount = candidate['autoAdjustAboveThresholdCount'];

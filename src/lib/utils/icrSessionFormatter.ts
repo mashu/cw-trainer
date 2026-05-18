@@ -26,6 +26,14 @@ export type SharedAudioSnapshot = {
   readonly linkVolume?: boolean;
   readonly steepness: number;
   readonly envelopeSmoothing?: number;
+  readonly qsbEnabled?: boolean;
+  readonly qsbDepth?: number;
+  readonly qsbRateHz?: number;
+  readonly qrnEnabled?: boolean;
+  readonly qrnLevel?: number;
+  readonly qrmEnabled?: boolean;
+  readonly qrmLevel?: number;
+  readonly qrmProfile?: 'whistle' | 'ringing' | 'mixed';
 };
 
 export interface FormatIcrSessionParams {
@@ -101,6 +109,30 @@ const normalizeSharedAudio = (snapshot: SharedAudioSnapshot): IcrAudioSnapshot =
       : {}),
     ...(typeof snapshot.linkVolume === 'boolean'
       ? { linkVolume: snapshot.linkVolume }
+      : {}),
+    ...(typeof snapshot.qsbEnabled === 'boolean'
+      ? { qsbEnabled: snapshot.qsbEnabled }
+      : {}),
+    ...(typeof snapshot.qsbDepth === 'number'
+      ? { qsbDepth: clampNumber(snapshot.qsbDepth, 0, 1) }
+      : {}),
+    ...(typeof snapshot.qsbRateHz === 'number'
+      ? { qsbRateHz: clampNumber(snapshot.qsbRateHz, 0.03, 1.5) }
+      : {}),
+    ...(typeof snapshot.qrnEnabled === 'boolean'
+      ? { qrnEnabled: snapshot.qrnEnabled }
+      : {}),
+    ...(typeof snapshot.qrnLevel === 'number'
+      ? { qrnLevel: clampNumber(snapshot.qrnLevel, 0, 1) }
+      : {}),
+    ...(typeof snapshot.qrmEnabled === 'boolean'
+      ? { qrmEnabled: snapshot.qrmEnabled }
+      : {}),
+    ...(typeof snapshot.qrmLevel === 'number'
+      ? { qrmLevel: clampNumber(snapshot.qrmLevel, 0, 1) }
+      : {}),
+    ...(snapshot.qrmProfile === 'whistle' || snapshot.qrmProfile === 'ringing' || snapshot.qrmProfile === 'mixed'
+      ? { qrmProfile: snapshot.qrmProfile }
       : {}),
   };
 };

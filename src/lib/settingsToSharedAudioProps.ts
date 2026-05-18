@@ -24,6 +24,14 @@ export type SharedAudioFromSettings = {
   linkVolume: boolean;
   steepness: number;
   envelopeSmoothing: number;
+  qsbEnabled?: boolean;
+  qsbDepth?: number;
+  qsbRateHz?: number;
+  qrnEnabled?: boolean;
+  qrnLevel?: number;
+  qrmEnabled?: boolean;
+  qrmLevel?: number;
+  qrmProfile?: TrainingSettings['qrmProfile'];
 };
 
 /**
@@ -57,5 +65,13 @@ export function settingsToSharedAudioProps(
     linkVolume: settings.linkVolume,
     steepness: settings.steepness,
     envelopeSmoothing: settings.envelopeSmoothing,
+    qsbEnabled: settings.qsbEnabled,
+    qsbDepth: settings.qsbDepth,
+    qsbRateHz: settings.qsbRateHz,
+    qrnEnabled: settings.qrnEnabled,
+    qrnLevel: settings.qrnLevel,
+    qrmEnabled: settings.qrmEnabled,
+    qrmLevel: settings.qrmLevel,
+    qrmProfile: settings.qrmProfile,
   };
 }
