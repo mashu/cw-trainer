@@ -460,8 +460,11 @@ export function useTrainingSession({
         } finally {
           dropSessionLock();
         }
-      } else {
+      } else if (!resultsProcessedRef.current) {
+        // submitAnswer() already processed results (and set abort); do not wipe results → idle.
         cancelRuntimeSession();
+        dropSessionLock();
+      } else {
         dropSessionLock();
       }
     } catch (error) {
