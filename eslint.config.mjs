@@ -21,7 +21,6 @@ export default [
       'out/**',
       'dist/**',
       'next-env.d.ts',
-      'docs/**',
     ],
   },
   ...nextCoreWebVitals,
