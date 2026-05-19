@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <rect width="512" height="512" rx="96" fill="#059669"/>
-  <!-- Morse: dit ? dash  dit ? (S)  centered, clean -->
+  <!-- Morse S: dit - dash - dit -->
   <g fill="#fff" stroke="none">
     <!-- dit (left) -->
     <circle cx="148" cy="256" r="48"/>
