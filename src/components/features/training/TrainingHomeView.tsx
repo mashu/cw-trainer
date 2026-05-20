@@ -3,7 +3,10 @@
 import React, { useEffect, useState } from 'react';
 
 import { ActivityHeatmap } from '@/components/ui/charts/ActivityHeatmap';
+import { AutoLevelAdjustProgressCard } from '@/components/ui/training/AutoLevelAdjustProgressCard';
 import { NewLetterPlayer } from '@/components/ui/training/NewLetterPlayer';
+import { useAutoLevelAdjustProgress } from '@/hooks/useAutoLevelAdjustProgress';
+import type { AutoAdjustProfileVariant } from '@/lib/kochAutoAdjust';
 import { settingsToSharedAudioProps } from '@/lib/settingsToSharedAudioProps';
 import type { TrainingSettings } from '@/types';
 
@@ -87,6 +90,8 @@ export interface TrainingHomeViewProps {
   readonly tips?: readonly string[];
   /** Optional region (e.g. echo-mode Morse decoder warm-up) rendered between the intro card and tips. */
   readonly beforeTipsSlot?: React.ReactNode;
+  /** Which auto-adjust profile counters to show (group vs echo). */
+  readonly autoAdjustProfile?: AutoAdjustProfileVariant;
 }
 
 export function TrainingHomeView({
@@ -103,9 +108,24 @@ export function TrainingHomeView({
   listeningPrompt = 'New to this level? Listen to the letters:',
   tips = DEFAULT_TIPS,
   beforeTipsSlot,
+  autoAdjustProfile = 'group',
 }: TrainingHomeViewProps): JSX.Element {
+  const levelAdjustProgress = useAutoLevelAdjustProgress(
+    settings,
+    autoAdjustProfile,
+    sessionCount + lastAccuracyPercent,
+  );
+  const profileLabel = autoAdjustProfile === 'echo' ? 'Echo' : 'Group';
+
   return (
     <div className="space-y-8">
+      {levelAdjustProgress !== null && (
+        <AutoLevelAdjustProgressCard
+          progress={levelAdjustProgress}
+          profileLabel={profileLabel}
+        />
+      )}
+
       {sessionCount > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">

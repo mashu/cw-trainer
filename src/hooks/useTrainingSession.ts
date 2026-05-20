@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { buildSessionResult } from '@/lib/buildSessionResult';
 import { AUTO_CONFIRM_DELAY_MS } from '@/lib/constants';
 import { ensureAppError } from '@/lib/errors';
+import { MAX_DIGITS_LEVEL, MAX_KOCH_LEVEL_GUESS } from '@/lib/constants';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { isGroupTrainingRuntimeActive } from '@/lib/training/groupSessionMachine';
@@ -318,21 +319,43 @@ export function useTrainingSession({
       const charSetMode = currentSettings.charSetMode ?? 'koch';
       const mode: AutoAdjustMode =
         charSetMode === 'digits' ? 'digits' : charSetMode === 'mixed' ? 'mixed' : 'koch';
-      const currentLevel =
-        mode === 'digits' ? (currentSettings.digitsLevel ?? 10) : currentSettings.kochLevel;
-      const maxLevel = mode === 'digits' ? 10 : 40;
+      const isMixed = charSetMode === 'mixed';
+      const isDigits = charSetMode === 'digits';
       const adjustment = evaluateAutoLevelAdjust(result.accuracy, {
         enabled: currentSettings.autoAdjustKoch,
         mode,
         threshold: currentSettings.autoAdjustThreshold ?? 90,
         aboveThresholdCount: Math.max(0, currentSettings.autoAdjustAboveThresholdCount ?? 0),
         belowThresholdCount: Math.max(0, currentSettings.autoAdjustBelowThresholdCount ?? 0),
-        currentLevel,
-        maxLevel,
+        currentLevel: isDigits
+          ? (currentSettings.digitsLevel ?? 10)
+          : currentSettings.kochLevel,
+        maxLevel: isDigits ? MAX_DIGITS_LEVEL : MAX_KOCH_LEVEL_GUESS,
+        ...(isMixed
+          ? {
+              pairedDigitsLevel: currentSettings.digitsLevel ?? 10,
+              maxDigitsLevel: MAX_DIGITS_LEVEL,
+            }
+          : {}),
       });
       if (adjustment) {
-        const field = mode === 'digits' ? 'digitsLevel' : 'kochLevel';
-        currentSetTrainingSettingsState((prev) => ({ ...prev, [field]: adjustment.nextLevel }));
+        if (isDigits) {
+          currentSetTrainingSettingsState((prev) => ({
+            ...prev,
+            digitsLevel: adjustment.nextLevel,
+          }));
+        } else if (isMixed) {
+          currentSetTrainingSettingsState((prev) => ({
+            ...prev,
+            kochLevel: adjustment.nextLevel,
+            digitsLevel: adjustment.nextDigitsLevel ?? prev.digitsLevel,
+          }));
+        } else {
+          currentSetTrainingSettingsState((prev) => ({
+            ...prev,
+            kochLevel: adjustment.nextLevel,
+          }));
+        }
         currentShowToast({ message: adjustment.message, type: adjustment.messageType });
       }
     } catch (autoAdjustError) {

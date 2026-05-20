@@ -137,6 +137,7 @@ export function TrainingRouter({
         settings={settings}
         lastAccuracyPercent={lastAccuracyPercent}
         sessionCount={groupSessions.length}
+        autoAdjustProfile="group"
         onStartTraining={() => void training.startTraining()}
         onViewStats={() => {
           stopTrainingIfActive();
@@ -178,6 +179,7 @@ export function TrainingRouter({
         settings={settings}
         lastAccuracyPercent={lastEchoAccuracyPercent}
         sessionCount={echoSessions.length}
+        autoAdjustProfile="echo"
         title="Echo Sending"
         description="Hear each character, then send it back with your paddle. The groups come from the same character set and group settings as normal training."
         startLabel="🎯 Start Echo Mode"

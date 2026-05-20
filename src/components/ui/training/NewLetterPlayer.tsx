@@ -32,8 +32,32 @@ interface NewLetterPlayerProps {
   };
 }
 
+function poolSettingsFrom(
+  settings: NewLetterPlayerProps['settings'],
+): Parameters<typeof computeCharPool>[0] {
+  return {
+    kochLevel: settings.kochLevel,
+    ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
+    ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
+    ...(settings.customSet && settings.customSet.length > 0
+      ? { customSet: [...settings.customSet] }
+      : {}),
+    ...(settings.customSequence && settings.customSequence.length > 0
+      ? { customSequence: [...settings.customSequence] }
+      : {}),
+    ...(settings.slidingWindowStart !== undefined
+      ? { slidingWindowStart: settings.slidingWindowStart }
+      : {}),
+    ...(settings.slidingWindowEnd !== undefined
+      ? { slidingWindowEnd: settings.slidingWindowEnd }
+      : {}),
+  };
+}
+
 export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element | null {
   const { takeLock, releaseLock } = useTrainingSessionLock();
+  const charSetMode = settings.charSetMode ?? 'koch';
+  const useLinearNav = charSetMode === 'mixed' || charSetMode === 'digits';
 
   const [isPlaying, setIsPlaying] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -54,71 +78,55 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
     };
   }, [clearDurationDoneTimeout, releaseLock]);
 
-  const charPool = computeCharPool({
-    kochLevel: settings.kochLevel,
-    ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
-    ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
-    ...(settings.customSet && settings.customSet.length > 0
-      ? { customSet: [...settings.customSet] }
-      : {}),
-    ...(settings.customSequence && settings.customSequence.length > 0
-      ? { customSequence: [...settings.customSequence] }
-      : {}),
-    ...(settings.slidingWindowStart !== undefined
-      ? { slidingWindowStart: settings.slidingWindowStart }
-      : {}),
-    ...(settings.slidingWindowEnd !== undefined
-      ? { slidingWindowEnd: settings.slidingWindowEnd }
-      : {}),
-  });
+  const charPool = useMemo(() => computeCharPool(poolSettingsFrom(settings)), [settings]);
 
-  // Get the previous level's pool to determine what's new
+  // Pool before the latest level step (letters and/or digits) to mark "new" characters.
   const previousLevelPool = useMemo(() => {
+    const base = poolSettingsFrom(settings);
+    if (charSetMode === 'digits') {
+      const prevDigits = Math.max(1, (settings.digitsLevel ?? 10) - 1);
+      if (prevDigits >= (settings.digitsLevel ?? 10)) return [];
+      return computeCharPool({ ...base, digitsLevel: prevDigits });
+    }
+    if (charSetMode === 'mixed') {
+      const prevKoch = Math.max(1, settings.kochLevel - 1);
+      const prevDigits = Math.max(1, (settings.digitsLevel ?? 10) - 1);
+      if (prevKoch >= settings.kochLevel && prevDigits >= (settings.digitsLevel ?? 10)) {
+        return [];
+      }
+      return computeCharPool({
+        ...base,
+        kochLevel: prevKoch,
+        digitsLevel: prevDigits,
+      });
+    }
     if (settings.kochLevel <= 1) return [];
-    return computeCharPool({
-      kochLevel: settings.kochLevel - 1,
-      ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
-      ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
-      ...(settings.customSet && settings.customSet.length > 0
-        ? { customSet: [...settings.customSet] }
-        : {}),
-      ...(settings.customSequence && settings.customSequence.length > 0
-        ? { customSequence: [...settings.customSequence] }
-        : {}),
-      ...(settings.slidingWindowStart !== undefined
-        ? { slidingWindowStart: settings.slidingWindowStart }
-        : {}),
-      ...(settings.slidingWindowEnd !== undefined
-        ? { slidingWindowEnd: settings.slidingWindowEnd }
-        : {}),
-    });
-  }, [
-    settings.kochLevel,
-    settings.charSetMode,
-    settings.digitsLevel,
-    settings.customSet,
-    settings.customSequence,
-    settings.slidingWindowStart,
-    settings.slidingWindowEnd,
-  ]);
+    return computeCharPool({ ...base, kochLevel: settings.kochLevel - 1 });
+  }, [settings, charSetMode]);
 
   // Always compute the latest/newest letter index - no state persistence
   // For level 1: show both letters (K M)
   // For level 2+: always default to the newest letter (the one not in previous level)
   const defaultLetterIndex = useMemo(() => {
     if (charPool.length === 0) return 0;
+    if (useLinearNav) {
+      const newChars = charPool.filter((char) => !previousLevelPool.includes(char));
+      if (newChars.length > 0) {
+        const lastNew = newChars[newChars.length - 1];
+        const idx = lastNew ? charPool.indexOf(lastNew) : -1;
+        if (idx >= 0) return idx;
+      }
+      return charPool.length - 1;
+    }
     if (settings.kochLevel === 1) {
-      // Level 1: default to showing both letters (index doesn't matter much, but use 0)
       return 0;
     }
-    // For level 2+, find the new letter (the one that wasn't in previous level)
     const newLetter = charPool.find((char) => !previousLevelPool.includes(char));
     if (newLetter) {
       return charPool.indexOf(newLetter);
     }
-    // Fallback to last character if no new letter found
     return charPool.length - 1;
-  }, [charPool, previousLevelPool, settings.kochLevel]);
+  }, [charPool, previousLevelPool, settings.kochLevel, useLinearNav]);
 
   // State for navigation - null means "use default", set when user navigates
   // This avoids the flash on initial load since we always use defaultLetterIndex until user navigates
@@ -135,11 +143,10 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
   // Calculate values needed for hooks (handle empty charPool case)
   const selectedLetter =
     charPool.length > 0 ? (charPool[selectedLetterIndex] ?? charPool[0] ?? '') : '';
-  // For level 2+, treat indices 0 and 1 as the same "K M" pair
-  // Navigation: 0 (K M) -> 2 (U) -> 3 (R) -> etc.
-  const isFirstLevelPair = settings.kochLevel > 1 && selectedLetterIndex < 2;
-  const canGoPrevious = settings.kochLevel === 1 ? false : selectedLetterIndex > 0; // Can always go back (from 2->0, from 1->0, from 3->2, etc.)
-  const canGoNext = settings.kochLevel === 1 ? false : selectedLetterIndex < charPool.length - 1;
+  const isKochLevelOne = !useLinearNav && settings.kochLevel === 1;
+  const isFirstLevelPair = !useLinearNav && settings.kochLevel > 1 && selectedLetterIndex < 2;
+  const canGoPrevious = isKochLevelOne ? false : selectedLetterIndex > 0;
+  const canGoNext = isKochLevelOne ? false : selectedLetterIndex < charPool.length - 1;
 
   const pickToneHz = useCallback((): number => {
     const min = Math.max(100, settings.sideToneMin);
@@ -171,8 +178,9 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
       takeLock();
       // Determine what to play based on level
       let lettersToPlay: string[];
-      if (settings.kochLevel === 1) {
-        // Level 1: play both letters
+      if (useLinearNav) {
+        lettersToPlay = selectedLetter ? [selectedLetter] : [];
+      } else if (settings.kochLevel === 1) {
         lettersToPlay = charPool;
       } else if (isFirstLevelPair) {
         // Level 2+: if navigating to first two letters (K and M), play both together
@@ -223,6 +231,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
     settings,
     charPool,
     isFirstLevelPair,
+    useLinearNav,
     pickToneHz,
     clearDurationDoneTimeout,
     takeLock,
@@ -230,10 +239,11 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
   ]);
 
   const handlePrevious = useCallback(() => {
-    if (isPlaying) return;
-    if (settings.kochLevel === 1) return;
-    // If at index 2, go to index 0 (K M pair)
-    // Otherwise, go to previous index
+    if (isPlaying || isKochLevelOne) return;
+    if (useLinearNav) {
+      setUserSelectedIndex(Math.max(0, selectedLetterIndex - 1));
+      return;
+    }
     let newIndex = selectedLetterIndex;
     if (selectedLetterIndex === 2) {
       newIndex = 0;
@@ -243,13 +253,14 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
       newIndex = 0;
     }
     setUserSelectedIndex(newIndex);
-  }, [isPlaying, settings.kochLevel, selectedLetterIndex]);
+  }, [isPlaying, isKochLevelOne, useLinearNav, selectedLetterIndex]);
 
   const handleNext = useCallback(() => {
-    if (isPlaying) return;
-    if (settings.kochLevel === 1) return;
-    // If at index 0 or 1 (K M pair), go to index 2 (first individual letter)
-    // Otherwise, go to next index
+    if (isPlaying || isKochLevelOne) return;
+    if (useLinearNav) {
+      setUserSelectedIndex(Math.min(charPool.length - 1, selectedLetterIndex + 1));
+      return;
+    }
     let newIndex = selectedLetterIndex;
     if (selectedLetterIndex < 2) {
       newIndex = 2;
@@ -257,7 +268,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
       newIndex = selectedLetterIndex + 1;
     }
     setUserSelectedIndex(newIndex);
-  }, [isPlaying, settings.kochLevel, selectedLetterIndex]);
+  }, [isPlaying, isKochLevelOne, useLinearNav, selectedLetterIndex, charPool.length]);
 
   // Early return after all hooks
   if (charPool.length === 0) {
@@ -266,24 +277,22 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
 
   // For level 1: display both letters
   // For level 2+: if navigating to first two letters (indices 0 or 1), display "K M", otherwise display selected letter
-  const displayText =
-    settings.kochLevel === 1
-      ? charPool.join(' ') // K M
+  const displayText = useLinearNav
+    ? selectedLetter
+    : settings.kochLevel === 1
+      ? charPool.join(' ')
       : isFirstLevelPair
-        ? charPool.slice(0, 2).join(' ') // K M
+        ? charPool.slice(0, 2).join(' ')
         : selectedLetter;
-  const isNewLetter =
-    settings.kochLevel === 1
-      ? false // Level 1 doesn't have a "new" letter concept
+  const isNewLetter = useLinearNav
+    ? Boolean(selectedLetter && !previousLevelPool.includes(selectedLetter))
+    : settings.kochLevel === 1
+      ? false
       : isFirstLevelPair
-        ? false // K M pair is not "new"
-        : selectedLetter
-          ? !previousLevelPool.includes(selectedLetter)
-          : false;
+        ? false
+        : Boolean(selectedLetter && !previousLevelPool.includes(selectedLetter));
 
-  // Level 1: no navigation, just play both letters
-  // Level 2+: show navigation and play selected letter
-  const showNavigation = settings.kochLevel > 1;
+  const showNavigation = useLinearNav ? charPool.length > 1 : settings.kochLevel > 1;
 
   return (
     <div className="flex items-center gap-2">
@@ -312,9 +321,9 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
         className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 transition-all duration-200 hover:shadow-sm text-sm font-medium justify-center relative"
         style={{ minWidth: '100px' }} // Fixed width to prevent layout shifts
         title={
-          settings.kochLevel === 1
+          isKochLevelOne
             ? `Play two letters from level 1: ${displayText}`
-            : `Play letter: ${displayText}${isNewLetter ? ' (new for this level)' : ''}`
+            : `Play character: ${displayText}${isNewLetter ? ' (new for this level)' : ''}`
         }
         type="button"
       >

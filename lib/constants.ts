@@ -36,7 +36,9 @@ export const PCM_INT16_MAX = 0x7FFF;
 
 // Session persistence
 export const MAX_KOCH_LEVEL_GUESS = 60;
+export const MAX_DIGITS_LEVEL = 10;
 export const MIN_KOCH_LEVEL = 1;
+export const MIN_DIGITS_LEVEL = 1;
 export const DEFAULT_AUTO_ADJUST_THRESHOLD = 90;
 
 // UI constants

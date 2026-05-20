@@ -133,7 +133,7 @@ function AutoAdjustProfileBlock({
       )}
       {enabled && charMode === 'mixed' && (
         <p className="mt-1.5 text-xs text-slate-600">
-          In Mixed mode, the alphabet level is adjusted automatically; digits level stays fixed.
+          In Mixed mode, alphabet and digits levels are adjusted together from session accuracy.
         </p>
       )}
       {enabled && (
