@@ -3,9 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
+import { defaultCharPreviewIndex, splitLettersAndDigits } from '@/lib/charPreviewUtils';
 import { playMorseCodeControlled } from '@/lib/morseAudio';
 import { computeCharPool } from '@/lib/trainingUtils';
 import type { CharacterSetMode, TrainingSettings } from '@/types';
+
+import { CharPreviewStrip } from './CharPreviewStrip';
 
 interface NewLetterPlayerProps {
   settings: Pick<
@@ -54,10 +57,28 @@ function poolSettingsFrom(
   };
 }
 
+function useSelectableIndex(defaultIndex: number): {
+  readonly selectedIndex: number;
+  readonly setIndex: (index: number) => void;
+} {
+  const [userIndex, setUserIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setUserIndex(null);
+  }, [defaultIndex]);
+
+  return {
+    selectedIndex: userIndex ?? defaultIndex,
+    setIndex: setUserIndex,
+  };
+}
+
 export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element | null {
   const { takeLock, releaseLock } = useTrainingSessionLock();
   const charSetMode = settings.charSetMode ?? 'koch';
-  const useLinearNav = charSetMode === 'mixed' || charSetMode === 'digits';
+  const isMixed = charSetMode === 'mixed';
+  const isDigitsOnly = charSetMode === 'digits';
+  const isKochLevelOne = !isMixed && !isDigitsOnly && settings.kochLevel === 1;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -80,15 +101,14 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
 
   const charPool = useMemo(() => computeCharPool(poolSettingsFrom(settings)), [settings]);
 
-  // Pool before the latest level step (letters and/or digits) to mark "new" characters.
   const previousLevelPool = useMemo(() => {
     const base = poolSettingsFrom(settings);
-    if (charSetMode === 'digits') {
+    if (isDigitsOnly) {
       const prevDigits = Math.max(1, (settings.digitsLevel ?? 10) - 1);
       if (prevDigits >= (settings.digitsLevel ?? 10)) return [];
       return computeCharPool({ ...base, digitsLevel: prevDigits });
     }
-    if (charSetMode === 'mixed') {
+    if (isMixed) {
       const prevKoch = Math.max(1, settings.kochLevel - 1);
       const prevDigits = Math.max(1, (settings.digitsLevel ?? 10) - 1);
       if (prevKoch >= settings.kochLevel && prevDigits >= (settings.digitsLevel ?? 10)) {
@@ -102,51 +122,31 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
     }
     if (settings.kochLevel <= 1) return [];
     return computeCharPool({ ...base, kochLevel: settings.kochLevel - 1 });
-  }, [settings, charSetMode]);
+  }, [settings, isMixed, isDigitsOnly]);
 
-  // Always compute the latest/newest letter index - no state persistence
-  // For level 1: show both letters (K M)
-  // For level 2+: always default to the newest letter (the one not in previous level)
-  const defaultLetterIndex = useMemo(() => {
-    if (charPool.length === 0) return 0;
-    if (useLinearNav) {
-      const newChars = charPool.filter((char) => !previousLevelPool.includes(char));
-      if (newChars.length > 0) {
-        const lastNew = newChars[newChars.length - 1];
-        const idx = lastNew ? charPool.indexOf(lastNew) : -1;
-        if (idx >= 0) return idx;
-      }
-      return charPool.length - 1;
-    }
-    if (settings.kochLevel === 1) {
-      return 0;
-    }
-    const newLetter = charPool.find((char) => !previousLevelPool.includes(char));
-    if (newLetter) {
-      return charPool.indexOf(newLetter);
-    }
-    return charPool.length - 1;
-  }, [charPool, previousLevelPool, settings.kochLevel, useLinearNav]);
+  const { letters: lettersPool, digits: digitsPool } = useMemo(
+    () => splitLettersAndDigits(charPool),
+    [charPool],
+  );
+  const { letters: previousLettersPool, digits: previousDigitsPool } = useMemo(
+    () => splitLettersAndDigits(previousLevelPool),
+    [previousLevelPool],
+  );
 
-  // State for navigation - null means "use default", set when user navigates
-  // This avoids the flash on initial load since we always use defaultLetterIndex until user navigates
-  const [userSelectedIndex, setUserSelectedIndex] = useState<number | null>(null);
+  const singlePool = isMixed ? lettersPool : charPool;
+  const singlePreviousPool = isMixed ? previousLettersPool : previousLevelPool;
 
-  // Reset user selection when settings change (so we go back to showing latest letter)
-  React.useEffect(() => {
-    setUserSelectedIndex(null);
-  }, [defaultLetterIndex]);
+  const defaultSingleIndex = useMemo(
+    () => defaultCharPreviewIndex(singlePool, singlePreviousPool),
+    [singlePool, singlePreviousPool],
+  );
+  const defaultDigitsIndex = useMemo(
+    () => defaultCharPreviewIndex(digitsPool, previousDigitsPool),
+    [digitsPool, previousDigitsPool],
+  );
 
-  // The actual index to use: user selection if set, otherwise the computed default
-  const selectedLetterIndex = userSelectedIndex ?? defaultLetterIndex;
-
-  // Calculate values needed for hooks (handle empty charPool case)
-  const selectedLetter =
-    charPool.length > 0 ? (charPool[selectedLetterIndex] ?? charPool[0] ?? '') : '';
-  const isKochLevelOne = !useLinearNav && settings.kochLevel === 1;
-  const isFirstLevelPair = !useLinearNav && settings.kochLevel > 1 && selectedLetterIndex < 2;
-  const canGoPrevious = isKochLevelOne ? false : selectedLetterIndex > 0;
-  const canGoNext = isKochLevelOne ? false : selectedLetterIndex < charPool.length - 1;
+  const singleNav = useSelectableIndex(defaultSingleIndex);
+  const digitsNav = useSelectableIndex(defaultDigitsIndex);
 
   const pickToneHz = useCallback((): number => {
     const min = Math.max(100, settings.sideToneMin);
@@ -155,227 +155,166 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
     return Math.floor(min + Math.random() * (max - min + 1));
   }, [settings.sideToneMin, settings.sideToneMax]);
 
-  const handlePlay = useCallback(async () => {
-    if (isPlaying) {
-      clearDurationDoneTimeout();
-      // Stop if already playing
-      if (stopRef.current) {
-        stopRef.current();
-        stopRef.current = null;
-      }
-      setIsPlaying(false);
-      releaseLock();
-      return;
+  const stopPlayback = useCallback((): void => {
+    clearDurationDoneTimeout();
+    if (stopRef.current) {
+      stopRef.current();
+      stopRef.current = null;
     }
+    setIsPlaying(false);
+    releaseLock();
+  }, [clearDurationDoneTimeout, releaseLock]);
 
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
-    }
-    const ctx = audioContextRef.current;
+  const playCharacters = useCallback(
+    async (chars: readonly string[]): Promise<void> => {
+      if (chars.length === 0) return;
 
-    try {
-      setIsPlaying(true);
-      takeLock();
-      // Determine what to play based on level
-      let lettersToPlay: string[];
-      if (useLinearNav) {
-        lettersToPlay = selectedLetter ? [selectedLetter] : [];
-      } else if (settings.kochLevel === 1) {
-        lettersToPlay = charPool;
-      } else if (isFirstLevelPair) {
-        // Level 2+: if navigating to first two letters (K and M), play both together
-        lettersToPlay = charPool.slice(0, 2);
-      } else {
-        // Level 2+: play only the selected letter
-        lettersToPlay = selectedLetter ? [selectedLetter] : [];
+      if (isPlaying) {
+        stopPlayback();
       }
-      const textToPlay = lettersToPlay.join(' '); // Add space between letters
-      const { stop, durationSec } = await playMorseCodeControlled(
-        ctx,
-        textToPlay,
-        {
-          charWpmMin: Math.max(1, settings.charWpmMin),
-          charWpmMax: Math.max(1, settings.charWpmMax),
-          effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
-          effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
-          sideTone: pickToneHz(),
-          steepness: settings.steepness,
-          envelopeSmoothing: settings.envelopeSmoothing ?? 0,
-          volumeMin: settings.volumeMin ?? 1,
-          volumeMax: settings.volumeMax ?? 1,
-          linkVolume: settings.linkVolume ?? true,
-        },
-        () => false, // Don't stop unless user clicks
-      );
-      stopRef.current = stop;
 
-      // Wait for playback to finish based on actual duration
-      const durationMs = Math.ceil((durationSec || 0) * 1000) + 100; // Add small buffer
-      clearDurationDoneTimeout();
-      durationDoneTimeoutRef.current = window.setTimeout(() => {
-        durationDoneTimeoutRef.current = undefined;
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      const ctx = audioContextRef.current;
+
+      try {
+        setIsPlaying(true);
+        takeLock();
+        const textToPlay = chars.join(' ');
+        const { stop, durationSec } = await playMorseCodeControlled(
+          ctx,
+          textToPlay,
+          {
+            charWpmMin: Math.max(1, settings.charWpmMin),
+            charWpmMax: Math.max(1, settings.charWpmMax),
+            effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
+            effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
+            sideTone: pickToneHz(),
+            steepness: settings.steepness,
+            envelopeSmoothing: settings.envelopeSmoothing ?? 0,
+            volumeMin: settings.volumeMin ?? 1,
+            volumeMax: settings.volumeMax ?? 1,
+            linkVolume: settings.linkVolume ?? true,
+          },
+          () => false,
+        );
+        stopRef.current = stop;
+
+        const durationMs = Math.ceil((durationSec || 0) * 1000) + 100;
+        clearDurationDoneTimeout();
+        durationDoneTimeoutRef.current = window.setTimeout(() => {
+          durationDoneTimeoutRef.current = undefined;
+          setIsPlaying(false);
+          releaseLock();
+          stopRef.current = null;
+        }, durationMs);
+      } catch (error) {
+        console.error('Error playing characters:', error);
+        clearDurationDoneTimeout();
         setIsPlaying(false);
         releaseLock();
         stopRef.current = null;
-      }, durationMs);
-    } catch (error) {
-      console.error('Error playing letters:', error);
-      clearDurationDoneTimeout();
-      setIsPlaying(false);
-      releaseLock();
-      stopRef.current = null;
-    }
-  }, [
-    isPlaying,
-    selectedLetter,
-    settings,
-    charPool,
-    isFirstLevelPair,
-    useLinearNav,
-    pickToneHz,
-    clearDurationDoneTimeout,
-    takeLock,
-    releaseLock,
-  ]);
+      }
+    },
+    [isPlaying, settings, pickToneHz, clearDurationDoneTimeout, takeLock, releaseLock, stopPlayback],
+  );
 
-  const handlePrevious = useCallback(() => {
-    if (isPlaying || isKochLevelOne) return;
-    if (useLinearNav) {
-      setUserSelectedIndex(Math.max(0, selectedLetterIndex - 1));
-      return;
-    }
-    let newIndex = selectedLetterIndex;
-    if (selectedLetterIndex === 2) {
-      newIndex = 0;
-    } else if (selectedLetterIndex > 2) {
-      newIndex = selectedLetterIndex - 1;
-    } else if (selectedLetterIndex === 1) {
-      newIndex = 0;
-    }
-    setUserSelectedIndex(newIndex);
-  }, [isPlaying, isKochLevelOne, useLinearNav, selectedLetterIndex]);
+  const playAtSingleIndex = useCallback(
+    (index: number): void => {
+      const toggleOff = isPlaying && index === singleNav.selectedIndex;
+      singleNav.setIndex(index);
+      if (toggleOff) {
+        stopPlayback();
+        return;
+      }
+      if (isKochLevelOne) {
+        void playCharacters(charPool);
+        return;
+      }
+      const char = singlePool[index];
+      void playCharacters(char ? [char] : []);
+    },
+    [
+      isPlaying,
+      isKochLevelOne,
+      charPool,
+      singlePool,
+      singleNav.selectedIndex,
+      singleNav,
+      playCharacters,
+      stopPlayback,
+    ],
+  );
 
-  const handleNext = useCallback(() => {
-    if (isPlaying || isKochLevelOne) return;
-    if (useLinearNav) {
-      setUserSelectedIndex(Math.min(charPool.length - 1, selectedLetterIndex + 1));
-      return;
-    }
-    let newIndex = selectedLetterIndex;
-    if (selectedLetterIndex < 2) {
-      newIndex = 2;
-    } else {
-      newIndex = selectedLetterIndex + 1;
-    }
-    setUserSelectedIndex(newIndex);
-  }, [isPlaying, isKochLevelOne, useLinearNav, selectedLetterIndex, charPool.length]);
+  const playAtDigitsIndex = useCallback(
+    (index: number): void => {
+      const toggleOff = isPlaying && index === digitsNav.selectedIndex;
+      digitsNav.setIndex(index);
+      if (toggleOff) {
+        stopPlayback();
+        return;
+      }
+      const char = digitsPool[index];
+      void playCharacters(char ? [char] : []);
+    },
+    [
+      isPlaying,
+      digitsPool,
+      digitsNav.selectedIndex,
+      digitsNav,
+      playCharacters,
+      stopPlayback,
+    ],
+  );
 
-  // Early return after all hooks
   if (charPool.length === 0) {
     return null;
   }
 
-  // For level 1: display both letters
-  // For level 2+: if navigating to first two letters (indices 0 or 1), display "K M", otherwise display selected letter
-  const displayText = useLinearNav
-    ? selectedLetter
-    : settings.kochLevel === 1
-      ? charPool.join(' ')
-      : isFirstLevelPair
-        ? charPool.slice(0, 2).join(' ')
-        : selectedLetter;
-  const isNewLetter = useLinearNav
-    ? Boolean(selectedLetter && !previousLevelPool.includes(selectedLetter))
-    : settings.kochLevel === 1
-      ? false
-      : isFirstLevelPair
-        ? false
-        : Boolean(selectedLetter && !previousLevelPool.includes(selectedLetter));
-
-  const showNavigation = useLinearNav ? charPool.length > 1 : settings.kochLevel > 1;
+  if (isMixed) {
+    return (
+      <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+        <CharPreviewStrip
+          label="Letters"
+          pool={lettersPool}
+          selectedIndex={singleNav.selectedIndex}
+          previousPool={previousLettersPool}
+          isPlaying={isPlaying}
+          onPrevious={() => singleNav.setIndex(Math.max(0, singleNav.selectedIndex - 1))}
+          onNext={() =>
+            singleNav.setIndex(Math.min(lettersPool.length - 1, singleNav.selectedIndex + 1))
+          }
+          onPlayAtIndex={playAtSingleIndex}
+        />
+        <CharPreviewStrip
+          label="Digits"
+          pool={digitsPool}
+          selectedIndex={digitsNav.selectedIndex}
+          previousPool={previousDigitsPool}
+          isPlaying={isPlaying}
+          onPrevious={() => digitsNav.setIndex(Math.max(0, digitsNav.selectedIndex - 1))}
+          onNext={() =>
+            digitsNav.setIndex(Math.min(digitsPool.length - 1, digitsNav.selectedIndex + 1))
+          }
+          onPlayAtIndex={playAtDigitsIndex}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-2">
-      {/* Previous button - only for level 2+ */}
-      {showNavigation && (
-        <button
-          onClick={handlePrevious}
-          disabled={!canGoPrevious || isPlaying}
-          className="p-1.5 rounded-md bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50"
-          title="Previous letter"
-          type="button"
-        >
-          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </button>
-      )}
-
-      {/* Play button */}
-      <button
-        onClick={handlePlay}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 transition-all duration-200 hover:shadow-sm text-sm font-medium justify-center relative"
-        style={{ minWidth: '100px' }} // Fixed width to prevent layout shifts
-        title={
-          isKochLevelOne
-            ? `Play two letters from level 1: ${displayText}`
-            : `Play character: ${displayText}${isNewLetter ? ' (new for this level)' : ''}`
-        }
-        type="button"
-      >
-        {isPlaying ? (
-          <>
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <span className="text-xs">Stop</span>
-          </>
-        ) : (
-          <>
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <span className="text-xs">{displayText}</span>
-            {/* Reserve space for NEW badge to prevent layout shifts - only for level 2+ */}
-            {showNavigation && (
-              <span className="text-[10px] text-blue-500 font-semibold w-8 text-center">
-                {isNewLetter ? 'NEW' : ''}
-              </span>
-            )}
-          </>
-        )}
-      </button>
-
-      {/* Next button - only for level 2+ */}
-      {showNavigation && (
-        <button
-          onClick={handleNext}
-          disabled={!canGoNext || isPlaying}
-          className="p-1.5 rounded-md bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50"
-          title="Next letter"
-          type="button"
-        >
-          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </button>
-      )}
-    </div>
+    <CharPreviewStrip
+      pool={charPool}
+      selectedIndex={singleNav.selectedIndex}
+      previousPool={singlePreviousPool}
+      isPlaying={isPlaying}
+      playEntirePool={isKochLevelOne}
+      onPrevious={() => singleNav.setIndex(Math.max(0, singleNav.selectedIndex - 1))}
+      onNext={() =>
+        singleNav.setIndex(Math.min(charPool.length - 1, singleNav.selectedIndex + 1))
+      }
+      onPlayAtIndex={playAtSingleIndex}
+    />
   );
 }
