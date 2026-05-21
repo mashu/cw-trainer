@@ -18,6 +18,8 @@ export function useAutoLevelAdjustProgress(
   refreshKey: number,
 ): AutoLevelAdjustProgressView | null {
   return useMemo(() => {
+    void refreshKey;
+
     const enabled =
       profile === 'echo' ? settings.echoAutoAdjustKoch : settings.autoAdjustKoch;
     if (!enabled) {

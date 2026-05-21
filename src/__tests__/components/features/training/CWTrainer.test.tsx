@@ -458,8 +458,7 @@ describe('CWTrainer', (): void => {
       expect(mockSessionService.listSessions).toHaveBeenCalled();
     });
 
-    // "Sessions" appears in the stats card and in tips; match the stats label with "total completed"
-    expect(await screen.findByText(/total completed/i, {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(await screen.findByText(/Practice activity/i, {}, { timeout: 2000 })).toBeInTheDocument();
   });
 
   it('should handle back from stats view', async (): Promise<void> => {

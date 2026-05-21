@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
-import { ensureAppError } from '@/lib/errors';
 import { MAX_DIGITS_LEVEL, MAX_KOCH_LEVEL_GUESS } from '@/lib/constants';
+import { ensureAppError } from '@/lib/errors';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { playMorseCodeControlled, resumeAudioContextFromUserGesture } from '@/lib/morseAudio';

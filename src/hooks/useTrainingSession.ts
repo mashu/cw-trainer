@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
-import { AUTO_CONFIRM_DELAY_MS } from '@/lib/constants';
+import {
+  AUTO_CONFIRM_DELAY_MS,
+  MAX_DIGITS_LEVEL,
+  MAX_KOCH_LEVEL_GUESS,
+} from '@/lib/constants';
 import { ensureAppError } from '@/lib/errors';
-import { MAX_DIGITS_LEVEL, MAX_KOCH_LEVEL_GUESS } from '@/lib/constants';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { isGroupTrainingRuntimeActive } from '@/lib/training/groupSessionMachine';

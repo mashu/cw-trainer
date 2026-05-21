@@ -240,7 +240,6 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
       isKochLevelOne,
       charPool,
       singlePool,
-      singleNav.selectedIndex,
       singleNav,
       playCharacters,
       stopPlayback,
@@ -258,14 +257,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
       const char = digitsPool[index];
       void playCharacters(char ? [char] : []);
     },
-    [
-      isPlaying,
-      digitsPool,
-      digitsNav.selectedIndex,
-      digitsNav,
-      playCharacters,
-      stopPlayback,
-    ],
+    [isPlaying, digitsPool, digitsNav, playCharacters, stopPlayback],
   );
 
   if (charPool.length === 0) {
@@ -274,7 +266,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
 
   if (isMixed) {
     return (
-      <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
         <CharPreviewStrip
           label="Letters"
           pool={lettersPool}

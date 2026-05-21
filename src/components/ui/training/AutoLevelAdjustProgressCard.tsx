@@ -4,39 +4,40 @@ import React from 'react';
 
 import type { AutoLevelAdjustProgressView } from '@/lib/kochAutoAdjust';
 
-function ProgressRow({
+function CompactBar({
   label,
-  detail,
   count,
   target,
+  threshold,
   tone,
 }: {
   readonly label: string;
-  readonly detail: string;
   readonly count: number;
   readonly target: number;
+  readonly threshold: number;
   readonly tone: 'up' | 'down';
 }): JSX.Element {
   const ratio = target > 0 ? Math.min(1, count / target) : 0;
-  const barClass =
+  const fill =
     tone === 'up'
-      ? 'bg-gradient-to-r from-emerald-400 to-emerald-600'
-      : 'bg-gradient-to-r from-rose-400 to-rose-600';
-  const trackClass = tone === 'up' ? 'bg-emerald-100' : 'bg-rose-100';
-  const textClass = tone === 'up' ? 'text-emerald-800' : 'text-rose-800';
-  const mutedClass = tone === 'up' ? 'text-emerald-700/80' : 'text-rose-700/80';
+      ? 'bg-emerald-500'
+      : 'bg-rose-500';
+  const track = tone === 'up' ? 'bg-emerald-100' : 'bg-rose-100';
+  const hint =
+    tone === 'up'
+      ? `Sessions ≥ ${threshold}% toward level up`
+      : `Sessions < ${threshold}% toward level down`;
 
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2">
-        <span className={`text-sm font-semibold ${textClass}`}>{label}</span>
-        <span className={`text-sm font-bold tabular-nums ${textClass}`}>
-          {count} / {target}
+    <div className="min-w-0 flex-1" title={hint}>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className="text-xs font-medium text-slate-600">{label}</span>
+        <span className="text-xs font-semibold tabular-nums text-slate-700">
+          {count}/{target}
         </span>
       </div>
-      <p className={`text-xs mt-0.5 ${mutedClass}`}>{detail}</p>
       <div
-        className={`mt-2 h-2.5 w-full rounded-full overflow-hidden ${trackClass}`}
+        className={`h-1.5 w-full rounded-full overflow-hidden ${track}`}
         role="progressbar"
         aria-valuenow={count}
         aria-valuemin={0}
@@ -44,7 +45,7 @@ function ProgressRow({
         aria-label={label}
       >
         <div
-          className={`h-full rounded-full transition-all duration-300 ${barClass}`}
+          className={`h-full rounded-full transition-all duration-300 ${fill}`}
           style={{ width: `${Math.round(ratio * 100)}%` }}
         />
       </div>
@@ -61,60 +62,41 @@ export function AutoLevelAdjustProgressCard({
   progress,
   profileLabel,
 }: AutoLevelAdjustProgressCardProps): JSX.Element {
-  const {
-    adjustsBothLevels,
-    threshold,
-    aboveCount,
-    belowCount,
-    aboveTarget,
-    belowTarget,
-    aboveImmediate,
-    belowImmediate,
-  } = progress;
-
-  const bothNote = adjustsBothLevels ? ' — both levels move together' : '';
-
-  const increaseDetail = aboveImmediate
-    ? `Next session at or above ${threshold}% raises level${bothNote} (setting: 0 = first success)`
-    : `Sessions at or above ${threshold}% accuracy${bothNote}`;
-  const decreaseDetail = belowImmediate
-    ? `Next session below ${threshold}% lowers level${bothNote} (setting: 0 = first miss)`
-    : `Sessions below ${threshold}% accuracy${bothNote}`;
+  const { threshold, aboveCount, belowCount, aboveTarget, belowTarget, adjustsBothLevels } =
+    progress;
 
   return (
     <section
-      className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-white p-4 sm:p-5"
-      aria-labelledby="auto-level-progress-heading"
+      className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 w-full min-w-0"
+      aria-label="Automatic level adjustment progress"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
-        <div>
-          <h3
-            id="auto-level-progress-heading"
-            className="text-sm font-semibold uppercase tracking-wide text-indigo-800"
-          >
-            Level change progress
-            {profileLabel ? ` · ${profileLabel}` : ''}
-          </h3>
-          <p className="text-sm text-slate-600 mt-1">Counts reset when levels change</p>
-        </div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-semibold text-slate-700">Auto level</span>
+        {profileLabel ? (
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+            {profileLabel}
+          </span>
+        ) : null}
       </div>
-
-      <div className="space-y-4">
-        <ProgressRow
-          label="Toward level up"
-          detail={increaseDetail}
+      <div className="flex gap-3">
+        <CompactBar
+          label="Up"
           count={aboveCount}
           target={aboveTarget}
+          threshold={threshold}
           tone="up"
         />
-        <ProgressRow
-          label="Toward level down"
-          detail={decreaseDetail}
+        <CompactBar
+          label="Down"
           count={belowCount}
           target={belowTarget}
+          threshold={threshold}
           tone="down"
         />
       </div>
+      <p className="mt-1.5 text-[10px] text-slate-400 leading-snug">
+        {adjustsBothLevels ? 'Letters & digits' : 'Resets on level change'}
+      </p>
     </section>
   );
 }

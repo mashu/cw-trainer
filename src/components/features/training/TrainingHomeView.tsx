@@ -116,77 +116,82 @@ export function TrainingHomeView({
     sessionCount + lastAccuracyPercent,
   );
   const profileLabel = autoAdjustProfile === 'echo' ? 'Echo' : 'Group';
+  const charSetMode = settings.charSetMode ?? 'koch';
+  const levelKpiLabel =
+    charSetMode === 'digits'
+      ? 'Digits level'
+      : charSetMode === 'mixed'
+        ? 'Levels'
+        : 'Koch level';
+  const levelKpiValue =
+    charSetMode === 'digits'
+      ? String(settings.digitsLevel ?? 10)
+      : charSetMode === 'mixed'
+        ? `${settings.kochLevel} / ${settings.digitsLevel ?? 10}`
+        : String(settings.kochLevel);
 
   return (
-    <div className="space-y-8">
-      {levelAdjustProgress !== null && (
-        <AutoLevelAdjustProgressCard
-          progress={levelAdjustProgress}
-          profileLabel={profileLabel}
-        />
-      )}
+    <div className="space-y-6">
+      <header>
+        <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
+        <p className="text-sm text-slate-600 mt-1">{description}</p>
+      </header>
+
+      <section aria-labelledby="practice-activity-heading">
+        <h3
+          id="practice-activity-heading"
+          className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2"
+        >
+          Practice activity
+        </h3>
+        <ActivityHeatmap sessions={sessions} monthsPerPage={3} startOfWeek={1} />
+      </section>
 
       {sessionCount > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
             <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
-              Last Accuracy
+              Last accuracy
             </p>
-            <p className="text-3xl font-extrabold text-emerald-800 mt-1">
+            <p className="text-2xl font-extrabold text-emerald-800 mt-0.5">
               {lastAccuracyPercent}%
             </p>
-            <p className="text-xs text-emerald-700/70 mt-1">
-              from your last session
-            </p>
           </div>
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
             <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">
               Sessions
             </p>
-            <p className="text-3xl font-extrabold text-blue-800 mt-1">
-              {sessionCount}
-            </p>
-            <p className="text-xs text-blue-700/70 mt-1">total completed</p>
+            <p className="text-2xl font-extrabold text-blue-800 mt-0.5">{sessionCount}</p>
           </div>
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50 to-white border border-purple-100">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-purple-50 to-white border border-purple-100">
             <p className="text-xs uppercase tracking-wide text-purple-700 font-semibold">
-              Koch Level
+              {levelKpiLabel}
             </p>
-            <p className="text-3xl font-extrabold text-purple-800 mt-1">
-              {settings.kochLevel}
-            </p>
-            <p className="text-xs text-purple-700/70 mt-1">
-              active characters
-            </p>
+            <p className="text-2xl font-extrabold text-purple-800 mt-0.5">{levelKpiValue}</p>
           </div>
         </div>
       )}
 
-      <ActivityHeatmap
-        sessions={sessions}
-        monthsPerPage={3}
-        startOfWeek={1}
-      />
-
-      <div className="flex justify-center items-center gap-3 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
-        <span className="text-sm text-slate-600">
-          {listeningPrompt}
-        </span>
-        <NewLetterPlayer
-          settings={settingsToSharedAudioProps(settings)}
-        />
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white/70 p-5">
-        <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
-        <p className="text-sm text-slate-600 mt-2">{description}</p>
-      </div>
+      <section className="flex flex-col gap-3 min-w-0" aria-label="Character preview">
+        <div className="flex flex-col gap-3 p-3 rounded-xl border border-blue-100 bg-blue-50/50 min-w-0">
+          <p className="text-sm text-slate-600">{listeningPrompt}</p>
+          <div className="w-full min-w-0 overflow-x-auto">
+            <NewLetterPlayer settings={settingsToSharedAudioProps(settings)} />
+          </div>
+        </div>
+        {levelAdjustProgress !== null ? (
+          <AutoLevelAdjustProgressCard
+            progress={levelAdjustProgress}
+            profileLabel={profileLabel}
+          />
+        ) : null}
+      </section>
 
       {beforeTipsSlot != null ? beforeTipsSlot : null}
 
       <TrainingTipsCarousel tips={tips} />
 
-      <div className="flex justify-center gap-3 flex-wrap">
+      <div className="flex justify-center gap-3 flex-wrap pt-1">
         <button
           onClick={onStartTraining}
           className="px-12 py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-xl font-bold rounded-xl hover:from-emerald-600 hover:to-green-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
