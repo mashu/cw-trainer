@@ -7,6 +7,7 @@ jest.mock('@/lib/trainingSessionGroups', () => ({
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
+import { AUTO_CONFIRM_DELAY_MS } from '@/lib/constants';
 import { useTrainingAudio } from '@/hooks/useTrainingAudio';
 import { useTrainingSession } from '@/hooks/useTrainingSession';
 import type { IcrSessionService } from '@/lib/services/icr-session.service';
@@ -92,10 +93,15 @@ describe('useTrainingSession', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useRealTimers();
     mockUseTrainingAudio.mockReturnValue(createMockAudio());
     (mockTrainingSettingsService.getSettings as jest.Mock).mockResolvedValue(sessionSettings);
     (mockSessionService.listSessions as jest.Mock).mockResolvedValue([]);
     (mockIcrSessionService.listSessions as jest.Mock).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   const renderSessionHook = () =>
@@ -200,5 +206,210 @@ describe('useTrainingSession', () => {
     });
 
     expect(result.current.userInput[0]).toBe('A');
+  });
+
+  it('stopTraining during session cancels without showing results', async () => {
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.hasActiveSession).toBe(true);
+    });
+
+    act(() => {
+      result.current.stopTraining();
+    });
+
+    expect(result.current.hasActiveSession).toBe(false);
+    expect(result.current.showResults).toBe(false);
+    expect(saveSession).not.toHaveBeenCalled();
+  });
+
+  it('dismissResults hides the results screen', async () => {
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    act(() => {
+      result.current.confirmGroupAnswer(0, 'AB');
+    });
+
+    await waitFor(() => {
+      expect(result.current.showResults).toBe(true);
+    });
+
+    act(() => {
+      result.current.dismissResults();
+    });
+
+    expect(result.current.showResults).toBe(false);
+    expect(result.current.lastSessionResult).toBeNull();
+  });
+
+  it('aborts session without results when morse playback fails', async () => {
+    const failingAudio = createMockAudio();
+    failingAudio.playMorse.mockResolvedValue({
+      status: 'failed',
+      message: 'Audio blocked',
+    });
+    mockUseTrainingAudio.mockReturnValue(failingAudio);
+
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(failingAudio.playMorse).toHaveBeenCalled();
+    });
+
+    expect(result.current.showResults).toBe(false);
+    expect(result.current.hasActiveSession).toBe(false);
+    expect(saveSession).not.toHaveBeenCalled();
+  });
+
+  it('auto-confirms a complete answer after AUTO_CONFIRM_DELAY_MS', async () => {
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    act(() => {
+      result.current.handleAnswerChange(0, 'AB');
+    });
+
+    await waitFor(
+      () => {
+        expect(result.current.showResults).toBe(true);
+      },
+      { timeout: AUTO_CONFIRM_DELAY_MS + 500 },
+    );
+  });
+
+  it('pauses when the page is hidden during training', async () => {
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.hasActiveSession).toBe(true);
+    });
+
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(result.current.runtimeStatus).toBe('paused');
+    expect(result.current.sessionIssueMessage).toBe(
+      'Training paused while the page was hidden.',
+    );
+
+    if (originalDescriptor) {
+      Object.defineProperty(document, 'visibilityState', originalDescriptor);
+    }
+  });
+
+  it('resumes suspended audio when the page becomes visible', async () => {
+    const mockAudio = createMockAudio();
+    const resume = jest.fn().mockResolvedValue(undefined);
+    mockAudio.audioContextRef.current = {
+      state: 'suspended',
+      resume,
+    } as unknown as AudioContext;
+    mockUseTrainingAudio.mockReturnValue(mockAudio);
+
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.hasActiveSession).toBe(true);
+    });
+
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+
+    expect(resume).toHaveBeenCalled();
+
+    if (originalDescriptor) {
+      Object.defineProperty(document, 'visibilityState', originalDescriptor);
+    }
+
+    act(() => {
+      result.current.stopTraining();
+    });
+  });
+
+  it('restarts training when Enter is pressed on the results screen', async () => {
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    act(() => {
+      result.current.confirmGroupAnswer(0, 'AB');
+    });
+
+    await waitFor(() => {
+      expect(result.current.showResults).toBe(true);
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.showResults).toBe(false);
+      expect(result.current.hasActiveSession).toBe(true);
+    });
   });
 });

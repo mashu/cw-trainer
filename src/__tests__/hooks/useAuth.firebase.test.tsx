@@ -174,6 +174,115 @@ describe('useAuth with Firebase configured', () => {
     jest.useRealTimers();
   });
 
+  it('refreshes auth token when tab becomes visible', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    mockAuth.currentUser = { getIdToken: mockGetIdToken };
+
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(mockGetIdToken).toHaveBeenCalledWith(true);
+
+    if (originalDescriptor) {
+      Object.defineProperty(document, 'visibilityState', originalDescriptor);
+    }
+  });
+
+  it('sets user from redirect result on init', async () => {
+    mockGetRedirectedUser.mockResolvedValue(googleUser);
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => {
+      expect(result.current.firebaseUser).toEqual(googleUser);
+    });
+
+    expect(result.current.authInProgress).toBe(false);
+  });
+
+  it('continues when setPersistence fails', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockSetPersistence.mockRejectedValueOnce(new Error('persistence fail'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => {
+      expect(result.current.firebaseReady).toBe(true);
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Auth] Failed to set persistence',
+      expect.any(Error),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('maps anonymous Firebase users', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    act(() => {
+      authCallback?.({
+        uid: 'anon-uid',
+        email: 'anon@example.com',
+        displayName: null,
+        photoURL: null,
+        isAnonymous: true,
+        providerData: [],
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.appUser?.provider).toBe('anonymous');
+    });
+  });
+
+  it('returns null appUser when email and uid are empty', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    act(() => {
+      authCallback?.({
+        uid: '',
+        email: null,
+        displayName: null,
+        photoURL: null,
+        isAnonymous: false,
+        providerData: [],
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.appUser).toBeNull();
+    });
+  });
+
+  it('clears authInProgress when signInWithGoogle fails', async () => {
+    mockGoogleSignIn.mockRejectedValueOnce(new Error('Sign in failed'));
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    await expect(
+      act(async () => {
+        await result.current.signInWithGoogle();
+      }),
+    ).rejects.toThrow('Sign in failed');
+
+    expect(result.current.authInProgress).toBe(false);
+  });
+
   it('signOut clears user and calls googleSignOut', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
 

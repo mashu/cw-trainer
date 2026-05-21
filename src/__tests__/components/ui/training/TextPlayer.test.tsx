@@ -143,17 +143,17 @@ describe('TextPlayer', (): void => {
     expect(screen.getByDisplayValue('NEW TEXT')).toBeInTheDocument();
   });
 
-  it('should show play button', (): void => {
+  it('should show play text button in play text mode', (): void => {
     renderWithStore(<TextPlayer settings={defaultSettings} />);
 
-    expect(screen.getByRole('button', { name: /Play/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /▶ Play text/i })).toBeInTheDocument();
   });
 
   it('should show stop button when playing', async (): Promise<void> => {
     const user = userEvent.setup();
     renderWithStore(<TextPlayer settings={defaultSettings} />);
 
-    const playButton = screen.getByRole('button', { name: /Play/i });
+    const playButton = screen.getByRole('button', { name: /▶ Play text/i });
 
     // Click play button - this triggers async handlePlay
     // handlePlay calls setIsPlaying(true) immediately, then awaits playMorseCodeControlled
@@ -176,36 +176,63 @@ describe('TextPlayer', (): void => {
     );
   });
 
-  it('should show prefill button', (): void => {
+  it('should show prefill button in play text mode', (): void => {
     renderWithStore(<TextPlayer settings={defaultSettings} />);
 
-    expect(screen.getByRole('button', { name: /Pre-fill/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pre-fill groups/i })).toBeInTheDocument();
   });
 
   it('should prefill text with the alphabet', async (): Promise<void> => {
     const user = userEvent.setup();
     renderWithStore(<TextPlayer settings={defaultSettings} />);
 
-    await user.click(screen.getByRole('button', { name: /Alphabet/i }));
+    await user.click(screen.getByRole('button', { name: /Alphabet A–Z/i }));
 
     expect(screen.getByDisplayValue('ABCDEFGHIJKLMNOPQRSTUVWXYZ')).toBeInTheDocument();
   });
 
-  it('should show player listening summary in continuous mode', async (): Promise<void> => {
+  it('should show listening practice panel and hide text entry when random letters enabled', async (): Promise<void> => {
     const user = userEvent.setup();
-    renderWithStore(<TextPlayer settings={defaultSettings} />);
+    renderWithStore(
+      <TextPlayer
+        settings={{
+          ...defaultSettings,
+          playerRandomizeLetters: true,
+        }}
+      />,
+    );
 
-    await user.click(screen.getByRole('checkbox', { name: /Continuous listening/i }));
+    await user.click(screen.getByRole('tab', { name: /Listening practice/i }));
 
-    expect(screen.getByText(/Typed text/i)).toBeInTheDocument();
-    expect(screen.getByText(/1x, then 2s pause/i)).toBeInTheDocument();
+    expect(screen.getByText(/Random letters from your training alphabet/i)).toBeInTheDocument();
+    expect(screen.getByText(/1× Morse per letter/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Type text here/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Start listening/i })).toBeInTheDocument();
+  });
+
+  it('should show text entry in listening practice when using typed letters', async (): Promise<void> => {
+    const user = userEvent.setup();
+    renderWithStore(
+      <TextPlayer
+        settings={{
+          ...defaultSettings,
+          playerRandomizeLetters: false,
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: /Listening practice/i }));
+
+    expect(
+      screen.getByPlaceholderText(/one letter plays at a time/i),
+    ).toBeInTheDocument();
   });
 
   it('should prefill text when prefill button is clicked', async (): Promise<void> => {
     const user = userEvent.setup();
     renderWithStore(<TextPlayer settings={defaultSettings} />);
 
-    const prefillButton = screen.getByRole('button', { name: /Pre-fill/i });
+    const prefillButton = screen.getByRole('button', { name: /Pre-fill groups/i });
     await act(async () => {
       await user.click(prefillButton);
     });
