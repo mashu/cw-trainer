@@ -245,6 +245,57 @@ describe('GroupTrainingStats', (): void => {
     });
   });
 
+  it('should show bigram heatmap on the Mistakes tab when sessions exist', async (): Promise<void> => {
+    const user = userEvent.setup();
+    const mockSessions = [
+      {
+        date: '2024-01-01',
+        timestamp: Date.now(),
+        groups: [
+          { sent: 'AB', received: 'AX', correct: false },
+          { sent: 'BA', received: 'BA', correct: true },
+        ],
+        groupTimings: [{ timeToCompleteMs: 1000 }, { timeToCompleteMs: 900 }],
+        accuracy: 0.5,
+        letterAccuracy: {
+          A: { correct: 1, total: 2 },
+          B: { correct: 2, total: 2 },
+        },
+        alphabetSize: 2,
+        totalChars: 4,
+        effectiveAlphabetSize: 2,
+        avgResponseMs: 950,
+        score: 50,
+        startedAt: Date.now() - 5000,
+        finishedAt: Date.now(),
+      },
+    ];
+
+    mockSessionService.listSessions = jest.fn().mockResolvedValue(mockSessions);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Avg Accuracy/i)).toBeInTheDocument();
+    });
+
+    const mistakesTab = screen.getByRole('button', { name: /mistakes/i });
+    await user.click(mistakesTab);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Bigram Error Heatmap/i)).toBeInTheDocument();
+      expect(screen.getByText(/Per-Character Error Rate/i)).toBeInTheDocument();
+    });
+  });
+
   it('should switch between tabs', async (): Promise<void> => {
     const user = userEvent.setup();
     await act(async () => {

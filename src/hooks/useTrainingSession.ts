@@ -412,6 +412,8 @@ export function useTrainingSession({
       setRuntimeGroups(groups);
       activeSentGroupsRef.current = groups;
 
+      let sessionEndedDueToPlaybackIssue = false;
+
       for (let i = 0; i < groups.length; i++) {
         if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
         setRuntimeCurrentGroup(i);
@@ -441,8 +443,10 @@ export function useTrainingSession({
             playback.status === 'failed'
               ? playback.message
               : 'Audio was suspended by the browser. Tap Submit or Stop, or start a new run.';
+          sessionEndedDueToPlaybackIssue = true;
           setRuntimeStatus('failed', { errorMessage: message });
           audio.trainingAbortRef.current = true;
+          showToast({ message, type: 'error' });
           break;
         }
         const durationSec = playback.status === 'played' ? playback.durationSec : 0;
@@ -487,8 +491,10 @@ export function useTrainingSession({
           dropSessionLock();
         }
       } else if (!resultsProcessedRef.current) {
-        // submitAnswer() already processed results (and set abort); do not wipe results → idle.
-        cancelRuntimeSession();
+        // Keep failed runtime (with errorMessage) visible until the user stops the session.
+        if (!sessionEndedDueToPlaybackIssue) {
+          cancelRuntimeSession();
+        }
         dropSessionLock();
       } else {
         dropSessionLock();

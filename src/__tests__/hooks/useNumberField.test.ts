@@ -19,7 +19,7 @@ function mouseUpEvent(active: boolean): MouseEvent<HTMLInputElement> {
       value: target,
     });
   }
-  return { target } as MouseEvent<HTMLInputElement>;
+  return { target } as unknown as MouseEvent<HTMLInputElement>;
 }
 
 describe('useNumberField', () => {

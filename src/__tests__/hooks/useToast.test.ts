@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 
-import { TOAST_DURATION_MS } from '@/lib/constants';
 import { useToast } from '@/hooks/useToast';
+import { TOAST_DURATION_MS } from '@/lib/constants';
 
 describe('useToast', () => {
   beforeEach(() => {

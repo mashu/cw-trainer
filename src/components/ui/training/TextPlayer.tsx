@@ -3,6 +3,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import {
+  HelpChip,
+  ListeningSourcePanel,
+  ModeTabButton,
+  PlaybackMeta,
+  type TextPlayerMode,
+} from '@/components/ui/training/text-player-ui';
 import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
 import {
   playMorseCodeControlled,
@@ -46,7 +53,9 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [durationSec, setDurationSec] = useState<number>(0);
   const [isRendering, setIsRendering] = useState<boolean>(false);
-  const [isContinuousMode, setIsContinuousMode] = useState<boolean>(false);
+  const [playerMode, setPlayerMode] = useState<TextPlayerMode>('playText');
+  const [showPlayTextHelp, setShowPlayTextHelp] = useState<boolean>(false);
+  const [showListeningHelp, setShowListeningHelp] = useState<boolean>(false);
   const [wakeLockSupported, setWakeLockSupported] = useState<boolean>(false);
   const [wakeLockActive, setWakeLockActive] = useState<boolean>(false);
   const [currentLetterIndex, setCurrentLetterIndex] = useState<number>(0);
@@ -68,6 +77,18 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
   const playerAnnounceLetters = settings.playerAnnounceLetters ?? false;
   const playerRandomizeLetters = settings.playerRandomizeLetters ?? false;
   const playerSpeechVoiceURI = settings.playerSpeechVoiceURI ?? '';
+
+  const isListeningPractice = playerMode === 'listeningPractice';
+  const showTextEntry = playerMode === 'playText' || !playerRandomizeLetters;
+
+  const charWpmLabel =
+    settings.charWpmMin === settings.charWpmMax
+      ? String(settings.charWpmMin)
+      : `${settings.charWpmMin}–${settings.charWpmMax}`;
+  const effWpmLabel =
+    settings.effectiveWpmMin === settings.effectiveWpmMax
+      ? String(settings.effectiveWpmMin)
+      : `${settings.effectiveWpmMin}–${settings.effectiveWpmMax}`;
 
   const toneHz = useMemo(() => {
     const min = Math.max(100, settings.sideToneMin);
@@ -340,8 +361,8 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     const ctx = audioContextRef.current;
     resumeAudioContextFromUserGesture(ctx);
 
-    // Request wake lock for continuous mode (after audio unlock — wake lock is async)
-    if (isContinuousMode) {
+    // Request wake lock for listening practice (after audio unlock — wake lock is async)
+    if (isListeningPractice) {
       await requestWakeLock();
     }
 
@@ -373,8 +394,8 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       }
 
       if (!playerRandomizeLetters && continuousIndexRef.current >= cleanText.length) {
-        // Loop back to start in continuous mode
-        if (isContinuousMode) {
+        // Loop back to start in listening practice
+        if (isListeningPractice) {
           continuousIndexRef.current = 0;
           setCurrentLetterIndex(0);
         } else {
@@ -461,7 +482,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
 
   // Normal mode: play entire text at once
   const handlePlay = async (): Promise<void> => {
-    if (isContinuousMode) {
+    if (isListeningPractice) {
       await playContinuous();
       return;
     }
@@ -576,154 +597,240 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     }
   };
 
+  const handleModeChange = (next: TextPlayerMode): void => {
+    if (next === playerMode) {
+      return;
+    }
+    if (isPlaying) {
+      void handleStop();
+    }
+    setPlayerMode(next);
+  };
+
+  const listeningStatusLine =
+    isListeningPractice && isPlaying
+      ? playerRandomizeLetters
+        ? `Listening — random letter ${currentLetterIndex}`
+        : `Listening — letter ${currentLetterIndex} of ${text.replace(/\s+/g, '').length || 1}`
+      : undefined;
+
+  const playDisabled =
+    isListeningPractice
+      ? !playerRandomizeLetters && !text.trim()
+      : !text.trim();
+
+  const primaryActionLabel = isListeningPractice
+    ? isPlaying
+      ? 'Stop listening'
+      : 'Start listening'
+    : isPlaying
+      ? 'Stop playback'
+      : 'Play text';
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-800">Text Player</h2>
-          <p className="text-slate-600 text-sm mt-1">
-            Type any text and play it as Morse using current settings.
-          </p>
-        </div>
+    <div className="space-y-5 sm:space-y-6">
+      <header className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 px-4 py-4 sm:px-5 sm:py-5">
+        <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Text Player</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
+          Hear Morse from typed text, or practice copy-free listening one letter at a time. Speed,
+          tone, and alphabet follow your training settings.
+        </p>
+      </header>
+
+      <div
+        role="tablist"
+        aria-label="Text player mode"
+        className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-2 sm:grid-cols-2"
+      >
+        <ModeTabButton
+          mode="playText"
+          active={playerMode === 'playText'}
+          disabled={isPlaying}
+          title="Play text"
+          subtitle="Send your message as one continuous transmission"
+          onSelect={() => handleModeChange('playText')}
+        />
+        <ModeTabButton
+          mode="listeningPractice"
+          active={playerMode === 'listeningPractice'}
+          disabled={isPlaying}
+          title="Listening practice"
+          subtitle="One letter at a time — ideal for head-copy drills"
+          onSelect={() => handleModeChange('listeningPractice')}
+        />
       </div>
 
-      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-white to-slate-50 border border-slate-200">
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type text here... (Press Enter to generate a line of groups)"
-          className="w-full h-40 sm:h-44 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-
-        <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-white to-indigo-50/40">
-          <div className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <label
-              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-colors ${
-                isContinuousMode
-                  ? 'border-indigo-200 bg-indigo-50 text-indigo-900'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-200'
-              }`}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 shadow-sm">
+        <div
+          role="tabpanel"
+          id={`text-player-panel-${playerMode}`}
+          aria-labelledby={`text-player-tab-${playerMode}`}
+          className="space-y-4 p-4 sm:space-y-5 sm:p-5"
+        >
+          {playerMode === 'playText' ? (
+            <HelpChip
+              expanded={showPlayTextHelp}
+              onToggle={() => setShowPlayTextHelp((value) => !value)}
+              title="How play text works"
             >
-              <input
-                type="checkbox"
-                checked={isContinuousMode}
-                onChange={(e) => {
-                  setIsContinuousMode(e.target.checked);
-                  if (!e.target.checked && isPlaying) {
-                    handleStop();
-                  }
-                }}
-                disabled={isPlaying}
-                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span className="text-sm font-semibold">Continuous listening</span>
-            </label>
-            {wakeLockSupported && (
-              <span
-                className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                  wakeLockActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                }`}
-              >
-                {wakeLockActive ? 'Screen lock active' : 'Screen lock available'}
-              </span>
-            )}
-          </div>
-          {isContinuousMode && (
-            <div className="flex flex-wrap gap-1.5 border-t border-slate-200/80 bg-white/65 px-2.5 py-2">
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                {playerRandomizeLetters ? 'Random current alphabet' : 'Typed text'}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                {playerLetterRepeatCount}x, then {playerDelaySeconds}s pause
-              </span>
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                {playerAnnounceLetters ? 'Spoken after Morse' : 'Morse only'}
-              </span>
-            </div>
+              <p>
+                Type or paste any text. Spaces create word gaps. Press{' '}
+                <span className="font-semibold">Enter</span> to append a line of random groups from
+                your current Koch / character settings. Use <span className="font-semibold">Pre-fill</span>{' '}
+                for several lines at once, or download a WAV to listen offline.
+              </p>
+            </HelpChip>
+          ) : (
+            <HelpChip
+              expanded={showListeningHelp}
+              onToggle={() => setShowListeningHelp((value) => !value)}
+              title="How listening practice works"
+            >
+              <ul className="list-disc space-y-2 pl-5">
+                <li>
+                  Plays <span className="font-semibold">one character</span> at a time, then pauses
+                  before the next.
+                </li>
+                <li>
+                  Choose random letters from your training alphabet, or your own text — one
+                  character at a time.
+                </li>
+                <li>
+                  With random letters you can press Start right away; with your own text, type the
+                  letters below and playback loops when it reaches the end.
+                </li>
+                <li>
+                  Repeats, pause, speech, and random vs. your own letters are in Settings →{' '}
+                  <span className="font-semibold">Player Listening Practice</span>.
+                </li>
+              </ul>
+            </HelpChip>
           )}
-        </div>
 
-        <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-xs text-slate-600">
-            <div>
-              Char WPM:{' '}
-              {settings.charWpmMin === settings.charWpmMax
-                ? settings.charWpmMin
-                : `${settings.charWpmMin}-${settings.charWpmMax}`}{' '}
-              • Eff WPM:{' '}
-              {settings.effectiveWpmMin === settings.effectiveWpmMax
-                ? settings.effectiveWpmMin
-                : `${settings.effectiveWpmMin}-${settings.effectiveWpmMax}`}
+          {playerMode === 'listeningPractice' && (
+            <ListeningSourcePanel
+              randomizeLetters={playerRandomizeLetters}
+              repeatCount={playerLetterRepeatCount}
+              delaySeconds={playerDelaySeconds}
+              announceLetters={playerAnnounceLetters}
+              wakeLockSupported={wakeLockSupported}
+              wakeLockActive={wakeLockActive}
+            />
+          )}
+
+          {showTextEntry && (
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-slate-800 sm:text-base">
+                {playerMode === 'playText'
+                  ? 'Text to transmit'
+                  : 'Letters to practice (loops in order)'}
+              </span>
+              <textarea
+                ref={textareaRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={playerMode === 'playText' ? handleKeyDown : undefined}
+                placeholder={
+                  playerMode === 'playText'
+                    ? 'Type text here… Press Enter to add a line of random groups'
+                    : 'e.g. ABCDE — spaces are ignored; one letter plays at a time'
+                }
+                className="min-h-[10rem] w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base leading-relaxed text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:min-h-[11rem]"
+              />
+            </label>
+          )}
+
+          <PlaybackMeta
+            charWpmLabel={charWpmLabel}
+            effWpmLabel={effWpmLabel}
+            toneHz={toneHz}
+            extraWordSpace={Math.max(1, settings.extraWordSpaceMultiplier ?? 1)}
+            durationSec={durationSec}
+            statusLine={listeningStatusLine}
+          />
+
+          <div className="flex flex-col gap-3 border-t border-slate-200/80 pt-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {!isPlaying ? (
+                <button
+                  type="button"
+                  onClick={() => void handlePlay()}
+                  disabled={playDisabled}
+                  className="min-h-[3rem] flex-1 rounded-xl bg-emerald-600 px-5 py-3 text-base font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[12rem]"
+                >
+                  ▶ {primaryActionLabel}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleStop()}
+                  className="min-h-[3rem] flex-1 rounded-xl bg-rose-600 px-5 py-3 text-base font-bold text-white shadow-sm hover:bg-rose-700 sm:min-w-[12rem]"
+                >
+                  ■ {primaryActionLabel}
+                </button>
+              )}
             </div>
-            <div>
-              Tone: {toneHz} Hz • Extra Word Space: ×
-              {Math.max(1, settings.extraWordSpaceMultiplier ?? 1)}
-            </div>
-            {durationSec > 0 && (
-              <div className="text-[11px] text-slate-500">
-                Last duration: ~{Math.round(durationSec)}s
+
+            {playerMode === 'playText' ? (
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => void handleDownload()}
+                  disabled={!text.trim() || isPlaying || isRendering}
+                  className="min-h-[2.75rem] rounded-xl border border-indigo-700 bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
+                  title="Download WAV"
+                >
+                  {isRendering ? 'Preparing…' : '⬇ Download WAV'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrefill}
+                  disabled={isPlaying}
+                  className="min-h-[2.75rem] rounded-xl border border-blue-700 bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
+                  title="Pre-fill with groups based on current settings"
+                >
+                  Pre-fill groups
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrefillAlphabet}
+                  disabled={isPlaying}
+                  className="min-h-[2.75rem] rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
+                  title="Pre-fill with A–Z"
+                >
+                  Alphabet A–Z
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setText('')}
+                  disabled={isPlaying}
+                  className="min-h-[2.75rem] rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
+                >
+                  Clear text
+                </button>
               </div>
-            )}
-            {isContinuousMode && isPlaying && (
-              <div className="text-[11px] text-indigo-600 font-medium">
-                {playerRandomizeLetters
-                  ? `Playing random letter ${currentLetterIndex}`
-                  : `Playing letter ${currentLetterIndex} of ${
-                      text.replace(/\s+/g, '').length || 1
-                    }`}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {!isPlaying ? (
-              <button
-                onClick={handlePlay}
-                disabled={!text.trim() && !(isContinuousMode && playerRandomizeLetters)}
-                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ▶ Play
-              </button>
             ) : (
-              <button
-                onClick={handleStop}
-                className="px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700"
-              >
-                ■ Stop
-              </button>
+              showTextEntry && (
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handlePrefillAlphabet}
+                    disabled={isPlaying}
+                    className="min-h-[2.75rem] rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
+                  >
+                    Fill A–Z
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setText('')}
+                    disabled={isPlaying}
+                    className="min-h-[2.75rem] rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
+                  >
+                    Clear text
+                  </button>
+                </div>
+              )
             )}
-            <button
-              onClick={handleDownload}
-              disabled={!text.trim() || isPlaying || isRendering}
-              className="px-3 py-2 rounded-lg bg-indigo-600 text-white border border-indigo-700 hover:bg-indigo-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Download WAV"
-            >
-              {isRendering ? 'Preparing…' : '⬇ Download WAV'}
-            </button>
-            <button
-              onClick={handlePrefill}
-              disabled={isPlaying}
-              className="px-3 py-2 rounded-lg bg-blue-600 text-white border border-blue-700 hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Pre-fill with groups based on current settings"
-            >
-              Pre-fill
-            </button>
-            <button
-              onClick={handlePrefillAlphabet}
-              disabled={isPlaying}
-              className="px-3 py-2 rounded-lg bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Pre-fill with A-Z for listen-only practice"
-            >
-              Alphabet
-            </button>
-            <button
-              onClick={() => setText('')}
-              disabled={isPlaying}
-              className="px-3 py-2 rounded-lg bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Clear
-            </button>
           </div>
         </div>
       </div>

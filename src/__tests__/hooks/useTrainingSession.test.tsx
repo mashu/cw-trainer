@@ -4,17 +4,31 @@ jest.mock('@/lib/trainingSessionGroups', () => ({
   generateTrainingGroup: jest.fn(() => 'AB'),
 }));
 
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act, waitFor, type RenderHookResult } from '@testing-library/react';
 
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
-import { AUTO_CONFIRM_DELAY_MS } from '@/lib/constants';
 import { useTrainingAudio } from '@/hooks/useTrainingAudio';
 import { useTrainingSession } from '@/hooks/useTrainingSession';
+import { AUTO_CONFIRM_DELAY_MS } from '@/lib/constants';
 import type { IcrSessionService } from '@/lib/services/icr-session.service';
 import type { SessionService } from '@/lib/services/session.service';
 import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
+import type {
+  GroupTrainingAudioStatus,
+  GroupTrainingRuntimeState,
+} from '@/lib/training/groupSessionMachine';
+import { useAppStore } from '@/store';
 import { AppStoreProvider } from '@/store/providers/app-store-provider';
 import type { TrainingSettings } from '@/types';
+
+const selectRuntimeAudioStatus = (
+  runtime: GroupTrainingRuntimeState,
+): GroupTrainingAudioStatus => {
+  if (runtime.status === 'idle' || runtime.status === 'results') {
+    return 'idle';
+  }
+  return runtime.audioStatus;
+};
 
 const mockUseTrainingAudio = useTrainingAudio as jest.MockedFunction<typeof useTrainingAudio>;
 
@@ -104,7 +118,10 @@ describe('useTrainingSession', () => {
     jest.useRealTimers();
   });
 
-  const renderSessionHook = () =>
+  const renderSessionHook = (): RenderHookResult<
+    ReturnType<typeof useTrainingSession>,
+    unknown
+  > =>
     renderHook(
       () =>
         useTrainingSession({
@@ -259,7 +276,7 @@ describe('useTrainingSession', () => {
 
   it('aborts session without results when morse playback fails', async () => {
     const failingAudio = createMockAudio();
-    failingAudio.playMorse.mockResolvedValue({
+    jest.mocked(failingAudio.playMorse).mockResolvedValue({
       status: 'failed',
       message: 'Audio blocked',
     });
@@ -275,11 +292,14 @@ describe('useTrainingSession', () => {
 
     await waitFor(() => {
       expect(failingAudio.playMorse).toHaveBeenCalled();
+      expect(result.current.runtimeStatus).toBe('failed');
     });
 
+    expect(result.current.sessionIssueMessage).toBe('Audio blocked');
     expect(result.current.showResults).toBe(false);
-    expect(result.current.hasActiveSession).toBe(false);
+    expect(result.current.hasActiveSession).toBe(true);
     expect(saveSession).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith({ message: 'Audio blocked', type: 'error' });
   });
 
   it('auto-confirms a complete answer after AUTO_CONFIRM_DELAY_MS', async () => {
@@ -336,6 +356,82 @@ describe('useTrainingSession', () => {
     if (originalDescriptor) {
       Object.defineProperty(document, 'visibilityState', originalDescriptor);
     }
+  });
+
+  it('marks runtime failed when playback returns suspended', async () => {
+    const suspendedAudio = createMockAudio();
+    jest.mocked(suspendedAudio.playMorse).mockResolvedValue({ status: 'suspended' });
+    mockUseTrainingAudio.mockReturnValue(suspendedAudio);
+
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(suspendedAudio.playMorse).toHaveBeenCalled();
+      expect(result.current.runtimeStatus).toBe('failed');
+    });
+
+    expect(result.current.sessionIssueMessage).toBe(
+      'Audio was suspended by the browser. Tap Submit or Stop, or start a new run.',
+    );
+    expect(result.current.showResults).toBe(false);
+    expect(result.current.hasActiveSession).toBe(true);
+    expect(saveSession).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error' }),
+    );
+  });
+
+  it('keeps audio suspended when context resume is rejected', async () => {
+    const mockAudio = createMockAudio();
+    const resume = jest.fn().mockRejectedValue(new Error('Not allowed'));
+    mockAudio.audioContextRef.current = {
+      state: 'suspended',
+      resume,
+    } as unknown as AudioContext;
+    mockUseTrainingAudio.mockReturnValue(mockAudio);
+
+    const { result } = renderHook(
+      () => {
+        const session = useTrainingSession({
+          settings: sessionSettings,
+          sessions: [],
+          saveSession,
+          setTrainingSettingsState,
+          showToast,
+        });
+        const audioStatus = useAppStore((s) => selectRuntimeAudioStatus(s.groupTrainingRuntime));
+        return { ...session, audioStatus };
+      },
+      { wrapper: TestWrapper },
+    );
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.hasActiveSession).toBe(true);
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.audioStatus).toBe('suspended');
+    });
+
+    act(() => {
+      result.current.stopTraining();
+    });
   });
 
   it('resumes suspended audio when the page becomes visible', async () => {
@@ -410,6 +506,223 @@ describe('useTrainingSession', () => {
     await waitFor(() => {
       expect(result.current.showResults).toBe(false);
       expect(result.current.hasActiveSession).toBe(true);
+    });
+  });
+
+  it('pauses on pagehide during training', async () => {
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.hasActiveSession).toBe(true);
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+
+    expect(result.current.runtimeStatus).toBe('paused');
+  });
+
+  it('unmount while training stops audio and aborts playback', async () => {
+    const audio = createMockAudio();
+    mockUseTrainingAudio.mockReturnValue(audio);
+    const { result, unmount } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.hasActiveSession).toBe(true);
+    });
+
+    unmount();
+
+    expect(audio.stopAudio).toHaveBeenCalled();
+    expect(audio.trainingAbortRef.current).toBe(true);
+  });
+
+  it('auto-confirms empty answer when groupTimeout elapses', async () => {
+    const timeoutSettings: TrainingSettings = { ...sessionSettings, groupTimeout: 1 };
+    const { result } = renderHook(
+      () =>
+        useTrainingSession({
+          settings: timeoutSettings,
+          sessions: [],
+          saveSession,
+          setTrainingSettingsState,
+          showToast,
+        }),
+      { wrapper: TestWrapper },
+    );
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    await waitFor(
+      () => {
+        expect(result.current.showResults).toBe(true);
+      },
+      { timeout: 2500 },
+    );
+  });
+
+  it('shows toast when saveSession fails after results', async () => {
+    saveSession.mockRejectedValueOnce(new Error('Persist failed'));
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    act(() => {
+      result.current.confirmGroupAnswer(0, 'AB');
+    });
+
+    await waitFor(() => {
+      expect(result.current.showResults).toBe(true);
+    });
+
+    expect(showToast).toHaveBeenCalledWith({
+      message: 'Persist failed',
+      type: 'error',
+    });
+  });
+
+  it('applies group auto-level adjust after a perfect session', async () => {
+    localStorage.clear();
+    const autoSettings: TrainingSettings = {
+      ...sessionSettings,
+      autoAdjustKoch: true,
+      autoAdjustThreshold: 90,
+      autoAdjustAboveThresholdCount: 0,
+      kochLevel: 4,
+    };
+    const { result } = renderHook(
+      () =>
+        useTrainingSession({
+          settings: autoSettings,
+          sessions: [],
+          saveSession,
+          setTrainingSettingsState,
+          showToast,
+        }),
+      { wrapper: TestWrapper },
+    );
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    act(() => {
+      result.current.confirmGroupAnswer(0, 'AB');
+    });
+
+    await waitFor(() => {
+      expect(result.current.showResults).toBe(true);
+    });
+
+    expect(setTrainingSettingsState).toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('increased') }),
+    );
+  });
+
+  it('scrolls focused input into view via inputRefCallback', async () => {
+    const scrollIntoView = jest.fn();
+    const focus = jest.fn();
+    const input = {
+      focus,
+      scrollIntoView,
+      disabled: false,
+      tagName: 'INPUT',
+    } as unknown as HTMLInputElement;
+
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.sentGroups.length).toBeGreaterThan(0);
+    });
+
+    act(() => {
+      result.current.inputRefCallback(0, input);
+      result.current.setCurrentFocusedGroup(0);
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+  });
+
+  it('sets audio status to closed when context is closed on pageshow', async () => {
+    const mockAudio = createMockAudio();
+    mockAudio.audioContextRef.current = {
+      state: 'closed',
+      resume: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AudioContext;
+    mockUseTrainingAudio.mockReturnValue(mockAudio);
+
+    const { result } = renderHook(
+      () => {
+        const session = useTrainingSession({
+          settings: sessionSettings,
+          sessions: [],
+          saveSession,
+          setTrainingSettingsState,
+          showToast,
+        });
+        const audioStatus = useAppStore((s) => selectRuntimeAudioStatus(s.groupTrainingRuntime));
+        return { ...session, audioStatus };
+      },
+      { wrapper: TestWrapper },
+    );
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.hasActiveSession).toBe(true);
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event('pageshow'));
+    });
+
+    expect(result.current.audioStatus).toBe('closed');
+
+    act(() => {
+      result.current.stopTraining();
     });
   });
 });

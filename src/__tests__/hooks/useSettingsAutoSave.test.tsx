@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
 import { useSettingsAutoSave } from '@/hooks/useSettingsAutoSave';

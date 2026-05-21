@@ -4,8 +4,8 @@ const mockSetPersistence = jest.fn().mockResolvedValue(undefined);
 const mockGetIdToken = jest.fn().mockResolvedValue('token');
 
 jest.mock('firebase/auth', () => ({
-  onAuthStateChanged: (...args: unknown[]) => mockOnAuthStateChanged(...args),
-  setPersistence: (...args: unknown[]) => mockSetPersistence(...args),
+  onAuthStateChanged: (...args: unknown[]): unknown => mockOnAuthStateChanged(...args),
+  setPersistence: (...args: unknown[]): unknown => mockSetPersistence(...args),
   browserLocalPersistence: 'local',
 }));
 
@@ -15,10 +15,10 @@ const mockGetRedirectedUser = jest.fn();
 const mockInitFirebase = jest.fn();
 
 jest.mock('@/lib/firebaseClient', () => ({
-  initFirebase: () => mockInitFirebase(),
-  googleSignIn: (...args: unknown[]) => mockGoogleSignIn(...args),
-  googleSignOut: (...args: unknown[]) => mockGoogleSignOut(...args),
-  getRedirectedUser: (...args: unknown[]) => mockGetRedirectedUser(...args),
+  initFirebase: (): unknown => mockInitFirebase(),
+  googleSignIn: (...args: unknown[]): unknown => mockGoogleSignIn(...args),
+  googleSignOut: (...args: unknown[]): unknown => mockGoogleSignOut(...args),
+  getRedirectedUser: (...args: unknown[]): unknown => mockGetRedirectedUser(...args),
 }));
 
 import { renderHook, act, waitFor } from '@testing-library/react';
@@ -235,11 +235,11 @@ describe('useAuth with Firebase configured', () => {
       authCallback?.({
         uid: 'anon-uid',
         email: 'anon@example.com',
-        displayName: null,
-        photoURL: null,
+        displayName: undefined,
+        photoURL: undefined,
         isAnonymous: true,
         providerData: [],
-      });
+      } as unknown as typeof googleUser);
     });
 
     await waitFor(() => {
@@ -256,11 +256,11 @@ describe('useAuth with Firebase configured', () => {
       authCallback?.({
         uid: '',
         email: null,
-        displayName: null,
-        photoURL: null,
+        displayName: undefined,
+        photoURL: undefined,
         isAnonymous: false,
         providerData: [],
-      });
+      } as unknown as typeof googleUser);
     });
 
     await waitFor(() => {
@@ -281,6 +281,113 @@ describe('useAuth with Firebase configured', () => {
     ).rejects.toThrow('Sign in failed');
 
     expect(result.current.authInProgress).toBe(false);
+  });
+
+  it('cancels pending sign-out debounce when user returns', async () => {
+    jest.useFakeTimers();
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    act(() => {
+      authCallback?.(googleUser);
+    });
+    act(() => {
+      authCallback?.(null);
+    });
+    act(() => {
+      authCallback?.(googleUser);
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(2600);
+    });
+
+    expect(result.current.firebaseUser).toEqual(googleUser);
+    jest.useRealTimers();
+  });
+
+  it('maps non-Google provider as anonymous', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    act(() => {
+      authCallback?.({
+        ...googleUser,
+        providerData: [{ providerId: 'facebook.com' }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.appUser?.provider).toBe('anonymous');
+    });
+  });
+
+  it('switchAccount signs out then signs in', async () => {
+    mockGoogleSignIn.mockResolvedValue(googleUser);
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    act(() => {
+      authCallback?.(googleUser);
+    });
+
+    await act(async () => {
+      await result.current.switchAccount();
+    });
+
+    expect(mockGoogleSignOut).toHaveBeenCalled();
+    expect(mockGoogleSignIn).toHaveBeenCalled();
+    expect(result.current.firebaseUser).toEqual(googleUser);
+  });
+
+  it('ignores token refresh failures on visibility change', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    mockAuth.currentUser = { getIdToken: jest.fn().mockRejectedValue(new Error('expired')) };
+
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+
+    expect(() => {
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+    }).not.toThrow();
+
+    if (originalDescriptor) {
+      Object.defineProperty(document, 'visibilityState', originalDescriptor);
+    }
+  });
+
+  it('signOut clears pending debounce timeout', async () => {
+    jest.useFakeTimers();
+    const { result } = renderHook(() => useAuth(), { wrapper: TestWrapper });
+
+    await waitFor(() => expect(result.current.firebaseReady).toBe(true));
+
+    act(() => {
+      authCallback?.(googleUser);
+      authCallback?.(null);
+    });
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(2600);
+    });
+
+    expect(result.current.firebaseUser).toBeNull();
+    jest.useRealTimers();
   });
 
   it('signOut clears user and calls googleSignOut', async () => {

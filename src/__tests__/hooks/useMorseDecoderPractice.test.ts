@@ -8,10 +8,11 @@ jest.mock('@/lib/training/sleepCancelablePolled', () => ({
 }));
 
 jest.mock('@/lib/morseSignals', () => {
-  const actual = jest.requireActual<typeof import('@/lib/morseSignals')>('@/lib/morseSignals');
+  const actual = jest.requireActual('@/lib/morseSignals') as Record<string, unknown>;
+  const decodeMorsePattern = actual['decodeMorsePattern'] as (pattern: string) => string | null;
   return {
     ...actual,
-    decodeMorsePattern: jest.fn(actual.decodeMorsePattern),
+    decodeMorsePattern: jest.fn(decodeMorsePattern),
   };
 });
 
@@ -49,9 +50,10 @@ function tapPaddle(code: string, key: string): void {
 describe('useMorseDecoderPractice', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDecodeMorsePattern.mockImplementation(
-      jest.requireActual<typeof import('@/lib/morseSignals')>('@/lib/morseSignals').decodeMorsePattern,
-    );
+    const actualMorseSignals = jest.requireActual('@/lib/morseSignals') as {
+      decodeMorsePattern: typeof decodeMorsePattern;
+    };
+    mockDecodeMorsePattern.mockImplementation(actualMorseSignals.decodeMorsePattern);
     jest.useFakeTimers();
   });
 

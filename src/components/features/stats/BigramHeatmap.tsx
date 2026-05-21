@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { GROUP_START_BIGRAM_TOKEN } from '@/lib/scoring/letterErrorStats';
+
 /** Token representing "start of group" in the bigram matrix. */
-export const START_TOKEN = '▸';
+export const START_TOKEN = GROUP_START_BIGRAM_TOKEN;
 
 /**
  * Perceptually smooth green → amber → red colour ramp for the bigram heatmap.
@@ -126,14 +128,21 @@ export function BigramHeatmapView({
                         return (
                           <td key={`${rowL}_${cell.col}`} className="p-0"
                             onMouseEnter={(e) => {
-                              if (isSelected) { setHoveredBigram(null); return; }
+                              if (!hasData || isSelected) {
+                                if (isSelected) setHoveredBigram(null);
+                                return;
+                              }
                               const rect = e.currentTarget.getBoundingClientRect();
                               setHoveredBigram({ row: cell.row, col: cell.col, x: rect.left + rect.width / 2, y: rect.top - 10 });
                             }}
                             onMouseLeave={() => setHoveredBigram(null)}
-                            onClick={() => { setSelectedBigram({ row: cell.row, col: cell.col }); setHoveredBigram(null); }}
+                            onClick={() => {
+                              setSelectedBigram({ row: cell.row, col: cell.col });
+                              setHoveredBigram(null);
+                            }}
                           >
-                            <div className={`relative w-7 h-7 rounded-[5px] cursor-pointer transition-all duration-150 ease-out
+                            <div className={`relative w-7 h-7 rounded-[5px] transition-all duration-150 ease-out
+                              ${hasData ? 'cursor-pointer' : 'cursor-default'}
                               ${isSelected ? 'ring-2 ring-blue-500/60 ring-offset-1 z-10 scale-[1.15]' : ''}
                               ${isHovered && !isSelected ? 'scale-110 z-10' : ''}
                               ${!isSelected && !isHovered ? 'hover:scale-105' : ''}`}
@@ -245,20 +254,52 @@ export function BigramHeatmapView({
             const row = matrix[rowIdx];
             if (!row) return null;
             const cell = row.find((c) => c.col === selectedBigram.col);
-            if (!cell || cell.total === 0) return null;
+            if (!cell) return null;
+            const transitionLabel =
+              cell.row === START_TOKEN ? (
+                <span title="Start of group">▸</span>
+              ) : (
+                cell.row
+              );
+            if (cell.total === 0) {
+              return (
+                <div className="mt-4 p-4 rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-800 font-mono mb-1">
+                        {transitionLabel} → {cell.col}
+                      </h4>
+                      <p className="text-sm text-slate-600">
+                        No occurrences for this letter pair in the selected date range.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBigram(null)}
+                      className="text-slate-400 hover:text-slate-600 transition-colors"
+                      aria-label="Close details"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
             const accuracy = ((cell.total - cell.wrong) / cell.total) * 100;
             return (
               <div className="mt-4 p-4 rounded-xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white shadow-lg">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h4 className="text-lg font-bold text-slate-800 font-mono mb-1">
-                      {cell.row === START_TOKEN ? <span title="Start of group">▸</span> : cell.row} → {cell.col}
+                      {transitionLabel} → {cell.col}
                     </h4>
                     <p className="text-xs text-slate-600">
                       {cell.row === START_TOKEN ? `Error rate when "${cell.col}" is the first character in a group` : 'Bigram transition statistics'}
                     </p>
                   </div>
-                  <button onClick={() => setSelectedBigram(null)} className="text-slate-400 hover:text-slate-600 transition-colors" aria-label="Close details">
+                  <button type="button" onClick={() => setSelectedBigram(null)} className="text-slate-400 hover:text-slate-600 transition-colors" aria-label="Close details">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>

@@ -28,13 +28,10 @@ import {
   type SessionFatiguePoint,
 } from '@/hooks/useStatsAnalytics';
 import { createGroupDisplayAlignment } from '@/lib/groupAlignment';
-import { LCWO_SEQUENCE } from '@/lib/morseConstants';
+import { buildBigramHeatmapData, buildUnigramStats } from '@/lib/scoring/letterErrorStats';
 
-import { BigramHeatmapView, START_TOKEN } from './BigramHeatmap';
+import { BigramHeatmapView } from './BigramHeatmap';
 import { Leaderboard } from './Leaderboard';
-
-/** Token representing "start of group" in the bigram matrix.
- *  Lets us capture first-character errors as  ▸ → char  instead of dropping them. */
 
 type BrushRange = {
   readonly startIndex?: number;
@@ -244,81 +241,26 @@ export function GroupTrainingStats({
     return rows;
   }, [selectedSession]);
 
-  const bigramHeatmap = useMemo<{
-    readonly letters: string[];
-    readonly matrix: Array<Array<{ row: string; col: string; rate: number; total: number; wrong: number }>>;
-    readonly maxRate: number;
-  }>(() => {
-    const lettersSet = new Set<string>();
-    const counts: Record<string, Record<string, { wrong: number; total: number }>> = {};
-    rangeFilteredSessions.forEach((s) => {
-      (s.groups || []).forEach((g) => {
-        const sent = (g?.sent || '').toUpperCase();
-        const rec = (g?.received || '').toUpperCase();
-        // Start from i = 0: use START_TOKEN as "prev" for the first character
-        for (let i = 0; i < sent.length; i++) {
-          const prev = i === 0 ? START_TOKEN : sent[i - 1];
-          const curr = sent[i];
-          if (!prev || !curr) continue;
-          lettersSet.add(prev);
-          lettersSet.add(curr);
-          if (!counts[prev]) counts[prev] = {};
-          if (!counts[prev][curr]) counts[prev][curr] = { wrong: 0, total: 0 };
-          counts[prev][curr].total += 1;
-          const typed = rec[i];
-          if (typed !== curr) counts[prev][curr].wrong += 1;
-        }
-      });
-    });
-    const letters = Array.from(lettersSet);
-    // Sort real characters by LCWO order; keep START_TOKEN first
-    letters.sort((a, b) => {
-      if (a === START_TOKEN) return -1;
-      if (b === START_TOKEN) return 1;
-      return LCWO_SEQUENCE.indexOf(a) - LCWO_SEQUENCE.indexOf(b);
-    });
-    let maxRate = 0;
-    const matrix = letters.map((row) =>
-      letters.map((col) => {
-        const c = counts[row]?.[col];
-        const total = c?.total || 0;
-        const wrong = c?.wrong || 0;
-        const rate = total > 0 ? wrong / total : 0;
-        if (rate > maxRate) maxRate = rate;
-        return { row, col, rate, total, wrong };
-      }),
-    );
-    return { letters, matrix, maxRate };
-  }, [rangeFilteredSessions]);
+  const letterGroupSamples = useMemo(
+    () =>
+      rangeFilteredSessions.flatMap((s) =>
+        (s.groups ?? []).map((g) => ({
+          sent: g?.sent ?? '',
+          received: g?.received ?? '',
+        })),
+      ),
+    [rangeFilteredSessions],
+  );
 
-  // Per-character (unigram) error stats — shows error density per individual
-  // character independent of the preceding character context.
-  const unigramStats = useMemo<
-    Array<{ letter: string; total: number; wrong: number; rate: number }>
-  >(() => {
-    const counts: Record<string, { wrong: number; total: number }> = {};
-    rangeFilteredSessions.forEach((s) => {
-      (s.groups || []).forEach((g) => {
-        const sent = (g?.sent || '').toUpperCase();
-        const rec = (g?.received || '').toUpperCase();
-        for (let i = 0; i < sent.length; i++) {
-          const ch = sent[i];
-          if (!ch) continue;
-          if (!counts[ch]) counts[ch] = { wrong: 0, total: 0 };
-          counts[ch].total += 1;
-          if (rec[i] !== ch) counts[ch].wrong += 1;
-        }
-      });
-    });
-    return Object.entries(counts)
-      .map(([letter, c]) => ({
-        letter,
-        total: c.total,
-        wrong: c.wrong,
-        rate: c.total > 0 ? c.wrong / c.total : 0,
-      }))
-      .sort((a, b) => LCWO_SEQUENCE.indexOf(a.letter) - LCWO_SEQUENCE.indexOf(b.letter));
-  }, [rangeFilteredSessions]);
+  const bigramHeatmap = useMemo(
+    () => buildBigramHeatmapData(letterGroupSamples),
+    [letterGroupSamples],
+  );
+
+  const unigramStats = useMemo(
+    () => buildUnigramStats(letterGroupSamples),
+    [letterGroupSamples],
+  );
 
   // KPIs derived from range
   const { kpiAvgAccuracy, kpiSessions, kpiAvgMs, kpiUniqueDays, bestLetter, worstLetter } =

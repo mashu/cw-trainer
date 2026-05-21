@@ -48,12 +48,15 @@ describe('useICRMicrophone', () => {
       createGain,
     })) as unknown as typeof AudioContext;
 
-    global.navigator.mediaDevices = {
-      getUserMedia: jest.fn().mockResolvedValue({
-        getTracks: () => [{ stop: mockTrackStop }],
-      }),
-      enumerateDevices: jest.fn().mockResolvedValue([]),
-    };
+    Object.defineProperty(global.navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: jest.fn().mockResolvedValue({
+          getTracks: () => [{ stop: mockTrackStop }],
+        }),
+        enumerateDevices: jest.fn().mockResolvedValue([]),
+      },
+    });
   });
 
   it('measureInputLevel returns 0 without analyser', () => {

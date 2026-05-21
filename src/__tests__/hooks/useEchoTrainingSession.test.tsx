@@ -11,7 +11,7 @@ jest.mock('@/lib/trainingSessionGroups', () => ({
   generateTrainingGroup: jest.fn(() => 'A'),
 }));
 
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act, waitFor, type RenderHookResult } from '@testing-library/react';
 
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
 import { useEchoTrainingSession } from '@/hooks/useEchoTrainingSession';
@@ -20,8 +20,13 @@ import { MORSE_CODE } from '@/lib/morseConstants';
 import type { IcrSessionService } from '@/lib/services/icr-session.service';
 import type { SessionService } from '@/lib/services/session.service';
 import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
+import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import { AppStoreProvider } from '@/store/providers/app-store-provider';
 import type { TrainingSettings } from '@/types';
+
+const mockGenerateTrainingGroup = generateTrainingGroup as jest.MockedFunction<
+  typeof generateTrainingGroup
+>;
 
 const mockUseTrainingAudio = useTrainingAudio as jest.MockedFunction<typeof useTrainingAudio>;
 
@@ -85,13 +90,19 @@ function createMockAudio(): ReturnType<typeof useTrainingAudio> {
   };
 }
 
-function fireKey(type: 'keydown' | 'keyup', code: string, key: string): void {
+function fireKey(
+  type: 'keydown' | 'keyup',
+  code: string,
+  key: string,
+  repeat = false,
+): void {
   window.dispatchEvent(
     new KeyboardEvent(type, {
       code,
       key,
       bubbles: true,
       cancelable: true,
+      repeat,
     }),
   );
 }
@@ -125,6 +136,7 @@ describe('useEchoTrainingSession', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
+    mockGenerateTrainingGroup.mockReturnValue('A');
     mockUseTrainingAudio.mockReturnValue(createMockAudio());
     (mockTrainingSettingsService.getSettings as jest.Mock).mockResolvedValue(echoSettings);
     (mockSessionService.listSessions as jest.Mock).mockResolvedValue([]);
@@ -135,7 +147,10 @@ describe('useEchoTrainingSession', () => {
     jest.useRealTimers();
   });
 
-  const renderEchoHook = () =>
+  const renderEchoHook = (): RenderHookResult<
+    ReturnType<typeof useEchoTrainingSession>,
+    unknown
+  > =>
     renderHook(
       () =>
         useEchoTrainingSession({
@@ -404,6 +419,176 @@ describe('useEchoTrainingSession', () => {
     expect(showToast).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'success', message: expect.stringContaining('increased') }),
     );
+  });
+
+  it('unmount aborts training and stops audio', async () => {
+    const audio = createMockAudio();
+    mockUseTrainingAudio.mockReturnValue(audio);
+    const { result, unmount } = renderEchoHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isTraining).toBe(true);
+    });
+
+    unmount();
+
+    expect(audio.stopAudio).toHaveBeenCalled();
+  });
+
+  it('shows error toast when startTraining throws', async () => {
+    mockGenerateTrainingGroup.mockImplementationOnce(() => {
+      throw new Error('Group generation failed');
+    });
+    const { result } = renderEchoHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      await result.current.startTraining();
+    });
+
+    expect(showToast).toHaveBeenCalledWith({
+      message: 'Echo training error: Group generation failed',
+      type: 'error',
+    });
+    expect(result.current.isTraining).toBe(false);
+  });
+
+  it('completes two groups when numGroups is 2', async () => {
+    mockGenerateTrainingGroup.mockReturnValue('E');
+    const twoGroupSettings: TrainingSettings = { ...echoSettings, numGroups: 2 };
+    const { result } = renderHook(
+      () =>
+        useEchoTrainingSession({
+          settings: twoGroupSettings,
+          sessions: [],
+          saveSession,
+          setTrainingSettingsState,
+          showToast,
+        }),
+      { wrapper: TestWrapper },
+    );
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    for (let group = 0; group < 2; group += 1) {
+      await waitFor(() => {
+        expect(result.current.currentCharacterState).toBe('awaiting');
+      });
+      for (const symbol of MORSE_CODE['E'] ?? '') {
+        await act(async () => {
+          if (symbol === '.') tapPaddle('BracketLeft', '{');
+          else if (symbol === '-') tapPaddle('BracketRight', '}');
+          await Promise.resolve();
+        });
+      }
+    }
+
+    await waitFor(() => {
+      expect(result.current.showResults).toBe(true);
+    });
+
+    expect(result.current.lastSessionResult?.correctCharacters).toBe(2);
+    expect(mockGenerateTrainingGroup).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies digits-mode echo auto-level adjust', async () => {
+    localStorage.clear();
+    mockGenerateTrainingGroup.mockReturnValue('5');
+    const digitsSettings: TrainingSettings = {
+      ...echoSettings,
+      charSetMode: 'digits',
+      digitsLevel: 5,
+      echoAutoAdjustKoch: true,
+      echoAutoAdjustThreshold: 90,
+      echoAutoAdjustAboveThresholdCount: 0,
+    };
+    const { result } = renderHook(
+      () =>
+        useEchoTrainingSession({
+          settings: digitsSettings,
+          sessions: [],
+          saveSession,
+          setTrainingSettingsState,
+          showToast,
+        }),
+      { wrapper: TestWrapper },
+    );
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentCharacterState).toBe('awaiting');
+    });
+
+    for (const symbol of MORSE_CODE['5'] ?? '') {
+      await act(async () => {
+        if (symbol === '.') tapPaddle('BracketLeft', '{');
+        await Promise.resolve();
+      });
+    }
+
+    await waitFor(() => {
+      expect(result.current.showResults).toBe(true);
+    });
+
+    expect(setTrainingSettingsState).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('ignores keydown when not training', async () => {
+    const { result } = renderEchoHook();
+    await waitForInitialLoads();
+
+    act(() => {
+      tapPaddle('BracketLeft', '{');
+    });
+
+    expect(result.current.currentSymbols).toBe('');
+  });
+
+  it('runs iambic keyer timing when both paddles are held', async () => {
+    const audio = createMockAudio();
+    let keyerTicks = 0;
+    jest.mocked(audio.sleepCancelable).mockImplementation(async () => {
+      keyerTicks += 1;
+      if (keyerTicks >= 2) {
+        act(() => {
+          fireKey('keyup', 'BracketLeft', '{');
+          fireKey('keyup', 'BracketRight', '}');
+        });
+      }
+    });
+    mockUseTrainingAudio.mockReturnValue(audio);
+
+    const { result } = renderEchoHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentCharacterState).toBe('awaiting');
+    });
+
+    act(() => {
+      fireKey('keydown', 'BracketLeft', '{');
+      fireKey('keydown', 'BracketRight', '}');
+    });
+
+    await waitFor(() => {
+      expect(keyerTicks).toBeGreaterThanOrEqual(2);
+    });
   });
 
   it('ignores repeated keydown while awaiting input', async () => {

@@ -29,6 +29,7 @@ describe('useTrainingAudio', () => {
     jest.clearAllMocks();
     mockPlayMorse.mockResolvedValue({
       durationSec: 0.5,
+      startTime: 0,
       stop: jest.fn(),
     });
   });
