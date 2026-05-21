@@ -30,7 +30,7 @@
   },
   "overrides": {
     "postcss": "^8.5.10",
-    "protobufjs": "^7.5.5"
+    "protobufjs": "^7.5.8"
   },
   "devDependencies": {
     "@alloc/quick-lru": "^5.2.0",
