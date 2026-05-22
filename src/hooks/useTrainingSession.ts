@@ -98,6 +98,9 @@ export function useTrainingSession({
   const completeRuntimeSession = useAppStore((state) => state.completeGroupTrainingSession);
   const cancelRuntimeSession = useAppStore((state) => state.cancelGroupTrainingSession);
   const dismissRuntimeResults = useAppStore((state) => state.dismissGroupTrainingResults);
+  const evaluateAchievementsForSessions = useAppStore(
+    (state) => state.evaluateAchievementsForSessions,
+  );
 
   const hasActiveSession = isGroupTrainingRuntimeActive(runtime);
   const activeRuntime =
@@ -134,12 +137,17 @@ export function useTrainingSession({
   // Refs for values read by processResults to prevent stale closures
   // (processResults runs after long async session; these may change mid-session)
   const settingsRef = useRef(settings);
+  const historicalSessionsRef = useRef(historicalSessions);
   const saveSessionRef = useRef(saveSession);
   const showToastRef = useRef(showToast);
   const setTrainingSettingsStateRef = useRef(setTrainingSettingsState);
+  const evaluateAchievementsForSessionsRef = useRef(evaluateAchievementsForSessions);
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+  useEffect(() => {
+    historicalSessionsRef.current = historicalSessions;
+  }, [historicalSessions]);
   useEffect(() => {
     saveSessionRef.current = saveSession;
   }, [saveSession]);
@@ -149,6 +157,9 @@ export function useTrainingSession({
   useEffect(() => {
     setTrainingSettingsStateRef.current = setTrainingSettingsState;
   }, [setTrainingSettingsState]);
+  useEffect(() => {
+    evaluateAchievementsForSessionsRef.current = evaluateAchievementsForSessions;
+  }, [evaluateAchievementsForSessions]);
   const groupStartAtRef = useRef<number[]>([]);
   const groupEndAtRef = useRef<number[]>([]);
   const groupAnswerAtRef = useRef<number[]>([]);
@@ -268,6 +279,7 @@ export function useTrainingSession({
     const currentSaveSession = saveSessionRef.current;
     const currentShowToast = showToastRef.current;
     const currentSetTrainingSettingsState = setTrainingSettingsStateRef.current;
+    const currentEvaluateAchievementsForSessions = evaluateAchievementsForSessionsRef.current;
 
     const sentSource =
       Array.isArray(sentOverride) && sentOverride.length
@@ -312,7 +324,22 @@ export function useTrainingSession({
     completeRuntimeSession(summary);
 
     try {
-      await currentSaveSession(result as SessionResultInput);
+      const savedSessions = await currentSaveSession(result as SessionResultInput);
+      const sessionsForAchievements =
+        savedSessions.some((session) => session.timestamp === result.timestamp)
+          ? savedSessions
+          : [...historicalSessionsRef.current, result];
+      const achievementResult =
+        await currentEvaluateAchievementsForSessions(sessionsForAchievements);
+      if (achievementResult.newlyUnlocked.length > 0) {
+        currentShowToast({
+          message:
+            achievementResult.newlyUnlocked.length === 1
+              ? 'New trophy unlocked.'
+              : `${achievementResult.newlyUnlocked.length} new trophies unlocked.`,
+          type: 'success',
+        });
+      }
     } catch (error) {
       currentShowToast({ message: ensureAppError(error).message, type: 'error' });
     }

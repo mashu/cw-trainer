@@ -8,10 +8,12 @@ import { PlayerSettingsForm } from '@/components/ui/forms/PlayerSettingsForm';
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingSettingsForm } from '@/components/ui/forms/TrainingSettingsForm';
 import { TrainingModeCarousel } from '@/components/ui/navigation/TrainingModeCarousel';
+import { useAchievementsActions, useAchievementsState } from '@/hooks/useAchievements';
 import type { AuthUserSummary } from '@/hooks/useAuth';
 import { useSessionsActions } from '@/hooks/useSessions';
 import { initFirebase } from '@/lib/firebaseClient';
 import { getUserCallSign, setUserCallSign } from '@/lib/sessionPersistence';
+import { useAppStore } from '@/store';
 import type { IcrSettings, TrainingMode } from '@/types';
 
 interface SidebarProps {
@@ -49,6 +51,9 @@ export function Sidebar({
   setSettings,
   onSaveSettings,
   isSavingSettings,
+  sessionResultsCount,
+  latestAccuracyPercent,
+  onViewStats,
   activeMode,
   onChangeMode,
   icrSettings,
@@ -58,9 +63,13 @@ export function Sidebar({
   const [showModeHelp, setShowModeHelp] = useState(false);
   const [callSign, setCallSign] = useState<string>('');
   const [callSignSaving, setCallSignSaving] = useState(false);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
   const callSignDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const { loadSessions } = useSessionsActions();
+  const sessions = useAppStore((state) => state.sessions);
+  const { achievements, progress } = useAchievementsState(sessions);
+  const { publishAchievementProfile } = useAchievementsActions();
 
   const autoAdjustProfile = activeMode === 'echo' ? 'echo' : 'group';
 
@@ -150,6 +159,34 @@ export function Sidebar({
         callSignDebounceRef.current = null;
       }
       void saveCallSign(callSign);
+    }
+  };
+
+  const handleShareProfile = async (): Promise<void> => {
+    setShareStatus(null);
+    try {
+      const profile = await publishAchievementProfile(sessions);
+      if (!profile) {
+        setShareStatus('Sign in with Firebase enabled to publish a public profile.');
+        return;
+      }
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const shareUrl = `${origin}/profile/?u=${profile.publicId}`;
+      if (navigator.share) {
+        await navigator.share({
+          title: 'CW-Trainer profile',
+          text: `My CW-Trainer trophy case: ${profile.badgeCount} badges, best score ${Math.round(profile.bestScore)}.`,
+          url: shareUrl,
+        });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareStatus('Profile link copied to clipboard.');
+      } else {
+        setShareStatus(shareUrl);
+      }
+    } catch (error) {
+      console.warn('Failed to share profile', error);
+      setShareStatus('Unable to share profile right now.');
     }
   };
 
@@ -336,6 +373,44 @@ export function Sidebar({
                   </p>
                 </div>
               )}
+              <div className="mb-3 rounded-xl border border-indigo-100 bg-white/80 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                      Trophy case
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {achievements.length} trophies, {progress.masteredLetterCount}/
+                      {progress.totalLetterCount} letters mastered
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {sessionResultsCount} sessions
+                      {latestAccuracyPercent !== undefined
+                        ? `, latest ${latestAccuracyPercent}%`
+                        : ''}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Earn and view trophies locally. Sign in only to sync or share them.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onViewStats}
+                    className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                  >
+                    View
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleShareProfile()}
+                  disabled={!firebaseReady}
+                  className="mt-3 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  Share public profile
+                </button>
+                {shareStatus && <p className="mt-2 text-xs text-slate-600">{shareStatus}</p>}
+              </div>
               <div className="flex flex-col gap-2">
                 <button
                   onClick={onLogout}

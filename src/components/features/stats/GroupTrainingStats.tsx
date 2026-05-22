@@ -30,6 +30,7 @@ import {
 import { createGroupDisplayAlignment } from '@/lib/groupAlignment';
 import { buildBigramHeatmapData, buildUnigramStats } from '@/lib/scoring/letterErrorStats';
 
+import { AchievementTrophyCase } from './AchievementTrophyCase';
 import { BigramHeatmapView } from './BigramHeatmap';
 import { Leaderboard } from './Leaderboard';
 
@@ -37,6 +38,74 @@ type BrushRange = {
   readonly startIndex?: number;
   readonly endIndex?: number;
 };
+
+type StatsTab = 'overview' | 'progress' | 'letters' | 'mistakes' | 'sessions' | 'achievements' | 'leaderboard';
+
+const STATS_TABS: ReadonlyArray<{
+  readonly id: StatsTab;
+  readonly label: string;
+  readonly description: string;
+  readonly icon: string;
+  readonly activeClass: string;
+}> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Summary and recommendations',
+    icon: '📊',
+    activeClass: 'from-sky-500 to-indigo-600',
+  },
+  {
+    id: 'progress',
+    label: 'Progress',
+    description: 'Accuracy and timing trends',
+    icon: '📈',
+    activeClass: 'from-emerald-500 to-teal-600',
+  },
+  {
+    id: 'letters',
+    label: 'Letters',
+    description: 'Character mastery',
+    icon: '🔤',
+    activeClass: 'from-violet-500 to-fuchsia-600',
+  },
+  {
+    id: 'mistakes',
+    label: 'Mistakes',
+    description: 'Confusions and errors',
+    icon: '✕',
+    activeClass: 'from-rose-500 to-orange-500',
+  },
+  {
+    id: 'sessions',
+    label: 'Sessions',
+    description: 'History and details',
+    icon: '▦',
+    activeClass: 'from-slate-600 to-slate-800',
+  },
+  {
+    id: 'achievements',
+    label: 'Trophies',
+    description: 'Badges earned locally',
+    icon: '★',
+    activeClass: 'from-amber-500 to-yellow-600',
+  },
+  {
+    id: 'leaderboard',
+    label: 'Leaderboard',
+    description: 'Shared score ranking',
+    icon: '🏆',
+    activeClass: 'from-indigo-500 to-purple-600',
+  },
+] as const;
+
+const RANGE_FILTER_TABS = new Set<StatsTab>([
+  'overview',
+  'progress',
+  'letters',
+  'mistakes',
+  'sessions',
+]);
 
 const isBrushRange = (value: unknown): value is BrushRange => {
   if (value === null || typeof value !== 'object') {
@@ -67,7 +136,7 @@ export function GroupTrainingStats({
 }: GroupTrainingStatsProps): JSX.Element {
   const [selectedSessionTs, setSelectedSessionTs] = useState<number | null>(null);
   const [range, setRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
-  const [tab, setTab] = useState<'overview' | 'progress' | 'letters' | 'mistakes' | 'sessions' | 'leaderboard'>('overview');
+  const [tab, setTab] = useState<StatsTab>('overview');
 
   const {
     sessions,
@@ -322,6 +391,14 @@ export function GroupTrainingStats({
     // Use sessionsSorted.length since range indices are based on sessionsSorted
     setRange({ startIndex: firstIdx, endIndex: sessionsSorted.length - 1 });
   };
+  const showRangeControls = RANGE_FILTER_TABS.has(tab);
+  const activeTabDetails = STATS_TABS.find((item) => item.id === tab) ?? {
+    id: 'overview' as const,
+    label: 'Overview',
+    description: 'Summary and recommendations',
+    icon: '📊',
+    activeClass: 'from-sky-500 to-indigo-600',
+  };
 
   return (
     <div
@@ -386,56 +463,85 @@ export function GroupTrainingStats({
 
           {/* Tabs + Controls */}
           {hasTrainingSessions && (
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-              <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm flex-wrap">
-                {([
-                  { id: 'overview', label: '📊 Overview' },
-                  { id: 'progress', label: '📈 Progress' },
-                  { id: 'letters', label: '🔤 Letters' },
-                  { id: 'mistakes', label: '❌ Mistakes' },
-                  { id: 'sessions', label: '📋 Sessions' },
-                  { id: 'leaderboard', label: '🏆 Leaderboard' },
-                ] as const).map((t) => (
-                  <button
-                    key={t.id}
-                    className={`px-3 py-1.5 rounded-lg transition-colors ${
-                      tab === t.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600 hover:text-slate-800'
-                    }`}
-                    onClick={() => setTab(t.id)}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden">
-                  {(
-                    [
-                      { label: 'All', v: 'all' },
-                      { label: '7d', v: 7 },
-                      { label: '30d', v: 30 },
-                      { label: '90d', v: 90 },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={String(opt.v)}
-                      onClick={() => applyRangePreset(opt.v)}
-                      className="px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                      disabled={isLoading || sessionResults.length === 0}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-sm">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  {STATS_TABS.map((t) => {
+                    const active = tab === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`group relative flex shrink-0 items-center gap-2 overflow-hidden rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                          active
+                            ? 'text-white shadow-md shadow-indigo-100'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        }`}
+                        onClick={() => setTab(t.id)}
+                        aria-pressed={active}
+                      >
+                        {active && (
+                          <span
+                            className={`absolute inset-0 bg-gradient-to-r ${t.activeClass}`}
+                            aria-hidden="true"
+                          />
+                        )}
+                        <span
+                          className={`relative flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold ${
+                            active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {t.icon}
+                        </span>
+                        <span className="relative whitespace-nowrap">{t.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                {range && (
-                  <button
-                    onClick={() => setRange(null)}
-                    className="px-2.5 py-1.5 text-xs rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  >
-                    Clear Range
-                  </button>
-                )}
+                <div className="flex flex-col gap-2 border-t border-slate-100 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-slate-500">
+                    <span className="font-semibold text-slate-700">{activeTabDetails.label}:</span>{' '}
+                    {activeTabDetails.description}
+                  </p>
+                  {!showRangeControls && (
+                    <p className="text-xs text-slate-500">Uses your full local history.</p>
+                  )}
+                </div>
               </div>
+              {showRangeControls && (
+                <div className="flex items-center gap-3 flex-wrap rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Date range
+                  </span>
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-white overflow-hidden">
+                    {(
+                      [
+                        { label: 'All', v: 'all' },
+                        { label: '7d', v: 7 },
+                        { label: '30d', v: 30 },
+                        { label: '90d', v: 90 },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={String(opt.v)}
+                        onClick={() => applyRangePreset(opt.v)}
+                        className="px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                        disabled={isLoading || sessionResults.length === 0}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {range && (
+                    <button
+                      onClick={() => setRange(null)}
+                      className="px-2.5 py-1.5 text-xs rounded-md bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
+                    >
+                      Clear range
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -864,6 +970,9 @@ export function GroupTrainingStats({
             <Leaderboard limitCount={20} />
           </div>
         )}
+
+        {/* ==================== ACHIEVEMENTS TAB ==================== */}
+        {tab === 'achievements' && <AchievementTrophyCase sessions={sessionResults} />}
       </div>
     </div>
   );

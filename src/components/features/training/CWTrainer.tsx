@@ -7,6 +7,7 @@ import { TrainingRouter } from '@/components/features/training/TrainingRouter';
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { SyncStatusIndicator } from '@/components/ui/training/SyncStatusIndicator';
 import { ToastOverlay } from '@/components/ui/training/ToastOverlay';
+import { useAchievementsActions, useAchievementsState } from '@/hooks/useAchievements';
 import { useAuth, type AuthUserSummary } from '@/hooks/useAuth';
 import { useEchoTrainingSession } from '@/hooks/useEchoTrainingSession';
 import { useIcrSettings } from '@/hooks/useIcrSettings';
@@ -218,6 +219,8 @@ export function CWTrainer(): JSX.Element {
 
   const groupSessions = useMemo(() => sessions.filter((s) => (s.mode ?? 'group') === 'group'), [sessions]);
   const echoSessions = useMemo(() => sessions.filter((s) => s.mode === 'echo'), [sessions]);
+  const { latestUnlockedAchievements } = useAchievementsState(groupSessions);
+  const { clearLatestUnlockedAchievements } = useAchievementsActions();
 
   const groupHeatmapSessions = useMemo(() => mapSessionsToHeatmap(groupSessions), [groupSessions]);
   const echoHeatmapSessions = useMemo(() => mapSessionsToHeatmap(echoSessions), [echoSessions]);
@@ -283,6 +286,8 @@ export function CWTrainer(): JSX.Element {
           stopTrainingIfActive={stopTrainingIfActive}
           sharedAudio={sharedAudio} icrSettings={icrSettings} showToast={showToast}
           handleMoveMode={handleMoveMode}
+          latestUnlockedAchievements={latestUnlockedAchievements}
+          onClearLatestUnlockedAchievements={clearLatestUnlockedAchievements}
         />
       </div>
 

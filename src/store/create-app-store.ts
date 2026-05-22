@@ -1,11 +1,13 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
+import type { AchievementService } from '@/lib/services/achievement.service';
 import type { IcrSessionService } from '@/lib/services/icr-session.service';
 import type { SessionService } from '@/lib/services/session.service';
 import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
 import { isGroupTrainingRuntimeBlockingSync } from '@/lib/training/groupSessionMachine';
 
 import { contextEquals } from './context-utils';
+import { createAchievementsSlice, type AchievementsSlice } from './slices/achievements.slice';
 import { createIcrSessionsSlice, type IcrSessionsSlice } from './slices/icr-sessions.slice';
 import { createSessionsSlice, type SessionsSlice } from './slices/sessions.slice';
 import {
@@ -21,12 +23,14 @@ import type { ContextSlice, StoreContextValue } from './types';
 export type AppStore = TrainingRuntimeSlice &
   TrainingSettingsSlice &
   SessionsSlice &
+  AchievementsSlice &
   IcrSessionsSlice &
   ContextSlice;
 
 export interface CreateAppStoreOptions {
   readonly context: StoreContextValue;
   readonly sessionService: SessionService;
+  readonly achievementService: AchievementService;
   readonly trainingSettingsService: TrainingSettingsService;
   readonly icrSessionService: IcrSessionService;
 }
@@ -34,6 +38,7 @@ export interface CreateAppStoreOptions {
 export const createAppStore = ({
   context,
   sessionService,
+  achievementService,
   trainingSettingsService,
   icrSessionService,
 }: CreateAppStoreOptions): StoreApi<AppStore> =>
@@ -100,6 +105,16 @@ export const createAppStore = ({
       set: (partial, replace) => set(partial as Partial<AppStore>, replace),
     });
 
+    const achievementsSlice = createAchievementsSlice({
+      service: achievementService,
+      getContext: () => get().context,
+      get: () => ({
+        achievements: get().achievements,
+        achievementsStatus: get().achievementsStatus,
+      }),
+      set: (partial, replace) => set(partial as Partial<AppStore>, replace),
+    });
+
     const icrSessionsSlice = createIcrSessionsSlice({
       service: icrSessionService,
       get: () => ({ icrSessions: get().icrSessions, icrSessionsStatus: get().icrSessionsStatus }),
@@ -112,6 +127,7 @@ export const createAppStore = ({
       ...trainingRuntimeSlice,
       ...trainingSettingsSlice,
       ...sessionsSlice,
+      ...achievementsSlice,
       ...icrSessionsSlice,
     };
   });

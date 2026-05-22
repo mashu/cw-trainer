@@ -6,10 +6,17 @@ import { useStore } from 'zustand';
 import type { StoreApi } from 'zustand/vanilla';
 
 import {
+  FirebaseAchievementRepository,
   FirebaseSessionRepository,
   FirebaseTrainingSettingsRepository,
 } from '@/lib/db/repositories';
-import { IcrSessionService, SessionService, TrainingSettingsService } from '@/lib/services';
+import {
+  AchievementService,
+  IcrSessionService,
+  SessionService,
+  TrainingSettingsService,
+} from '@/lib/services';
+import type { AchievementService as AchievementServiceType } from '@/lib/services/achievement.service';
 import type { IcrSessionService as IcrSessionServiceType } from '@/lib/services/icr-session.service';
 import type { SessionService as SessionServiceType } from '@/lib/services/session.service';
 import type { TrainingSettingsService as TrainingSettingsServiceType } from '@/lib/services/training-settings.service';
@@ -27,6 +34,7 @@ interface AppStoreProviderProps {
   readonly firebase?: FirebaseServicesLite;
   readonly user: AppUser | null;
   readonly sessionService?: SessionServiceType;
+  readonly achievementService?: AchievementServiceType;
   readonly trainingSettingsService?: TrainingSettingsServiceType;
   readonly icrSessionService?: IcrSessionServiceType;
 }
@@ -47,14 +55,17 @@ const StoreContext = createContext<AppStoreApi | null>(null);
 
 const buildDefaultServices = (): {
   sessionService: SessionServiceType;
+  achievementService: AchievementServiceType;
   trainingSettingsService: TrainingSettingsServiceType;
   icrSessionService: IcrSessionServiceType;
 } => {
   const sessionRepository = new FirebaseSessionRepository();
+  const achievementRepository = new FirebaseAchievementRepository();
   const trainingSettingsRepository = new FirebaseTrainingSettingsRepository();
 
   return {
     sessionService: new SessionService(sessionRepository),
+    achievementService: new AchievementService(achievementRepository),
     trainingSettingsService: new TrainingSettingsService(trainingSettingsRepository),
     icrSessionService: new IcrSessionService(),
   };
@@ -70,11 +81,13 @@ export function AppStoreProvider({
   firebase,
   user,
   sessionService,
+  achievementService,
   trainingSettingsService,
   icrSessionService,
 }: AppStoreProviderProps): JSX.Element {
   const servicesRef = useRef<{
     sessionService: SessionServiceType;
+    achievementService: AchievementServiceType;
     trainingSettingsService: TrainingSettingsServiceType;
     icrSessionService: IcrSessionServiceType;
   }>();
@@ -83,6 +96,7 @@ export function AppStoreProvider({
     const defaults = buildDefaultServices();
     servicesRef.current = {
       sessionService: sessionService ?? defaults.sessionService,
+      achievementService: achievementService ?? defaults.achievementService,
       trainingSettingsService: trainingSettingsService ?? defaults.trainingSettingsService,
       icrSessionService: icrSessionService ?? defaults.icrSessionService,
     };
@@ -90,6 +104,10 @@ export function AppStoreProvider({
 
   if (sessionService && servicesRef.current.sessionService !== sessionService) {
     servicesRef.current.sessionService = sessionService;
+  }
+
+  if (achievementService && servicesRef.current.achievementService !== achievementService) {
+    servicesRef.current.achievementService = achievementService;
   }
 
   if (
@@ -115,6 +133,7 @@ export function AppStoreProvider({
     storeRef.current = createAppStore({
       context,
       sessionService: servicesRef.current.sessionService,
+      achievementService: servicesRef.current.achievementService,
       trainingSettingsService: servicesRef.current.trainingSettingsService,
       icrSessionService: servicesRef.current.icrSessionService,
     });
@@ -167,6 +186,7 @@ export function AppStoreProvider({
               console.error('[app-store-provider] loadTrainingSettings error:', error);
             });
       const sessionsPromise = state.loadSessions().catch(() => undefined);
+      void state.loadAchievements().catch(() => undefined);
       void state.loadIcrSessions().catch(() => undefined);
       void Promise.all([settingsPromise, sessionsPromise]).then(() => markSyncCompleted());
     }, 50);

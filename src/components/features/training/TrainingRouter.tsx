@@ -6,6 +6,7 @@ import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSetting
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
 import type { UseTrainingSessionReturn } from '@/hooks/useTrainingSession';
+import type { UnlockedAchievement } from '@/lib/achievements';
 import type { SharedAudioFromSettings } from '@/lib/settingsToSharedAudioProps';
 import type { HeatmapSession, IcrSettings, SessionResult, TrainingMode, TrainingSettings } from '@/types';
 
@@ -52,6 +53,8 @@ interface TrainingRouterProps {
   readonly icrSettings: IcrSettings;
   readonly showToast: (t: { message: string; type: 'success' | 'error' | 'info' }) => void;
   readonly handleMoveMode: (delta: number) => void;
+  readonly latestUnlockedAchievements?: readonly UnlockedAchievement[];
+  readonly onClearLatestUnlockedAchievements?: () => void;
 }
 
 export function TrainingRouter({
@@ -74,8 +77,12 @@ export function TrainingRouter({
   icrSettings,
   showToast,
   handleMoveMode,
+  latestUnlockedAchievements = [],
+  onClearLatestUnlockedAchievements,
 }: TrainingRouterProps): JSX.Element | null {
   const [playerModalOpen, setPlayerModalOpen] = useState(false);
+  const clearLatestUnlockedAchievements =
+    onClearLatestUnlockedAchievements ?? ((): void => undefined);
 
   // ── Group mode: results screen ──
   if (
@@ -86,15 +93,21 @@ export function TrainingRouter({
     return (
       <SessionResultsView
         result={training.lastSessionResult}
+        unlockedAchievements={latestUnlockedAchievements}
         onTrainAgain={() => {
+          clearLatestUnlockedAchievements();
           training.dismissResults();
           void training.startTraining();
         }}
         onViewStats={() => {
+          clearLatestUnlockedAchievements();
           training.dismissResults();
           setGroupTab('stats');
         }}
-        onBack={() => training.dismissResults()}
+        onBack={() => {
+          clearLatestUnlockedAchievements();
+          training.dismissResults();
+        }}
       />
     );
   }

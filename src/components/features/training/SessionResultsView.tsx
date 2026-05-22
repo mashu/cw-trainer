@@ -2,7 +2,9 @@
 
 import React from 'react';
 
+import { AchievementUnlockBanner } from '@/components/ui/training/AchievementUnlockBanner';
 import { CharacterComparison } from '@/components/ui/training/CharacterComparison';
+import type { UnlockedAchievement } from '@/lib/achievements';
 
 export interface SessionResultsViewProps {
   readonly result: {
@@ -18,6 +20,7 @@ export interface SessionResultsViewProps {
   readonly onTrainAgain: () => void;
   readonly onViewStats: () => void;
   readonly onBack: () => void;
+  readonly unlockedAchievements?: readonly UnlockedAchievement[];
 }
 
 export function SessionResultsView({
@@ -25,6 +28,7 @@ export function SessionResultsView({
   onTrainAgain,
   onViewStats,
   onBack,
+  unlockedAchievements = [],
 }: SessionResultsViewProps): JSX.Element {
   return (
     <div className="space-y-6">
@@ -35,6 +39,8 @@ export function SessionResultsView({
         </h2>
         <p className="text-slate-600 mt-1">Here&apos;s how you did</p>
       </div>
+
+      <AchievementUnlockBanner achievements={unlockedAchievements} />
 
       {/* Score Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
