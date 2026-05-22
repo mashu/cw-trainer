@@ -186,7 +186,6 @@ export function AppStoreProvider({
               console.error('[app-store-provider] loadTrainingSettings error:', error);
             });
       const sessionsPromise = state.loadSessions().catch(() => undefined);
-      void state.loadAchievements().catch(() => undefined);
       void state.loadIcrSessions().catch(() => undefined);
       void Promise.all([settingsPromise, sessionsPromise]).then(() => markSyncCompleted());
     }, 50);
@@ -280,11 +279,7 @@ export function AppStoreProvider({
         state.trainingSessionActive ||
         isGroupTrainingRuntimeBlockingSync(state.groupTrainingRuntime);
       if (previousTrainingBlocked && !currentTrainingBlocked) {
-        console.debug('[app-store-provider] Training session ended, triggering loads');
-        // Do not reload training settings here: session teardown runs before
-        // processResults/auto-adjust and autosave; a settings load would race
-        // and replace the store with stale remote state.
-        triggerLoads({ skipTrainingSettings: true });
+        console.debug('[app-store-provider] Training session ended; deferring background sync');
         void tryRetryQueuedSessionsRef.current?.();
       }
       previousTrainingBlocked = currentTrainingBlocked;

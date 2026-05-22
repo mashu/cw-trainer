@@ -329,17 +329,24 @@ export function useTrainingSession({
         savedSessions.some((session) => session.timestamp === result.timestamp)
           ? savedSessions
           : [...historicalSessionsRef.current, result];
-      const achievementResult =
-        await currentEvaluateAchievementsForSessions(sessionsForAchievements);
-      if (achievementResult.newlyUnlocked.length > 0) {
-        currentShowToast({
-          message:
-            achievementResult.newlyUnlocked.length === 1
-              ? 'New trophy unlocked.'
-              : `${achievementResult.newlyUnlocked.length} new trophies unlocked.`,
-          type: 'success',
-        });
-      }
+      window.setTimeout(() => {
+        void currentEvaluateAchievementsForSessions(sessionsForAchievements).then(
+          (achievementResult) => {
+            if (achievementResult.newlyUnlocked.length > 0) {
+              currentShowToast({
+                message:
+                  achievementResult.newlyUnlocked.length === 1
+                    ? 'New trophy unlocked.'
+                    : `${achievementResult.newlyUnlocked.length} new trophies unlocked.`,
+                type: 'success',
+              });
+            }
+          },
+          (achievementError: unknown) => {
+            console.warn('[Training] Achievement evaluation failed:', achievementError);
+          },
+        );
+      }, 0);
     } catch (error) {
       currentShowToast({ message: ensureAppError(error).message, type: 'error' });
     }
