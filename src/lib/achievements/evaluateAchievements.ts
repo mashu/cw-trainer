@@ -20,7 +20,8 @@ type UnlockCandidate = {
   readonly session?: SessionResult | undefined;
 };
 
-const isGroupSession = (session: SessionResult): boolean => session.mode !== 'echo';
+const isGroupSession = (session: SessionResult): boolean =>
+  session.mode === undefined || session.mode === 'group';
 
 const toDateIndex = (date: string): number | null => {
   const timestamp = Date.parse(`${date}T00:00:00.000Z`);
@@ -224,7 +225,8 @@ const buildUnlockCandidates = ({
 
   const pressureCopy = findFirst(
     groupSessions,
-    (session) => session.accuracy >= 0.9 && session.avgResponseMs > 0 && session.avgResponseMs <= 1500,
+    (session) =>
+      session.accuracy >= 0.9 && session.avgResponseMs > 0 && session.avgResponseMs <= 1500,
   );
   if (pressureCopy) {
     candidates.push({ id: 'pressure-copy', session: pressureCopy });
@@ -277,7 +279,9 @@ export const evaluateAchievements = (
   now = Date.now(),
 ): AchievementEvaluationResult => {
   const progress = calculateAchievementProgress(sessions);
-  const existingById = new Map(existing.map((achievement) => [achievement.id, achievement] as const));
+  const existingById = new Map(
+    existing.map((achievement) => [achievement.id, achievement] as const),
+  );
   const candidates = buildUnlockCandidates({ sessions, progress });
   const newlyUnlocked: UnlockedAchievement[] = [];
   const unlockedById = new Map(existingById);

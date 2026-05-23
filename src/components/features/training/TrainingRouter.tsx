@@ -2,18 +2,36 @@
 
 import React, { Suspense, useState } from 'react';
 
+import { ChaseHomeView } from '@/components/features/chase/ChaseHomeView';
+import { ChaseResultsView } from '@/components/features/chase/ChaseResultsView';
+import { ChaseTrainingView } from '@/components/features/chase/ChaseTrainingView';
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
+import type { UseChaseTrainingSessionReturn } from '@/hooks/useChaseTrainingSession';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
 import type { UseTrainingSessionReturn } from '@/hooks/useTrainingSession';
 import type { UnlockedAchievement } from '@/lib/achievements';
 import type { SharedAudioFromSettings } from '@/lib/settingsToSharedAudioProps';
-import type { HeatmapSession, IcrSettings, SessionResult, TrainingMode, TrainingSettings } from '@/types';
+import type {
+  HeatmapSession,
+  IcrSettings,
+  SessionResult,
+  TrainingMode,
+  TrainingSettings,
+} from '@/types';
 
 // Lazy-loaded heavy views — only downloaded when the user navigates to them
-const ICRTrainer = React.lazy(() => import('@/components/features/icr/ICRTrainer').then(m => ({ default: m.ICRTrainer })));
-const GroupTrainingStats = React.lazy(() => import('@/components/features/stats/GroupTrainingStats').then(m => ({ default: m.GroupTrainingStats })));
-const TextPlayer = React.lazy(() => import('@/components/ui/training/TextPlayer').then(m => ({ default: m.TextPlayer })));
+const ICRTrainer = React.lazy(() =>
+  import('@/components/features/icr/ICRTrainer').then((m) => ({ default: m.ICRTrainer })),
+);
+const GroupTrainingStats = React.lazy(() =>
+  import('@/components/features/stats/GroupTrainingStats').then((m) => ({
+    default: m.GroupTrainingStats,
+  })),
+);
+const TextPlayer = React.lazy(() =>
+  import('@/components/ui/training/TextPlayer').then((m) => ({ default: m.TextPlayer })),
+);
 const TextPlayerModal = React.lazy(() =>
   import('@/components/ui/training/TextPlayerModal').then((m) => ({ default: m.TextPlayerModal })),
 );
@@ -40,14 +58,17 @@ interface TrainingRouterProps {
   readonly setActiveMode: (mode: TrainingMode) => void;
   readonly training: UseTrainingSessionReturn;
   readonly echoTraining: UseEchoTrainingSessionReturn;
+  readonly chaseTraining: UseChaseTrainingSessionReturn;
   readonly settings: TrainingSettings;
   readonly formSettings: FormTrainingSettings;
   readonly groupHeatmapSessions: readonly HeatmapSession[];
   readonly echoHeatmapSessions: readonly HeatmapSession[];
   readonly groupSessions: readonly SessionResult[];
   readonly echoSessions: readonly SessionResult[];
+  readonly chaseSessions: readonly SessionResult[];
   readonly lastAccuracyPercent: number;
   readonly lastEchoAccuracyPercent: number;
+  readonly lastChaseAccuracyPercent: number;
   readonly stopTrainingIfActive: () => void;
   readonly sharedAudio: SharedAudioFromSettings;
   readonly icrSettings: IcrSettings;
@@ -64,14 +85,17 @@ export function TrainingRouter({
   setActiveMode,
   training,
   echoTraining,
+  chaseTraining,
   settings,
   formSettings,
   groupHeatmapSessions,
   echoHeatmapSessions,
   groupSessions,
   echoSessions,
+  chaseSessions,
   lastAccuracyPercent,
   lastEchoAccuracyPercent,
+  lastChaseAccuracyPercent,
   stopTrainingIfActive,
   sharedAudio,
   icrSettings,
@@ -85,11 +109,7 @@ export function TrainingRouter({
     onClearLatestUnlockedAchievements ?? ((): void => undefined);
 
   // ── Group mode: results screen ──
-  if (
-    training.showResults &&
-    !training.isTraining &&
-    training.lastSessionResult
-  ) {
+  if (training.showResults && !training.isTraining && training.lastSessionResult) {
     return (
       <SessionResultsView
         result={training.lastSessionResult}
@@ -143,7 +163,12 @@ export function TrainingRouter({
   }
 
   // ── Group mode: home screen ──
-  if (!training.isTraining && !training.isCompletingSession && activeMode === 'group' && groupTab === 'train') {
+  if (
+    !training.isTraining &&
+    !training.isCompletingSession &&
+    activeMode === 'group' &&
+    groupTab === 'train'
+  ) {
     return (
       <TrainingHomeView
         sessions={groupHeatmapSessions}
@@ -214,6 +239,62 @@ export function TrainingRouter({
     );
   }
 
+  // ── Chase mode: results screen ──
+  if (
+    chaseTraining.status === 'results' &&
+    activeMode === 'chase' &&
+    chaseTraining.lastSessionResult
+  ) {
+    return (
+      <ChaseResultsView
+        result={chaseTraining.lastSessionResult}
+        onTrainAgain={() => {
+          chaseTraining.dismissResults();
+          void chaseTraining.startTraining();
+        }}
+        onBack={() => chaseTraining.dismissResults()}
+      />
+    );
+  }
+
+  // ── Chase mode: active training ──
+  if (
+    (chaseTraining.status === 'running' || chaseTraining.status === 'completing') &&
+    activeMode === 'chase'
+  ) {
+    return (
+      <ChaseTrainingView
+        target={chaseTraining.target}
+        lastResolvedTarget={chaseTraining.lastResolvedTarget}
+        userInput={chaseTraining.userInput}
+        lives={chaseTraining.lives}
+        level={chaseTraining.level}
+        score={chaseTraining.score}
+        streak={chaseTraining.streak}
+        bestStreak={chaseTraining.bestStreak}
+        levelProgress={chaseTraining.levelProgress}
+        groupsCompleted={chaseTraining.groupsCompleted}
+        onChange={chaseTraining.handleInputChange}
+        onSubmit={chaseTraining.submitAnswer}
+        onStop={chaseTraining.stopTraining}
+      />
+    );
+  }
+
+  // ── Chase mode: home screen ──
+  if (activeMode === 'chase') {
+    return (
+      <SwipeContainer onSwipeLeft={() => handleMoveMode(1)} onSwipeRight={() => handleMoveMode(-1)}>
+        <ChaseHomeView
+          settings={settings}
+          sessionCount={chaseSessions.length}
+          lastAccuracyPercent={lastChaseAccuracyPercent}
+          onStart={() => void chaseTraining.startTraining()}
+        />
+      </SwipeContainer>
+    );
+  }
+
   // ── Group mode: stats tab ──
   if (!training.isTraining && activeMode === 'group' && groupTab === 'stats') {
     return (
@@ -254,16 +335,9 @@ export function TrainingRouter({
   // ── ICR mode ──
   if (activeMode === 'icr') {
     return (
-      <SwipeContainer
-        onSwipeLeft={() => handleMoveMode(1)}
-        onSwipeRight={() => handleMoveMode(-1)}
-      >
+      <SwipeContainer onSwipeLeft={() => handleMoveMode(1)} onSwipeRight={() => handleMoveMode(-1)}>
         <Suspense fallback={<LazyFallback />}>
-          <ICRTrainer
-            sharedAudio={sharedAudio}
-            icrSettings={icrSettings}
-            showToast={showToast}
-          />
+          <ICRTrainer sharedAudio={sharedAudio} icrSettings={icrSettings} showToast={showToast} />
         </Suspense>
       </SwipeContainer>
     );
@@ -303,8 +377,8 @@ export function TrainingRouter({
       className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
       role="alert"
     >
-      Unable to match a training view for the current mode and session state. Try switching mode with
-      the carousel or reloading the page.
+      Unable to match a training view for the current mode and session state. Try switching mode
+      with the carousel or reloading the page.
     </div>
   );
 }

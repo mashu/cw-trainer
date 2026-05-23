@@ -1,6 +1,6 @@
 import type { TrainingMode } from '@/types';
 
-const VALID_MODES: readonly TrainingMode[] = ['group', 'icr', 'echo', 'player'];
+const VALID_MODES: readonly TrainingMode[] = ['group', 'icr', 'echo', 'chase', 'player'];
 
 /**
  * Reads `mode` from a URL query string (e.g. `window.location.search`).

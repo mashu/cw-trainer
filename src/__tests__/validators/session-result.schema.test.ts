@@ -82,6 +82,15 @@ describe('sessionResultSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts chase sessions', () => {
+    const result = sessionResultSchema.safeParse({
+      ...buildValidSession(),
+      mode: 'chase',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('rejects when groupTimings length does not match groups', () => {
     const candidate = {
       ...buildValidSession(),

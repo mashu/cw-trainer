@@ -16,6 +16,7 @@ const MODE_ITEMS: ReadonlyArray<{
   { id: 'group', label: 'Group' },
   { id: 'icr', label: 'ICR' },
   { id: 'echo', label: 'Echo' },
+  { id: 'chase', label: 'Chase' },
   { id: 'player', label: 'Player' },
 ];
 
@@ -84,10 +85,8 @@ export function TrainingModeCarousel({
             {MODE_ITEMS.map((item, index) => {
               const distance = Math.abs(index - activeIndex);
               const isActive = index === activeIndex;
-              const opacity =
-                distance === 0 ? 1 : distance === 1 ? 0.65 : 0.35;
-              const scale =
-                distance === 0 ? 1 : distance === 1 ? 0.94 : 0.88;
+              const opacity = distance === 0 ? 1 : distance === 1 ? 0.65 : 0.35;
+              const scale = distance === 0 ? 1 : distance === 1 ? 0.94 : 0.88;
               const colorClass = isActive
                 ? 'border-emerald-500 bg-emerald-500 text-white shadow-lg'
                 : 'border-slate-200 bg-slate-50 text-slate-600';

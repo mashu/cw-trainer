@@ -16,16 +16,14 @@ export interface BuildSessionResultInput {
   readonly answers: readonly string[];
   readonly startedAt: number;
   readonly groupTimings: readonly SessionTiming[];
-  readonly mode?: 'group' | 'echo';
+  readonly mode?: 'group' | 'echo' | 'chase';
 }
 
 /**
  * Build a complete SessionResult from raw training data.
  * Pure function — no React, no side effects.
  */
-export function buildSessionResult(
-  input: BuildSessionResultInput,
-): SessionResult {
+export function buildSessionResult(input: BuildSessionResultInput): SessionResult {
   const { sentGroups, answers, startedAt, groupTimings, mode } = input;
 
   const groups: SessionGroup[] = sentGroups.map((sent, idx) => ({
@@ -42,8 +40,7 @@ export function buildSessionResult(
   });
   const avgResponseMs = computeAverageResponseMs(
     groupTimings.map((t) => ({
-      timeToCompleteMs:
-        typeof t.perCharMs === 'number' ? t.perCharMs : t.timeToCompleteMs,
+      timeToCompleteMs: typeof t.perCharMs === 'number' ? t.perCharMs : t.timeToCompleteMs,
     })),
   );
   const totalChars = calculateTotalChars(groups);

@@ -4,6 +4,7 @@ import React from 'react';
 import { TrainingRouter } from '@/components/features/training/TrainingRouter';
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
+import type { UseChaseTrainingSessionReturn } from '@/hooks/useChaseTrainingSession';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
 import type { UseTrainingSessionReturn } from '@/hooks/useTrainingSession';
 import { settingsToSharedAudioProps } from '@/lib/settingsToSharedAudioProps';
@@ -62,6 +63,28 @@ const echoTraining = {
   dismissResults: jest.fn(),
 } as UseEchoTrainingSessionReturn;
 
+const chaseTraining = {
+  status: 'idle',
+  isTraining: false,
+  target: null,
+  lastResolvedTarget: null,
+  userInput: '',
+  lives: 3,
+  level: 1,
+  score: 0,
+  streak: 0,
+  bestStreak: 0,
+  correctInLevel: 0,
+  levelProgress: 0,
+  groupsCompleted: 0,
+  lastSessionResult: null,
+  startTraining: jest.fn(),
+  stopTraining: jest.fn(),
+  dismissResults: jest.fn(),
+  handleInputChange: jest.fn(),
+  submitAnswer: jest.fn(),
+} as UseChaseTrainingSessionReturn;
+
 describe('TrainingRouter active session resilience', () => {
   it('renders session results when showResults is true', () => {
     render(
@@ -83,14 +106,17 @@ describe('TrainingRouter active session resilience', () => {
           },
         })}
         echoTraining={echoTraining}
+        chaseTraining={chaseTraining}
         settings={DEFAULT_TRAINING_SETTINGS}
         formSettings={formSettings}
         groupHeatmapSessions={[]}
         echoHeatmapSessions={[]}
         groupSessions={[]}
         echoSessions={[]}
+        chaseSessions={[]}
         lastAccuracyPercent={0}
         lastEchoAccuracyPercent={0}
+        lastChaseAccuracyPercent={0}
         stopTrainingIfActive={jest.fn()}
         sharedAudio={settingsToSharedAudioProps(DEFAULT_TRAINING_SETTINGS)}
         icrSettings={{
@@ -121,14 +147,17 @@ describe('TrainingRouter active session resilience', () => {
         setActiveMode={jest.fn()}
         training={buildTraining()}
         echoTraining={echoTraining}
+        chaseTraining={chaseTraining}
         settings={DEFAULT_TRAINING_SETTINGS}
         formSettings={formSettings}
         groupHeatmapSessions={[]}
         echoHeatmapSessions={[]}
         groupSessions={[]}
         echoSessions={[]}
+        chaseSessions={[]}
         lastAccuracyPercent={0}
         lastEchoAccuracyPercent={0}
+        lastChaseAccuracyPercent={0}
         stopTrainingIfActive={jest.fn()}
         sharedAudio={settingsToSharedAudioProps(DEFAULT_TRAINING_SETTINGS)}
         icrSettings={{
@@ -148,5 +177,50 @@ describe('TrainingRouter active session resilience', () => {
 
     expect(screen.getByText(/Enter answers per group/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Start Training/i })).not.toBeInTheDocument();
+  });
+
+  it('renders Chase mode as a separate training surface', () => {
+    render(
+      <TrainingRouter
+        activeMode="chase"
+        groupTab="train"
+        setGroupTab={jest.fn()}
+        setActiveMode={jest.fn()}
+        training={buildTraining({
+          isTraining: false,
+          hasActiveSession: false,
+          isCompletingSession: false,
+        })}
+        echoTraining={echoTraining}
+        chaseTraining={chaseTraining}
+        settings={DEFAULT_TRAINING_SETTINGS}
+        formSettings={formSettings}
+        groupHeatmapSessions={[]}
+        echoHeatmapSessions={[]}
+        groupSessions={[]}
+        echoSessions={[]}
+        chaseSessions={[]}
+        lastAccuracyPercent={0}
+        lastEchoAccuracyPercent={0}
+        lastChaseAccuracyPercent={0}
+        stopTrainingIfActive={jest.fn()}
+        sharedAudio={settingsToSharedAudioProps(DEFAULT_TRAINING_SETTINGS)}
+        icrSettings={{
+          trialsPerSession: 30,
+          trialDelayMs: 700,
+          vadEnabled: true,
+          vadThreshold: 0.08,
+          vadHoldMs: 60,
+          bucketGreenMaxMs: 400,
+          bucketYellowMaxMs: 600,
+          bucketOrangeMaxMs: 800,
+        }}
+        showToast={jest.fn()}
+        handleMoveMode={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Chase Mode/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Start Chase/i })).toBeInTheDocument();
   });
 });

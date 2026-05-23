@@ -10,6 +10,7 @@ describe('trainingModeFromSearch', () => {
     expect(trainingModeFromSearch('?mode=icr')).toBe('icr');
     expect(trainingModeFromSearch('?mode=group')).toBe('group');
     expect(trainingModeFromSearch('?mode=echo')).toBe('echo');
+    expect(trainingModeFromSearch('?mode=chase')).toBe('chase');
     expect(trainingModeFromSearch('?mode=player')).toBe('player');
   });
 

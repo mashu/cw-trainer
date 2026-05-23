@@ -26,10 +26,10 @@ export interface AppUser {
 export type CharacterSetMode = 'koch' | 'digits' | 'custom' | 'mixed';
 
 /** High-level training modes exposed in the UI. */
-export type TrainingMode = 'group' | 'icr' | 'echo' | 'player';
+export type TrainingMode = 'group' | 'icr' | 'echo' | 'chase' | 'player';
 
 /** Persisted session families stored in the shared session history. */
-export type SessionMode = 'group' | 'echo';
+export type SessionMode = 'group' | 'echo' | 'chase';
 
 /** Echo-mode keyer behaviour when sending with paddles. */
 export type EchoKeyerMode = 'manual' | 'iambic-b';
@@ -259,4 +259,3 @@ export interface LetterStatistic {
   readonly total: number;
   readonly correct: number;
 }
-

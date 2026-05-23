@@ -9,6 +9,7 @@ import { SyncStatusIndicator } from '@/components/ui/training/SyncStatusIndicato
 import { ToastOverlay } from '@/components/ui/training/ToastOverlay';
 import { useAchievementsActions, useAchievementsState } from '@/hooks/useAchievements';
 import { useAuth, type AuthUserSummary } from '@/hooks/useAuth';
+import { useChaseTrainingSession } from '@/hooks/useChaseTrainingSession';
 import { useEchoTrainingSession } from '@/hooks/useEchoTrainingSession';
 import { useIcrSettings } from '@/hooks/useIcrSettings';
 import { useSessionsActions, useSessionsState } from '@/hooks/useSessions';
@@ -25,13 +26,19 @@ import type { SessionResult, TrainingMode, TrainingSettings } from '@/types';
 
 import { AppHeader } from './AppHeader';
 
-const MODE_ORDER: readonly TrainingMode[] = ['group', 'icr', 'echo', 'player'];
+const MODE_ORDER: readonly TrainingMode[] = ['group', 'icr', 'echo', 'chase', 'player'];
 const LAST_MODE_STORAGE_KEY = 'cw-trainer:last-mode';
 
 export function CWTrainer(): JSX.Element {
   const {
-    firebaseReady, firebaseServices, authInProgress,
-    user: authUser, firebaseUser, signInWithGoogle, signOut, switchAccount,
+    firebaseReady,
+    firebaseServices,
+    authInProgress,
+    user: authUser,
+    firebaseUser,
+    signInWithGoogle,
+    signOut,
+    switchAccount,
   } = useAuth();
 
   const { toast, showToast, dismissToast } = useToast();
@@ -47,20 +54,32 @@ export function CWTrainer(): JSX.Element {
   const { icrSettings, setIcrSettings } = useIcrSettings();
 
   const { saveSettings, latestSettingsRef } = useSettingsAutoSave({
-    settings, trainingSettingsStatus,
+    settings,
+    trainingSettingsStatus,
     saveTrainingSettings,
-    firebaseServices, firebaseUserUid: firebaseUser?.uid, showToast,
+    firebaseServices,
+    firebaseUserUid: firebaseUser?.uid,
+    showToast,
   });
 
   const training = useTrainingSession({
-    settings, sessions: sessions ?? [],
-    saveSession,
-    setTrainingSettingsState, showToast,
-  });
-  const echoTraining = useEchoTrainingSession({
-    settings, sessions: sessions ?? [],
+    settings,
+    sessions: sessions ?? [],
     saveSession,
     setTrainingSettingsState,
+    showToast,
+  });
+  const echoTraining = useEchoTrainingSession({
+    settings,
+    sessions: sessions ?? [],
+    saveSession,
+    setTrainingSettingsState,
+    showToast,
+  });
+  const chaseTraining = useChaseTrainingSession({
+    settings,
+    sessions: sessions ?? [],
+    saveSession,
     showToast,
   });
 
@@ -77,7 +96,13 @@ export function CWTrainer(): JSX.Element {
       return;
     }
     const savedMode = window.localStorage.getItem(LAST_MODE_STORAGE_KEY);
-    if (savedMode === 'group' || savedMode === 'icr' || savedMode === 'echo' || savedMode === 'player') {
+    if (
+      savedMode === 'group' ||
+      savedMode === 'icr' ||
+      savedMode === 'echo' ||
+      savedMode === 'chase' ||
+      savedMode === 'player'
+    ) {
       setActiveMode(savedMode);
     }
   }, []);
@@ -121,6 +146,8 @@ export function CWTrainer(): JSX.Element {
       echoIsTraining: echoTraining.isTraining,
       echoCompletingSession: echoTraining.isCompletingSession,
       echoShowResults: echoTraining.showResults,
+      chaseIsTraining: chaseTraining.isTraining,
+      chaseShowResults: chaseTraining.status === 'results',
       activeMode,
       groupTab,
     }),
@@ -133,6 +160,8 @@ export function CWTrainer(): JSX.Element {
       echoTraining.isTraining,
       echoTraining.isCompletingSession,
       echoTraining.showResults,
+      chaseTraining.isTraining,
+      chaseTraining.status,
       activeMode,
       groupTab,
     ],
@@ -140,10 +169,21 @@ export function CWTrainer(): JSX.Element {
 
   useEffect(() => {
     const s = interruptedSessionGuardInputs;
-    if (!s.trainingSessionActive || s.trainingIsTraining || s.trainingHasActiveSession || s.echoIsTraining) return;
+    if (
+      !s.trainingSessionActive ||
+      s.trainingIsTraining ||
+      s.trainingHasActiveSession ||
+      s.echoIsTraining ||
+      s.chaseIsTraining
+    )
+      return;
     if (s.trainingCompletingSession || s.echoCompletingSession) return;
-    if (s.trainingShowResults || s.echoShowResults) return;
-    if ((s.activeMode !== 'group' && s.activeMode !== 'echo') || s.groupTab !== 'train') return;
+    if (s.trainingShowResults || s.echoShowResults || s.chaseShowResults) return;
+    if (
+      (s.activeMode !== 'group' && s.activeMode !== 'echo' && s.activeMode !== 'chase') ||
+      s.groupTab !== 'train'
+    )
+      return;
     resetTrainingSessionLocks();
     showToast({ message: 'Session was interrupted. Start a new one when ready.', type: 'info' });
   }, [interruptedSessionGuardInputs, resetTrainingSessionLocks, showToast]);
@@ -162,7 +202,11 @@ export function CWTrainer(): JSX.Element {
   }, [firebaseReady, firebaseServices, showToast, signInWithGoogle]);
 
   const handleLogout = useCallback(async (): Promise<void> => {
-    try { await signOut(); } catch { showToast({ message: 'Failed to sign out.', type: 'error' }); }
+    try {
+      await signOut();
+    } catch {
+      showToast({ message: 'Failed to sign out.', type: 'error' });
+    }
   }, [showToast, signOut]);
 
   const handleSwitchAccount = useCallback(async (): Promise<void> => {
@@ -181,7 +225,8 @@ export function CWTrainer(): JSX.Element {
   const stopTrainingIfActive = useCallback((): void => {
     if (training.hasActiveSession) training.stopTraining();
     if (echoTraining.isTraining) echoTraining.stopTraining();
-  }, [training, echoTraining]);
+    if (chaseTraining.isTraining) chaseTraining.stopTraining();
+  }, [training, echoTraining, chaseTraining]);
 
   const handleChangeMode = useCallback(
     (m: TrainingMode) => {
@@ -190,19 +235,27 @@ export function CWTrainer(): JSX.Element {
         return;
       }
       if (echoTraining.isTraining && activeMode === 'echo') {
-        showToast({ message: 'Stop the active echo session before switching modes.', type: 'info' });
+        showToast({
+          message: 'Stop the active echo session before switching modes.',
+          type: 'info',
+        });
+        return;
+      }
+      if (chaseTraining.isTraining && activeMode === 'chase') {
+        showToast({ message: 'Stop the active Chase run before switching modes.', type: 'info' });
         return;
       }
       setActiveMode(m);
       if (m !== 'group') setGroupTab('train');
     },
-    [training, echoTraining, activeMode, showToast],
+    [training, echoTraining, chaseTraining, activeMode, showToast],
   );
 
   const handleMoveMode = useCallback(
     (delta: number): void => {
       const currentIndex = MODE_ORDER.indexOf(activeMode);
-      const nextMode = MODE_ORDER[Math.max(0, Math.min(MODE_ORDER.length - 1, currentIndex + delta))];
+      const nextMode =
+        MODE_ORDER[Math.max(0, Math.min(MODE_ORDER.length - 1, currentIndex + delta))];
       if (nextMode && nextMode !== activeMode) handleChangeMode(nextMode);
     },
     [activeMode, handleChangeMode],
@@ -213,28 +266,41 @@ export function CWTrainer(): JSX.Element {
     return {
       ...rest,
       customSet: customSet ? [...customSet] : [],
-      ...(customSequence && customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
+      ...(customSequence && customSequence.length > 0
+        ? { customSequence: [...customSequence] }
+        : {}),
     };
   }, [settings]);
 
-  const groupSessions = useMemo(() => sessions.filter((s) => (s.mode ?? 'group') === 'group'), [sessions]);
+  const groupSessions = useMemo(
+    () => sessions.filter((s) => (s.mode ?? 'group') === 'group'),
+    [sessions],
+  );
   const echoSessions = useMemo(() => sessions.filter((s) => s.mode === 'echo'), [sessions]);
+  const chaseSessions = useMemo(() => sessions.filter((s) => s.mode === 'chase'), [sessions]);
   const { latestUnlockedAchievements } = useAchievementsState(groupSessions);
   const { clearLatestUnlockedAchievements } = useAchievementsActions();
 
   const groupHeatmapSessions = useMemo(() => mapSessionsToHeatmap(groupSessions), [groupSessions]);
   const echoHeatmapSessions = useMemo(() => mapSessionsToHeatmap(echoSessions), [echoSessions]);
 
-  const computeLastAccuracy = useCallback(
-    (items: readonly SessionResult[]): number => {
-      const last = items[items.length - 1];
-      return last && Number.isFinite(last.accuracy) ? Math.round(last.accuracy * 100) : 0;
-    },
-    [],
-  );
+  const computeLastAccuracy = useCallback((items: readonly SessionResult[]): number => {
+    const last = items[items.length - 1];
+    return last && Number.isFinite(last.accuracy) ? Math.round(last.accuracy * 100) : 0;
+  }, []);
 
-  const lastAccuracyPercent = useMemo(() => computeLastAccuracy(groupSessions), [computeLastAccuracy, groupSessions]);
-  const lastEchoAccuracyPercent = useMemo(() => computeLastAccuracy(echoSessions), [computeLastAccuracy, echoSessions]);
+  const lastAccuracyPercent = useMemo(
+    () => computeLastAccuracy(groupSessions),
+    [computeLastAccuracy, groupSessions],
+  );
+  const lastEchoAccuracyPercent = useMemo(
+    () => computeLastAccuracy(echoSessions),
+    [computeLastAccuracy, echoSessions],
+  );
+  const lastChaseAccuracyPercent = useMemo(
+    () => computeLastAccuracy(chaseSessions),
+    [computeLastAccuracy, chaseSessions],
+  );
   const sharedAudio = useMemo(() => settingsToSharedAudioProps(settings), [settings]);
 
   return (
@@ -243,25 +309,36 @@ export function CWTrainer(): JSX.Element {
 
       <Sidebar
         open={sidebarOpen}
-        onClose={() => { deferredToastShownRef.current = false; setSidebarOpen(false); }}
-        user={authUser} firebaseReady={firebaseReady}
-        onGoogleLogin={handleLogin} onLogout={handleLogout} onSwitchAccount={handleSwitchAccount}
-        authInProgress={authInProgress} settings={formSettings}
+        onClose={() => {
+          deferredToastShownRef.current = false;
+          setSidebarOpen(false);
+        }}
+        user={authUser}
+        firebaseReady={firebaseReady}
+        onGoogleLogin={handleLogin}
+        onLogout={handleLogout}
+        onSwitchAccount={handleSwitchAccount}
+        authInProgress={authInProgress}
+        settings={formSettings}
         setSettings={(next) => {
           const nextValue = typeof next === 'function' ? next(formSettings) : next;
           const converted = formSettingsToStoreUpdate(nextValue);
           setTrainingSettingsState((prev) => ({ ...prev, ...converted }));
           latestSettingsRef.current = { ...formSettings, ...converted } as TrainingSettings;
-          if ((training.hasActiveSession || echoTraining.isTraining) && !deferredToastShownRef.current) {
+          if (
+            (training.hasActiveSession || echoTraining.isTraining || chaseTraining.isTraining) &&
+            !deferredToastShownRef.current
+          ) {
             deferredToastShownRef.current = true;
             showToast({ message: 'Changes will apply after the session ends.', type: 'info' });
           }
         }}
         onSaveSettings={() => void saveSettings({ source: 'manual' })}
         isSavingSettings={isSavingSettings}
-        sessionResultsCount={sessions.length} latestAccuracyPercent={lastAccuracyPercent}
+        sessionResultsCount={sessions.length}
+        latestAccuracyPercent={lastAccuracyPercent}
         onViewStats={() => {
-          if (training.hasActiveSession || echoTraining.isTraining) {
+          if (training.hasActiveSession || echoTraining.isTraining || chaseTraining.isTraining) {
             showToast({ message: 'Stop the active session before opening stats.', type: 'info' });
             return;
           }
@@ -269,29 +346,48 @@ export function CWTrainer(): JSX.Element {
           setActiveMode('group');
           setGroupTab('stats');
         }}
-        activeMode={activeMode} onChangeMode={handleChangeMode}
-        icrSettings={icrSettings} setIcrSettings={setIcrSettings}
+        activeMode={activeMode}
+        onChangeMode={handleChangeMode}
+        icrSettings={icrSettings}
+        setIcrSettings={setIcrSettings}
       />
 
       <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl ring-1 ring-black/5 p-3 sm:p-6 lg:p-8 border border-white/20">
         <AppHeader onOpenSidebar={() => setSidebarOpen(true)} />
 
         <TrainingRouter
-          activeMode={activeMode} groupTab={groupTab} setGroupTab={setGroupTab} setActiveMode={setActiveMode}
-          training={training} echoTraining={echoTraining}
-          settings={settings} formSettings={formSettings}
-          groupHeatmapSessions={groupHeatmapSessions} echoHeatmapSessions={echoHeatmapSessions}
-          groupSessions={groupSessions} echoSessions={echoSessions}
-          lastAccuracyPercent={lastAccuracyPercent} lastEchoAccuracyPercent={lastEchoAccuracyPercent}
+          activeMode={activeMode}
+          groupTab={groupTab}
+          setGroupTab={setGroupTab}
+          setActiveMode={setActiveMode}
+          training={training}
+          echoTraining={echoTraining}
+          chaseTraining={chaseTraining}
+          settings={settings}
+          formSettings={formSettings}
+          groupHeatmapSessions={groupHeatmapSessions}
+          echoHeatmapSessions={echoHeatmapSessions}
+          groupSessions={groupSessions}
+          echoSessions={echoSessions}
+          chaseSessions={chaseSessions}
+          lastAccuracyPercent={lastAccuracyPercent}
+          lastEchoAccuracyPercent={lastEchoAccuracyPercent}
+          lastChaseAccuracyPercent={lastChaseAccuracyPercent}
           stopTrainingIfActive={stopTrainingIfActive}
-          sharedAudio={sharedAudio} icrSettings={icrSettings} showToast={showToast}
+          sharedAudio={sharedAudio}
+          icrSettings={icrSettings}
+          showToast={showToast}
           handleMoveMode={handleMoveMode}
           latestUnlockedAchievements={latestUnlockedAchievements}
           onClearLatestUnlockedAchievements={clearLatestUnlockedAchievements}
         />
       </div>
 
-      <SyncStatusIndicator totalSessions={sessions.length} isSyncing={sessionsSyncing} onRetry={() => void syncPendingSessions()} />
+      <SyncStatusIndicator
+        totalSessions={sessions.length}
+        isSyncing={sessionsSyncing}
+        onRetry={() => void syncPendingSessions()}
+      />
     </div>
   );
 }

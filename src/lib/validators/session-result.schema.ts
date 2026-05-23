@@ -33,7 +33,7 @@ export const sessionResultSchema = z
     totalChars: z.number().int().min(0),
     effectiveAlphabetSize: z.number().min(0),
     score: z.number().min(0),
-    mode: z.enum(['group', 'echo']).optional(),
+    mode: z.enum(['group', 'echo', 'chase']).optional(),
     firestoreId: z.string().min(1).optional(),
   })
   .superRefine((value, ctx) => {

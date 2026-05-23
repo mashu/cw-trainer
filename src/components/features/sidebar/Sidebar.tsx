@@ -111,7 +111,7 @@ export function Sidebar({
       if (!services) return;
       const firebaseLite = { db: services.db, auth: services.auth };
       await setUserCallSign(firebaseLite, { uid: user.uid }, value || null);
-      
+
       // Reload sessions to trigger leaderboard update with new call-sign
       // This will backfill call-sign to existing leaderboard entries
       try {
@@ -138,12 +138,12 @@ export function Sidebar({
   const handleCallSignInputChange = (value: string): void => {
     // Update local state immediately for responsive UI
     setCallSign(value);
-    
+
     // Clear existing debounce timer
     if (callSignDebounceRef.current) {
       clearTimeout(callSignDebounceRef.current);
     }
-    
+
     // Debounce save: wait 1 second after user stops typing
     callSignDebounceRef.current = setTimeout(() => {
       void saveCallSign(value);
@@ -277,6 +277,10 @@ export function Sidebar({
                       with <code>[</code> for dot and <code>]</code> for dash.
                     </li>
                     <li>
+                      <span className="font-medium">Chase</span>: Copy falling Morse groups before
+                      they hit the danger zone. Speed rises and lives are limited.
+                    </li>
+                    <li>
                       <span className="font-medium">Player</span>: Type any text and play it as
                       Morse, or run listen-only random letters from your current alphabet.
                     </li>
@@ -311,7 +315,7 @@ export function Sidebar({
                   onSaveSettings={onSaveSettings}
                   autoAdjustProfile={autoAdjustProfile}
                 />
-                
+
                 {/* ICR Settings - only visible when in ICR mode */}
                 {activeMode === 'icr' && icrSettings && setIcrSettings && (
                   <ICRSettingsForm settings={icrSettings} setSettings={setIcrSettings} />
@@ -369,7 +373,9 @@ export function Sidebar({
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:text-slate-500"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    {callSignSaving ? 'Saving...' : 'Optional: Your call sign will appear on the leaderboard instead of your ID. Press Enter to save immediately.'}
+                    {callSignSaving
+                      ? 'Saving...'
+                      : 'Optional: Your call sign will appear on the leaderboard instead of your ID. Press Enter to save immediately.'}
                   </p>
                 </div>
               )}
