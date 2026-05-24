@@ -84,6 +84,13 @@ const defaultTrainingSettings: TrainingSettings = {
   echoAutoAdjustThreshold: 90,
   echoAutoAdjustBelowThresholdCount: 0,
   echoAutoAdjustAboveThresholdCount: 0,
+  chaseLives: 3,
+  chaseAutoLevelEnabled: true,
+  chaseGroupsPerLevel: 5,
+  chaseStartFallMs: 7200,
+  chaseMinFallMs: 1800,
+  chaseLevelSpeedupMs: 430,
+  chaseGroupSpeedupMs: 28,
   errorWeightStrength: 0,
 };
 
@@ -110,7 +117,7 @@ const waitForInitialLoads = async (): Promise<void> => {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
   });
-  
+
   // Wait for all the mock service calls to complete
   // Since the mocks are set up in beforeEach to return immediately,
   // we just need to wait for React to process the state updates
@@ -123,7 +130,9 @@ describe('useTrainingSettingsState', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Mock services to return immediately to avoid act warnings
-    (mockTrainingSettingsService.getSettings as jest.Mock).mockResolvedValue(defaultTrainingSettings);
+    (mockTrainingSettingsService.getSettings as jest.Mock).mockResolvedValue(
+      defaultTrainingSettings,
+    );
     (mockSessionService.listSessions as jest.Mock).mockResolvedValue([]);
     (mockIcrSessionService.listSessions as jest.Mock).mockResolvedValue([]);
   });
@@ -167,7 +176,9 @@ describe('useTrainingSettingsActions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Mock services to return immediately to avoid act warnings
-    (mockTrainingSettingsService.getSettings as jest.Mock).mockResolvedValue(defaultTrainingSettings);
+    (mockTrainingSettingsService.getSettings as jest.Mock).mockResolvedValue(
+      defaultTrainingSettings,
+    );
     (mockSessionService.listSessions as jest.Mock).mockResolvedValue([]);
     (mockIcrSessionService.listSessions as jest.Mock).mockResolvedValue([]);
   });
@@ -317,7 +328,7 @@ describe('useTrainingSettingsActions', () => {
     await waitForInitialLoads();
 
     const newSettings = { ...defaultTrainingSettings, kochLevel: 5 };
-    
+
     // Verify the function exists and can be called
     expect(actionsResult.current.setTrainingSettingsState).toBeDefined();
     await act(async () => {
@@ -342,4 +353,3 @@ describe('useTrainingSettingsActions', () => {
     });
   });
 });
-

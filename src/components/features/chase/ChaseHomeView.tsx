@@ -2,7 +2,6 @@
 
 import React from 'react';
 
-import { CHASE_GROUPS_PER_LEVEL, CHASE_STARTING_LIVES } from '@/lib/chase';
 import type { TrainingSettings } from '@/types';
 
 interface ChaseHomeViewProps {
@@ -39,11 +38,11 @@ export function ChaseHomeView({
           <div className="grid gap-3 sm:grid-cols-4">
             <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4">
               <p className="text-xs uppercase tracking-wide text-emerald-200">Lives</p>
-              <p className="mt-1 text-3xl font-black">{CHASE_STARTING_LIVES}</p>
+              <p className="mt-1 text-3xl font-black">{settings.chaseLives}</p>
             </div>
             <div className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-4">
               <p className="text-xs uppercase tracking-wide text-cyan-200">Groups / level</p>
-              <p className="mt-1 text-3xl font-black">{CHASE_GROUPS_PER_LEVEL}</p>
+              <p className="mt-1 text-3xl font-black">{settings.chaseGroupsPerLevel}</p>
             </div>
             <div className="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-400/10 p-4">
               <p className="text-xs uppercase tracking-wide text-fuchsia-200">Koch start</p>

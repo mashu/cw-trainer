@@ -56,12 +56,72 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html[data-training-mode='chase'] body {
+  background: #020617;
+}
+
+html[data-training-mode='chase'] #data-notice {
+  color: rgb(203 213 225);
+}
+
+html[data-training-mode='chase'] #data-notice > div {
+  border-color: rgb(8 145 178 / 0.22);
+  background:
+    radial-gradient(circle at top left, rgb(244 63 94 / 0.14), transparent 36%),
+    linear-gradient(135deg, rgb(2 6 23 / 0.96), rgb(15 23 42 / 0.94));
+  box-shadow: 0 24px 80px rgb(2 6 23 / 0.55);
+}
+
+html[data-training-mode='chase'] #data-notice p,
+html[data-training-mode='chase'] #data-notice a {
+  color: rgb(226 232 240);
+}
+
+html[data-training-mode='chase'] #data-notice a:hover {
+  color: rgb(165 243 252);
+}
+
+html[data-training-mode='chase'] #data-notice code {
+  background: rgb(15 23 42);
+  color: rgb(226 232 240);
+}
+
 @keyframes chase-fall {
   from {
     transform: translate(-50%, 0);
   }
 
   to {
-    transform: translate(-50%, 22.5rem);
+    transform: translate(-50%, 19rem);
+  }
+}
+
+@keyframes chase-danger-flash {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 rgba(244, 63, 94, 0);
+    filter: saturate(1);
+  }
+
+  18%,
+  58% {
+    box-shadow:
+      inset 0 0 80px rgba(244, 63, 94, 0.48),
+      0 0 42px rgba(244, 63, 94, 0.42);
+    filter: saturate(1.5);
+  }
+}
+
+@keyframes chase-target-missed {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(0.98);
+  }
+
+  18%,
+  70% {
+    opacity: 1;
+    transform: translateY(-0.35rem) scale(1);
   }
 }

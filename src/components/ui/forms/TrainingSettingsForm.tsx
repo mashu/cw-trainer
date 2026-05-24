@@ -26,7 +26,7 @@ export interface FormTrainingSettings {
   customSet?: string[];
   customSequence?: string[]; // Custom sequence order for Koch mode
   slidingWindowStart?: number; // 1-based start index in unlocked sequence (1 = first)
-  slidingWindowEnd?: number;   // 1-based end index (inclusive); default wide = all unlocked
+  slidingWindowEnd?: number; // 1-based end index (inclusive); default wide = all unlocked
   sideToneMin: number;
   sideToneMax: number;
   volumeMin?: number;
@@ -73,6 +73,13 @@ export interface FormTrainingSettings {
   echoAutoAdjustThreshold?: number;
   echoAutoAdjustBelowThresholdCount?: number;
   echoAutoAdjustAboveThresholdCount?: number;
+  chaseLives?: number;
+  chaseAutoLevelEnabled?: boolean;
+  chaseGroupsPerLevel?: number;
+  chaseStartFallMs?: number;
+  chaseMinFallMs?: number;
+  chaseLevelSpeedupMs?: number;
+  chaseGroupSpeedupMs?: number;
   errorWeightStrength?: number;
   playerAnnounceLetters?: boolean;
   playerLetterRepeatCount?: number;
@@ -161,8 +168,12 @@ export function TrainingSettingsForm({
 
   const [charWpmMinInput, setCharWpmMinInput] = useState<string>(String(settings.charWpmMin));
   const [charWpmMaxInput, setCharWpmMaxInput] = useState<string>(String(settings.charWpmMax));
-  const [effectiveWpmMinInput, setEffectiveWpmMinInput] = useState<string>(String(settings.effectiveWpmMin));
-  const [effectiveWpmMaxInput, setEffectiveWpmMaxInput] = useState<string>(String(settings.effectiveWpmMax));
+  const [effectiveWpmMinInput, setEffectiveWpmMinInput] = useState<string>(
+    String(settings.effectiveWpmMin),
+  );
+  const [effectiveWpmMaxInput, setEffectiveWpmMaxInput] = useState<string>(
+    String(settings.effectiveWpmMax),
+  );
   const [minGroupSizeInput, setMinGroupSizeInput] = useState<string>(String(settings.minGroupSize));
   const [maxGroupSizeInput, setMaxGroupSizeInput] = useState<string>(String(settings.maxGroupSize));
 
@@ -250,33 +261,55 @@ export function TrainingSettingsForm({
   }, [settings.maxGroupSize]);
   const digitsAsc = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
   // Filter out prosigns (characters with < > format) - only single characters allowed
-  const allChars = Object.keys(MORSE_CODE).filter(char => {
+  const allChars = Object.keys(MORSE_CODE).filter((char) => {
     // Exclude prosigns (format like <AR>, <BT>, etc.)
     return !(char.startsWith('<') && char.endsWith('>'));
   });
   const letters = allChars.filter((character) => /[A-Z]/.test(character));
 
   // Use the shared computeCharPool instead of reimplementing sliding window logic
-  const currentPreviewChars = useMemo(() => computeCharPool({
-    kochLevel: settings.kochLevel,
-    ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
-    ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
-    ...(settings.mixedLettersPercent !== undefined ? { mixedLettersPercent: settings.mixedLettersPercent } : {}),
-    ...(settings.customSet !== undefined ? { customSet: settings.customSet } : {}),
-    ...(settings.customSequence !== undefined ? { customSequence: settings.customSequence } : {}),
-    ...(settings.slidingWindowStart !== undefined ? { slidingWindowStart: settings.slidingWindowStart } : {}),
-    ...(settings.slidingWindowEnd !== undefined ? { slidingWindowEnd: settings.slidingWindowEnd } : {}),
-  }), [settings.kochLevel, settings.charSetMode, settings.digitsLevel, settings.mixedLettersPercent, settings.customSet, settings.customSequence, settings.slidingWindowStart, settings.slidingWindowEnd]);
+  const currentPreviewChars = useMemo(
+    () =>
+      computeCharPool({
+        kochLevel: settings.kochLevel,
+        ...(settings.charSetMode !== undefined ? { charSetMode: settings.charSetMode } : {}),
+        ...(settings.digitsLevel !== undefined ? { digitsLevel: settings.digitsLevel } : {}),
+        ...(settings.mixedLettersPercent !== undefined
+          ? { mixedLettersPercent: settings.mixedLettersPercent }
+          : {}),
+        ...(settings.customSet !== undefined ? { customSet: settings.customSet } : {}),
+        ...(settings.customSequence !== undefined
+          ? { customSequence: settings.customSequence }
+          : {}),
+        ...(settings.slidingWindowStart !== undefined
+          ? { slidingWindowStart: settings.slidingWindowStart }
+          : {}),
+        ...(settings.slidingWindowEnd !== undefined
+          ? { slidingWindowEnd: settings.slidingWindowEnd }
+          : {}),
+      }),
+    [
+      settings.kochLevel,
+      settings.charSetMode,
+      settings.digitsLevel,
+      settings.mixedLettersPercent,
+      settings.customSet,
+      settings.customSequence,
+      settings.slidingWindowStart,
+      settings.slidingWindowEnd,
+    ],
+  );
 
   // Detect which preset matches the current sequence
   const currentPresetId = useMemo(() => {
     // If no customSequence is set, use LCWO_SEQUENCE
-    const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
-      ? settings.customSequence
-      : LCWO_SEQUENCE;
+    const sequence =
+      Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+        ? settings.customSequence
+        : LCWO_SEQUENCE;
     const sequenceStr = sequence.join(',');
     const matchingPreset = SEQUENCE_PRESETS.find(
-      (preset) => preset.sequence.join(',') === sequenceStr
+      (preset) => preset.sequence.join(',') === sequenceStr,
     );
     // If no customSequence was set and it matches LCWO, return 'lcwo'
     // Otherwise return the matching preset or 'custom'
@@ -291,7 +324,12 @@ export function TrainingSettingsForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2 p-4 border border-gray-200 rounded-lg bg-slate-50">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-slate-700">Character set</h4>
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700">Shared character set</h4>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Applies to Group, Echo, Chase, ICR, and Player.
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => setShowCharacterSetHelp((value) => !value)}
@@ -310,13 +348,19 @@ export function TrainingSettingsForm({
             <div className="mb-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
               <ul className="list-disc ml-4 space-y-1">
                 <li>
-                  <span className="font-medium">Alphabet</span>: Letters from a preset sequence (e.g. LCWO). Preset and Level choose which letters are unlocked; Practice narrows the range.
+                  <span className="font-medium">Alphabet</span>: Letters from a preset sequence
+                  (e.g. LCWO). Preset and Level choose which letters are unlocked; Practice narrows
+                  the range.
                 </li>
                 <li>
-                  <span className="font-medium">Digits</span>: Digits 0–9 by level. Level and Practice work like Alphabet.
+                  <span className="font-medium">Digits</span>: Digits 0–9 by level. Level and
+                  Practice work like Alphabet.
                 </li>
                 <li>
-                  <span className="font-medium">Mixed</span>: Same alphabet preset and level as Alphabet (all unlocked letters; no Practice slice), plus a digits level. Pool is the union (each digit counted once). Letters % sets how often a drawn character is a letter vs a digit.
+                  <span className="font-medium">Mixed</span>: Same alphabet preset and level as
+                  Alphabet (all unlocked letters; no Practice slice), plus a digits level. Pool is
+                  the union (each digit counted once). Letters % sets how often a drawn character is
+                  a letter vs a digit.
                 </li>
                 <li>
                   <span className="font-medium">Custom</span>: Pick your own set and order.
@@ -359,7 +403,7 @@ export function TrainingSettingsForm({
                               // Keep current custom sequence, do nothing
                               return;
                             }
-                            const preset = SEQUENCE_PRESETS.find(p => p.id === presetId);
+                            const preset = SEQUENCE_PRESETS.find((p) => p.id === presetId);
                             if (preset) {
                               setSettings({ ...settings, customSequence: preset.sequence });
                             }
@@ -376,8 +420,18 @@ export function TrainingSettingsForm({
                           )}
                         </select>
                         <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          <svg
+                            className="w-4 h-4 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 9l-7 7-7-7"
+                            />
                           </svg>
                         </div>
                       </div>
@@ -409,15 +463,26 @@ export function TrainingSettingsForm({
                   </div>
                   {/* Unified: Level (number input for accuracy) + Practice (dropdown) */}
                   {((): JSX.Element => {
-                    const nLetters = Math.max(2, Math.min(settings.kochLevel + 1, currentSequence.length));
+                    const nLetters = Math.max(
+                      2,
+                      Math.min(settings.kochLevel + 1, currentSequence.length),
+                    );
                     const start = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, nLetters));
                     const end = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, nLetters));
                     const startIdx = Math.min(start, end);
                     const endIdx = Math.max(start, end);
                     const isAll = startIdx === 1 && endIdx >= nLetters;
-                    const isLast3 = nLetters >= 3 && startIdx === nLetters - 2 && endIdx === nLetters;
-                    const isLast5 = nLetters >= 5 && startIdx === nLetters - 4 && endIdx === nLetters;
-                    const practiceValue = isAll ? 'all' : isLast3 ? 'last3' : isLast5 ? 'last5' : 'all';
+                    const isLast3 =
+                      nLetters >= 3 && startIdx === nLetters - 2 && endIdx === nLetters;
+                    const isLast5 =
+                      nLetters >= 5 && startIdx === nLetters - 4 && endIdx === nLetters;
+                    const practiceValue = isAll
+                      ? 'all'
+                      : isLast3
+                        ? 'last3'
+                        : isLast5
+                          ? 'last5'
+                          : 'all';
                     return (
                       <div className="space-y-3">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -441,10 +506,28 @@ export function TrainingSettingsForm({
                               value={practiceValue}
                               onChange={(e) => {
                                 const v = e.target.value as 'all' | 'last3' | 'last5';
-                                const n = Math.max(2, Math.min(settings.kochLevel + 1, currentSequence.length));
-                                if (v === 'all') setSettings({ ...settings, slidingWindowStart: 1, slidingWindowEnd: n });
-                                else if (v === 'last3') setSettings({ ...settings, slidingWindowStart: Math.max(1, n - 2), slidingWindowEnd: n });
-                                else if (v === 'last5') setSettings({ ...settings, slidingWindowStart: Math.max(1, n - 4), slidingWindowEnd: n });
+                                const n = Math.max(
+                                  2,
+                                  Math.min(settings.kochLevel + 1, currentSequence.length),
+                                );
+                                if (v === 'all')
+                                  setSettings({
+                                    ...settings,
+                                    slidingWindowStart: 1,
+                                    slidingWindowEnd: n,
+                                  });
+                                else if (v === 'last3')
+                                  setSettings({
+                                    ...settings,
+                                    slidingWindowStart: Math.max(1, n - 2),
+                                    slidingWindowEnd: n,
+                                  });
+                                else if (v === 'last5')
+                                  setSettings({
+                                    ...settings,
+                                    slidingWindowStart: Math.max(1, n - 4),
+                                    slidingWindowEnd: n,
+                                  });
                               }}
                               className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             >
@@ -476,7 +559,7 @@ export function TrainingSettingsForm({
                   />
                 </div>
               )}
-              {charMode === 'digits' && (
+              {charMode === 'digits' &&
                 ((): JSX.Element => {
                   const maxDigits = 10;
                   const nDigits = Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10));
@@ -487,12 +570,20 @@ export function TrainingSettingsForm({
                   const isAll = startIdx === 1 && endIdx >= nDigits;
                   const isLast3 = nDigits >= 3 && startIdx === nDigits - 2 && endIdx === nDigits;
                   const isLast5 = nDigits >= 5 && startIdx === nDigits - 4 && endIdx === nDigits;
-                  const practiceValue = isAll ? 'all' : isLast3 ? 'last3' : isLast5 ? 'last5' : 'all';
+                  const practiceValue = isAll
+                    ? 'all'
+                    : isLast3
+                      ? 'last3'
+                      : isLast5
+                        ? 'last5'
+                        : 'all';
                   return (
                     <div className="space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Level</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Level
+                          </label>
                           <input
                             {...digitsLevelField.inputProps}
                             className="w-full px-3 py-2 border border-gray-300 rounded"
@@ -500,15 +591,35 @@ export function TrainingSettingsForm({
                           <p className="text-xs text-gray-500 mt-1">{nDigits} digits</p>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Practice</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Practice
+                          </label>
                           <select
                             value={practiceValue}
                             onChange={(e) => {
                               const v = e.target.value as 'all' | 'last3' | 'last5';
-                              const n = Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10));
-                              if (v === 'all') setSettings({ ...settings, slidingWindowStart: 1, slidingWindowEnd: n });
-                              else if (v === 'last3') setSettings({ ...settings, slidingWindowStart: Math.max(1, n - 2), slidingWindowEnd: n });
-                              else if (v === 'last5') setSettings({ ...settings, slidingWindowStart: Math.max(1, n - 4), slidingWindowEnd: n });
+                              const n = Math.max(
+                                1,
+                                Math.min(maxDigits, settings.digitsLevel ?? 10),
+                              );
+                              if (v === 'all')
+                                setSettings({
+                                  ...settings,
+                                  slidingWindowStart: 1,
+                                  slidingWindowEnd: n,
+                                });
+                              else if (v === 'last3')
+                                setSettings({
+                                  ...settings,
+                                  slidingWindowStart: Math.max(1, n - 2),
+                                  slidingWindowEnd: n,
+                                });
+                              else if (v === 'last5')
+                                setSettings({
+                                  ...settings,
+                                  slidingWindowStart: Math.max(1, n - 4),
+                                  slidingWindowEnd: n,
+                                });
                             }}
                             className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           >
@@ -518,20 +629,26 @@ export function TrainingSettingsForm({
                           </select>
                         </div>
                       </div>
-                      <p className="text-xs text-gray-500">Digits: {currentPreviewChars.join(' ')}</p>
+                      <p className="text-xs text-gray-500">
+                        Digits: {currentPreviewChars.join(' ')}
+                      </p>
                     </div>
                   );
-                })()
-              )}
-              {charMode === 'mixed' && (
+                })()}
+              {charMode === 'mixed' &&
                 ((): JSX.Element => {
                   const maxDigits = 10;
-                  const nLetters = Math.max(2, Math.min(settings.kochLevel + 1, currentSequence.length));
+                  const nLetters = Math.max(
+                    2,
+                    Math.min(settings.kochLevel + 1, currentSequence.length),
+                  );
                   return (
                     <div className="space-y-3">
                       <div className="flex items-center gap-3">
                         <div className="flex-1">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Preset sequence</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Preset sequence
+                          </label>
                           <div className="relative">
                             <select
                               value={currentPresetId}
@@ -539,7 +656,8 @@ export function TrainingSettingsForm({
                                 const presetId = e.target.value;
                                 if (presetId === 'custom') return;
                                 const preset = SEQUENCE_PRESETS.find((p) => p.id === presetId);
-                                if (preset) setSettings({ ...settings, customSequence: preset.sequence });
+                                if (preset)
+                                  setSettings({ ...settings, customSequence: preset.sequence });
                               }}
                               className="w-full px-3 py-2 pr-8 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none"
                             >
@@ -553,8 +671,18 @@ export function TrainingSettingsForm({
                               )}
                             </select>
                             <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              <svg
+                                className="w-4 h-4 text-gray-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 9l-7 7-7-7"
+                                />
                               </svg>
                             </div>
                           </div>
@@ -566,15 +694,27 @@ export function TrainingSettingsForm({
                             className="p-2 text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors flex items-center justify-center"
                             title="Edit sequence order"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                              />
                             </svg>
                           </button>
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Alphabet level</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Alphabet level
+                          </label>
                           <input
                             {...kochLevelField.inputProps}
                             className="w-full px-3 py-2 border border-gray-300 rounded"
@@ -582,18 +722,23 @@ export function TrainingSettingsForm({
                           <p className="text-xs text-gray-500 mt-1">{nLetters} letters in pool</p>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Digits level</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Digits level
+                          </label>
                           <input
                             {...digitsLevelField.inputProps}
                             className="w-full px-3 py-2 border border-gray-300 rounded"
                           />
                           <p className="text-xs text-gray-500 mt-1">
-                            {Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10))} digits in pool (union with alphabet)
+                            {Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10))} digits in
+                            pool (union with alphabet)
                           </p>
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Letters % (draw bias)</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Letters % (draw bias)
+                        </label>
                         <input
                           {...mixedLettersPercentField.inputProps}
                           className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded"
@@ -606,7 +751,8 @@ export function TrainingSettingsForm({
                         open={showSequenceEditor}
                         onClose={() => setShowSequenceEditor(false)}
                         sequence={
-                          Array.isArray(settings.customSequence) && settings.customSequence.length > 0
+                          Array.isArray(settings.customSequence) &&
+                          settings.customSequence.length > 0
                             ? settings.customSequence
                             : LCWO_SEQUENCE
                         }
@@ -616,8 +762,7 @@ export function TrainingSettingsForm({
                       />
                     </div>
                   );
-                })()
-              )}
+                })()}
               {charMode === 'custom' && (
                 <CustomAlphabetEditor
                   customSet={settings.customSet || []}
@@ -635,7 +780,15 @@ export function TrainingSettingsForm({
 
         <div className="sm:col-span-2 p-4 border border-gray-200 rounded-lg bg-slate-50">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-slate-700">Speed &amp; groups</h4>
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700">
+                Shared Morse speed &amp; Group session size
+              </h4>
+              <p className="mt-0.5 text-xs text-slate-500">
+                WPM and group size are shared. The session count below is for Group/Echo sessions;
+                Chase has its own group count setting when Chase is selected.
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => setShowSpeedGroupsHelp((value) => !value)}
@@ -655,22 +808,28 @@ export function TrainingSettingsForm({
               <div className="font-semibold text-slate-800 mb-1">Speed &amp; groups</div>
               <ul className="list-disc ml-4 space-y-1">
                 <li>
-                  <span className="font-medium">Character speed (WPM)</span>: Speed of dots and dashes within each letter.
+                  <span className="font-medium">Character speed (WPM)</span>: Speed of dots and
+                  dashes within each letter.
                 </li>
                 <li>
-                  <span className="font-medium">Effective speed (WPM)</span>: Controls gap between letters (Farnsworth). Lower = longer gaps. Link to keep equal to character speed.
+                  <span className="font-medium">Effective speed (WPM)</span>: Controls gap between
+                  letters (Farnsworth). Lower = longer gaps. Link to keep equal to character speed.
                 </li>
                 <li>
-                  <span className="font-medium">Extra word spacing</span>: Multiplies the gap between words. Used in Player mode (text with spaces).
+                  <span className="font-medium">Extra word spacing</span>: Multiplies the gap
+                  between words. Used in Player mode (text with spaces).
                 </li>
                 <li>
-                  <span className="font-medium">Number of groups</span>: How many groups per session.
+                  <span className="font-medium">Number of groups</span>: How many groups per
+                  Group/Echo session. Chase uses “Groups before level-up” in Chase settings.
                 </li>
                 <li>
-                  <span className="font-medium">Group size</span>: Min/max characters per group (random in range).
+                  <span className="font-medium">Group size</span>: Min/max characters per group
+                  (random in range).
                 </li>
                 <li>
-                  <span className="font-medium">Group timeout</span>: Seconds before a group is skipped or session ends.
+                  <span className="font-medium">Group timeout</span>: Seconds before a group is
+                  skipped or session ends.
                 </li>
               </ul>
             </div>
@@ -678,7 +837,7 @@ export function TrainingSettingsForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Number of Groups
+                Group/Echo: Number of Groups
               </label>
               <input
                 {...numGroupsField.inputProps}
@@ -712,7 +871,7 @@ export function TrainingSettingsForm({
                     const currentMax = settings.linkCharWpm ? num : settings.charWpmMax;
                     const validMin = Math.min(num, currentMax);
                     setCharWpmMinInput(String(validMin));
-                    
+
                     const updates: Partial<FormTrainingSettings> = { charWpmMin: validMin };
                     if (settings.linkCharWpm) {
                       updates.charWpmMax = validMin;
@@ -741,7 +900,7 @@ export function TrainingSettingsForm({
                     // Ensure max >= min (clamp max to min if needed)
                     const validMax = Math.max(num, settings.charWpmMin);
                     setCharWpmMaxInput(String(validMax));
-                    
+
                     const updates: Partial<FormTrainingSettings> = { charWpmMax: validMax };
                     // Propagate to effective WPM max if char-to-effective link is enabled
                     if (settings.linkCharToEffective) {
@@ -770,7 +929,7 @@ export function TrainingSettingsForm({
                 unit="WPM"
               />
             </div>
-            
+
             {/* Vertical link between Character Speed and Effective Speed */}
             <div className="sm:col-span-2 flex justify-center -my-1">
               <button
@@ -790,31 +949,46 @@ export function TrainingSettingsForm({
                 }}
                 className={`
                   flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300
-                  ${settings.linkCharToEffective
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md hover:shadow-lg hover:scale-105'
-                    : 'bg-white border-2 border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50'
+                  ${
+                    settings.linkCharToEffective
+                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md hover:shadow-lg hover:scale-105'
+                      : 'bg-white border-2 border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50'
                   }
                 `}
-                title={settings.linkCharToEffective ? 'Unlink character and effective speeds' : 'Link character and effective speeds'}
+                title={
+                  settings.linkCharToEffective
+                    ? 'Unlink character and effective speeds'
+                    : 'Link character and effective speeds'
+                }
               >
                 {settings.linkCharToEffective ? (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                      />
                     </svg>
                     <span>Char = Effective</span>
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                      />
                     </svg>
                     <span>Char ≠ Effective</span>
                   </>
                 )}
               </button>
             </div>
-            
+
             <div className="sm:col-span-2">
               <LinkedRangeInput
                 label="Effective Speed (WPM)"
@@ -843,7 +1017,7 @@ export function TrainingSettingsForm({
                     const currentMax = settings.linkEffectiveWpm ? num : settings.effectiveWpmMax;
                     const validMin = Math.min(num, currentMax);
                     setEffectiveWpmMinInput(String(validMin));
-                    
+
                     const updates: Partial<FormTrainingSettings> = { effectiveWpmMin: validMin };
                     if (settings.linkEffectiveWpm) {
                       updates.effectiveWpmMax = validMin;
@@ -863,7 +1037,7 @@ export function TrainingSettingsForm({
                     // Ensure max >= min (clamp max to min if needed)
                     const validMax = Math.max(num, settings.effectiveWpmMin);
                     setEffectiveWpmMaxInput(String(validMax));
-                    
+
                     setSettings({ ...settings, effectiveWpmMax: validMax });
                     if (onSaveSettings) {
                       setTimeout(() => onSaveSettings(), 50);
@@ -892,9 +1066,7 @@ export function TrainingSettingsForm({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Group Timeout
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Group Timeout</label>
               <input
                 {...groupTimeoutField.inputProps}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
@@ -924,10 +1096,12 @@ export function TrainingSettingsForm({
                     }
                   } else {
                     // Ensure min <= max (clamp min to max if needed)
-                    const currentMax = settings.linkGroupSize ? Math.floor(num) : settings.maxGroupSize;
+                    const currentMax = settings.linkGroupSize
+                      ? Math.floor(num)
+                      : settings.maxGroupSize;
                     const validMin = Math.max(1, Math.min(Math.floor(num), currentMax));
                     setMinGroupSizeInput(String(validMin));
-                    
+
                     const updates: Partial<FormTrainingSettings> = { minGroupSize: validMin };
                     if (settings.linkGroupSize) {
                       updates.maxGroupSize = validMin;
@@ -947,7 +1121,7 @@ export function TrainingSettingsForm({
                     // Ensure max >= min (clamp max to min if needed)
                     const validMax = Math.max(1, Math.max(Math.floor(num), settings.minGroupSize));
                     setMaxGroupSizeInput(String(validMax));
-                    
+
                     setSettings({ ...settings, maxGroupSize: validMax });
                     if (onSaveSettings) {
                       setTimeout(() => onSaveSettings(), 50);
@@ -1042,4 +1216,3 @@ export function TrainingSettingsForm({
     </>
   );
 }
-

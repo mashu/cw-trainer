@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
+import { ChaseSettingsForm } from '@/components/ui/forms/ChaseSettingsForm';
 import { EchoSettingsForm } from '@/components/ui/forms/EchoSettingsForm';
 import { ICRSettingsForm } from '@/components/ui/forms/ICRSettingsForm';
 import { PlayerSettingsForm } from '@/components/ui/forms/PlayerSettingsForm';
@@ -308,6 +309,10 @@ export function Sidebar({
             </button>
             {settingsOpen && (
               <div className="px-4 pb-4">
+                <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/70 p-3 text-xs text-indigo-950">
+                  <span className="font-semibold">Settings scope:</span> shared Morse settings are
+                  always shown first. Mode-specific options appear below them for the selected mode.
+                </div>
                 {/* Shared settings - always visible (character set, audio, etc.) */}
                 <TrainingSettingsForm
                   settings={settings}
@@ -322,6 +327,13 @@ export function Sidebar({
                 )}
                 {activeMode === 'echo' && (
                   <EchoSettingsForm settings={settings} setSettings={setSettings} />
+                )}
+                {activeMode === 'chase' && (
+                  <ChaseSettingsForm
+                    settings={settings}
+                    setSettings={setSettings}
+                    onSaveSettings={onSaveSettings}
+                  />
                 )}
                 {activeMode === 'player' && (
                   <PlayerSettingsForm settings={settings} setSettings={setSettings} />

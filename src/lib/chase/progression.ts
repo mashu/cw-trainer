@@ -11,6 +11,11 @@ export type ChaseResolveOutcome = 'correct' | 'wrong' | 'missed';
 export interface ChaseTargetTimingInput {
   readonly level: number;
   readonly targetIndex: number;
+  readonly groupsPerLevel?: number;
+  readonly startFallMs?: number;
+  readonly minFallMs?: number;
+  readonly levelSpeedupMs?: number;
+  readonly groupSpeedupMs?: number;
 }
 
 export interface ChaseResolveInput {
@@ -32,19 +37,36 @@ export interface ChaseResolveResult {
   readonly correct: boolean;
 }
 
-export function computeChaseFallMs({ level, targetIndex }: ChaseTargetTimingInput): number {
+export function computeChaseFallMs({
+  level,
+  targetIndex,
+  groupsPerLevel,
+  startFallMs,
+  minFallMs,
+  levelSpeedupMs,
+  groupSpeedupMs,
+}: ChaseTargetTimingInput): number {
   const safeLevel = Math.max(1, Math.floor(level));
   const safeTargetIndex = Math.max(0, Math.floor(targetIndex));
-  const levelPressure = (safeLevel - 1) * 430;
-  const endurancePressure = Math.floor(safeTargetIndex / CHASE_GROUPS_PER_LEVEL) * 140;
-  return Math.max(CHASE_MIN_FALL_MS, CHASE_BASE_FALL_MS - levelPressure - endurancePressure);
+  const safeGroupsPerLevel = Math.max(1, Math.floor(groupsPerLevel ?? CHASE_GROUPS_PER_LEVEL));
+  const safeStartFallMs = Math.max(500, startFallMs ?? CHASE_BASE_FALL_MS);
+  const safeMinFallMs = Math.max(500, Math.min(safeStartFallMs, minFallMs ?? CHASE_MIN_FALL_MS));
+  const safeLevelSpeedupMs = Math.max(0, levelSpeedupMs ?? 430);
+  const safeGroupSpeedupMs = Math.max(0, groupSpeedupMs ?? 28);
+  const levelPressure = (safeLevel - 1) * safeLevelSpeedupMs;
+  const endurancePressure = safeTargetIndex * safeGroupSpeedupMs;
+  const wavePressure = Math.floor(safeTargetIndex / safeGroupsPerLevel) * safeGroupSpeedupMs;
+  return Math.max(
+    safeMinFallMs,
+    safeStartFallMs - levelPressure - endurancePressure - wavePressure,
+  );
 }
 
 export function computeChaseLevelSettings(
   settings: TrainingSettings,
   level: number,
 ): TrainingSettings {
-  const levelOffset = Math.max(0, Math.floor(level) - 1);
+  const levelOffset = settings.chaseAutoLevelEnabled ? Math.max(0, Math.floor(level) - 1) : 0;
   const charSetMode = settings.charSetMode ?? 'koch';
 
   if (charSetMode === 'digits') {
@@ -72,8 +94,11 @@ export function computeChaseLevelSettings(
   };
 }
 
-export function computeChaseLevelProgress(correctInLevel: number): number {
-  return Math.max(0, Math.min(1, correctInLevel / CHASE_GROUPS_PER_LEVEL));
+export function computeChaseLevelProgress(
+  correctInLevel: number,
+  groupsPerLevel: number = CHASE_GROUPS_PER_LEVEL,
+): number {
+  return Math.max(0, Math.min(1, correctInLevel / Math.max(1, groupsPerLevel)));
 }
 
 export function resolveChaseTarget(input: ChaseResolveInput): ChaseResolveResult {
@@ -94,7 +119,8 @@ export function resolveChaseTarget(input: ChaseResolveInput): ChaseResolveResult
   const nextStreak = input.streak + 1;
   const speedBonus = Math.max(0, Math.round(input.remainingMs / 100));
   const streakBonus = Math.min(500, nextStreak * 25);
-  const scoreDelta = input.level * 100 + speedBonus * 10 + streakBonus;
+  const lengthBonus = normalizedExpected.length * 80;
+  const scoreDelta = input.level * 100 + lengthBonus + speedBonus * 10 + streakBonus;
 
   return {
     lives: input.lives,

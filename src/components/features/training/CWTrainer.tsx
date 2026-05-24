@@ -110,6 +110,10 @@ export function CWTrainer(): JSX.Element {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(LAST_MODE_STORAGE_KEY, activeMode);
+    document.documentElement.dataset['trainingMode'] = activeMode;
+    return (): void => {
+      delete document.documentElement.dataset['trainingMode'];
+    };
   }, [activeMode]);
 
   const prevUserRef = useRef<AuthUserSummary | null>(null);
@@ -302,9 +306,16 @@ export function CWTrainer(): JSX.Element {
     [computeLastAccuracy, chaseSessions],
   );
   const sharedAudio = useMemo(() => settingsToSharedAudioProps(settings), [settings]);
+  const chaseShellActive = activeMode === 'chase';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-2 sm:p-4 lg:p-6 relative">
+    <div
+      className={`min-h-screen p-2 sm:p-4 lg:p-6 relative ${
+        chaseShellActive
+          ? 'bg-[radial-gradient(circle_at_top,rgba(244,63,94,0.22),transparent_34%),linear-gradient(135deg,#020617,#0f172a_48%,#190b12)]'
+          : 'bg-gradient-to-br from-indigo-50 via-white to-cyan-50'
+      }`}
+    >
       <ToastOverlay toast={toast} onDismiss={dismissToast} />
 
       <Sidebar
@@ -352,8 +363,14 @@ export function CWTrainer(): JSX.Element {
         setIcrSettings={setIcrSettings}
       />
 
-      <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl ring-1 ring-black/5 p-3 sm:p-6 lg:p-8 border border-white/20">
-        <AppHeader onOpenSidebar={() => setSidebarOpen(true)} />
+      <div
+        className={`mx-auto rounded-3xl p-3 shadow-2xl backdrop-blur-sm sm:p-6 lg:p-8 ${
+          chaseShellActive
+            ? 'max-w-6xl border border-cyan-300/15 bg-slate-950/72 ring-1 ring-cyan-300/10'
+            : 'max-w-4xl border border-white/20 bg-white/80 ring-1 ring-black/5'
+        }`}
+      >
+        <AppHeader onOpenSidebar={() => setSidebarOpen(true)} dark={chaseShellActive} />
 
         <TrainingRouter
           activeMode={activeMode}

@@ -176,6 +176,20 @@ export interface TrainingSettings {
   readonly echoAutoAdjustThreshold: number;
   readonly echoAutoAdjustBelowThresholdCount: number;
   readonly echoAutoAdjustAboveThresholdCount: number;
+  /** Chase-only: lives available at the start of an arcade run. */
+  readonly chaseLives: number;
+  /** Chase-only: whether completed levels unlock more characters during the run. */
+  readonly chaseAutoLevelEnabled: boolean;
+  /** Chase-only: correct groups needed before level pressure/unlocks advance. */
+  readonly chaseGroupsPerLevel: number;
+  /** Chase-only: initial falling target time budget in milliseconds. */
+  readonly chaseStartFallMs: number;
+  /** Chase-only: lower bound for falling target time budget in milliseconds. */
+  readonly chaseMinFallMs: number;
+  /** Chase-only: milliseconds removed from fall time each Chase level. */
+  readonly chaseLevelSpeedupMs: number;
+  /** Chase-only: milliseconds removed from fall time for each completed Chase target. */
+  readonly chaseGroupSpeedupMs: number;
   readonly errorWeightStrength: number;
   /** Player-only: speak each character after its Morse repeats. */
   readonly playerAnnounceLetters?: boolean;

@@ -21,6 +21,14 @@ const AUTO_THRESHOLD_MIN = 0;
 const AUTO_THRESHOLD_MAX = 100;
 const AUTO_ADJUST_COUNT_MIN = 0;
 const AUTO_ADJUST_COUNT_MAX = 20;
+const CHASE_LIVES_MIN = 1;
+const CHASE_LIVES_MAX = 6;
+const CHASE_GROUPS_PER_LEVEL_MIN = 1;
+const CHASE_GROUPS_PER_LEVEL_MAX = 50;
+const CHASE_FALL_MS_MIN = 500;
+const CHASE_FALL_MS_MAX = 60000;
+const CHASE_SPEEDUP_MS_MIN = 0;
+const CHASE_SPEEDUP_MS_MAX = 5000;
 const SLIDING_WINDOW_INDEX_MIN = 1;
 const SLIDING_WINDOW_INDEX_MAX = 40;
 const MIXED_LETTERS_PERCENT_MIN = 0;
@@ -59,11 +67,29 @@ export const trainingSettingsSchema = z
     kochLevel: z.number().int().min(KOCH_LEVEL_MIN).max(KOCH_LEVEL_MAX),
     charSetMode: characterSetModeSchema as z.ZodType<CharacterSetMode>,
     digitsLevel: z.number().int().min(DIGITS_LEVEL_MIN).max(DIGITS_LEVEL_MAX),
-    mixedLettersPercent: z.number().int().min(MIXED_LETTERS_PERCENT_MIN).max(MIXED_LETTERS_PERCENT_MAX).optional().default(70),
+    mixedLettersPercent: z
+      .number()
+      .int()
+      .min(MIXED_LETTERS_PERCENT_MIN)
+      .max(MIXED_LETTERS_PERCENT_MAX)
+      .optional()
+      .default(70),
     customSet: z.array(z.string().min(1)).max(64).optional().default([]),
     customSequence: z.array(z.string().min(1)).optional(),
-    slidingWindowStart: z.number().int().min(SLIDING_WINDOW_INDEX_MIN).max(SLIDING_WINDOW_INDEX_MAX).optional().default(1),
-    slidingWindowEnd: z.number().int().min(SLIDING_WINDOW_INDEX_MIN).max(SLIDING_WINDOW_INDEX_MAX).optional().default(40),
+    slidingWindowStart: z
+      .number()
+      .int()
+      .min(SLIDING_WINDOW_INDEX_MIN)
+      .max(SLIDING_WINDOW_INDEX_MAX)
+      .optional()
+      .default(1),
+    slidingWindowEnd: z
+      .number()
+      .int()
+      .min(SLIDING_WINDOW_INDEX_MIN)
+      .max(SLIDING_WINDOW_INDEX_MAX)
+      .optional()
+      .default(40),
     sideToneMin: z.number().int().min(TONE_MIN).max(TONE_MAX),
     sideToneMax: z.number().int().min(TONE_MIN).max(TONE_MAX),
     volumeMin: z.number().min(VOLUME_MIN).max(VOLUME_MAX),
@@ -128,8 +154,18 @@ export const trainingSettingsSchema = z
       .default(0.32),
     autoAdjustKoch: z.boolean(),
     autoAdjustThreshold: z.number().min(AUTO_THRESHOLD_MIN).max(AUTO_THRESHOLD_MAX),
-    autoAdjustBelowThresholdCount: z.number().int().min(AUTO_ADJUST_COUNT_MIN).max(AUTO_ADJUST_COUNT_MAX).default(0),
-    autoAdjustAboveThresholdCount: z.number().int().min(AUTO_ADJUST_COUNT_MIN).max(AUTO_ADJUST_COUNT_MAX).default(0),
+    autoAdjustBelowThresholdCount: z
+      .number()
+      .int()
+      .min(AUTO_ADJUST_COUNT_MIN)
+      .max(AUTO_ADJUST_COUNT_MAX)
+      .default(0),
+    autoAdjustAboveThresholdCount: z
+      .number()
+      .int()
+      .min(AUTO_ADJUST_COUNT_MIN)
+      .max(AUTO_ADJUST_COUNT_MAX)
+      .default(0),
     echoAutoAdjustKoch: z.boolean().default(false),
     echoAutoAdjustThreshold: z.number().min(AUTO_THRESHOLD_MIN).max(AUTO_THRESHOLD_MAX).default(90),
     echoAutoAdjustBelowThresholdCount: z
@@ -144,6 +180,28 @@ export const trainingSettingsSchema = z
       .min(AUTO_ADJUST_COUNT_MIN)
       .max(AUTO_ADJUST_COUNT_MAX)
       .default(0),
+    chaseLives: z.number().int().min(CHASE_LIVES_MIN).max(CHASE_LIVES_MAX).default(3),
+    chaseAutoLevelEnabled: z.boolean().default(true),
+    chaseGroupsPerLevel: z
+      .number()
+      .int()
+      .min(CHASE_GROUPS_PER_LEVEL_MIN)
+      .max(CHASE_GROUPS_PER_LEVEL_MAX)
+      .default(5),
+    chaseStartFallMs: z.number().int().min(CHASE_FALL_MS_MIN).max(CHASE_FALL_MS_MAX).default(7200),
+    chaseMinFallMs: z.number().int().min(CHASE_FALL_MS_MIN).max(CHASE_FALL_MS_MAX).default(1800),
+    chaseLevelSpeedupMs: z
+      .number()
+      .int()
+      .min(CHASE_SPEEDUP_MS_MIN)
+      .max(CHASE_SPEEDUP_MS_MAX)
+      .default(430),
+    chaseGroupSpeedupMs: z
+      .number()
+      .int()
+      .min(CHASE_SPEEDUP_MS_MIN)
+      .max(CHASE_SPEEDUP_MS_MAX)
+      .default(28),
     errorWeightStrength: z.number().min(0).max(5).default(0),
     playerAnnounceLetters: z.boolean().default(false),
     playerLetterRepeatCount: z
@@ -208,6 +266,14 @@ export const trainingSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: ['volumeMax'],
         message: 'volumeMax must be greater than or equal to volumeMin',
+      });
+    }
+
+    if (value.chaseStartFallMs < value.chaseMinFallMs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['chaseStartFallMs'],
+        message: 'chaseStartFallMs must be greater than or equal to chaseMinFallMs',
       });
     }
   });

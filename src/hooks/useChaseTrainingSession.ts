@@ -4,8 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
 import {
-  CHASE_GROUPS_PER_LEVEL,
-  CHASE_STARTING_LIVES,
   computeChaseFallMs,
   computeChaseLevelProgress,
   computeChaseLevelSettings,
@@ -106,7 +104,7 @@ export function useChaseTrainingSession({
   const [target, setTarget] = useState<ChaseTarget | null>(null);
   const [lastResolvedTarget, setLastResolvedTarget] = useState<ChaseResolvedTarget | null>(null);
   const [userInput, setUserInput] = useState('');
-  const [lives, setLives] = useState(CHASE_STARTING_LIVES);
+  const [lives, setLives] = useState(settings.chaseLives);
   const [level, setLevel] = useState(1);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -125,6 +123,7 @@ export function useChaseTrainingSession({
   const isTrainingRef = useRef(false);
   const startedAtRef = useRef<number | null>(null);
   const userInputRef = useRef('');
+  const targetRef = useRef<ChaseTarget | null>(null);
   const pendingResolverRef = useRef<PendingTargetResolver | null>(null);
   const pendingTimeoutRef = useRef<number | undefined>(undefined);
 
@@ -140,6 +139,9 @@ export function useChaseTrainingSession({
   useEffect(() => {
     showToastRef.current = showToast;
   }, [showToast]);
+  useEffect(() => {
+    targetRef.current = target;
+  }, [target]);
 
   const clearPendingTarget = useCallback((): void => {
     if (pendingTimeoutRef.current !== undefined) {
@@ -192,7 +194,7 @@ export function useChaseTrainingSession({
         maxLevel,
         survivedMs,
         bestStreak: bestRunStreak,
-        livesLost: CHASE_STARTING_LIVES,
+        livesLost: settingsRef.current.chaseLives,
       });
       setStatus('results');
       await saveSessionRef.current(result as SessionResultInput);
@@ -241,7 +243,7 @@ export function useChaseTrainingSession({
     setSessionIssueMessage(undefined);
     setLastSessionResult(null);
     setLastResolvedTarget(null);
-    setLives(CHASE_STARTING_LIVES);
+    setLives(settingsRef.current.chaseLives);
     setLevel(1);
     setScore(0);
     setStreak(0);
@@ -252,7 +254,7 @@ export function useChaseTrainingSession({
     const sentGroups: string[] = [];
     const answers: string[] = [];
     const timings: Array<{ timeToCompleteMs: number; perCharMs?: number }> = [];
-    let nextLives = CHASE_STARTING_LIVES;
+    let nextLives = settingsRef.current.chaseLives;
     let nextLevel = 1;
     let nextScore = 0;
     let nextStreak = 0;
@@ -271,7 +273,17 @@ export function useChaseTrainingSession({
       ) {
         const levelSettings = computeChaseLevelSettings(settingsRef.current, nextLevel);
         const group = generateTrainingGroup(levelSettings, sessionsRef.current);
-        const fallMs = computeChaseFallMs({ level: nextLevel, targetIndex });
+        const currentSettings = settingsRef.current;
+        const groupsPerLevel = currentSettings.chaseGroupsPerLevel;
+        const fallMs = computeChaseFallMs({
+          level: nextLevel,
+          targetIndex,
+          groupsPerLevel,
+          startFallMs: currentSettings.chaseStartFallMs,
+          minFallMs: currentSettings.chaseMinFallMs,
+          levelSpeedupMs: currentSettings.chaseLevelSpeedupMs,
+          groupSpeedupMs: currentSettings.chaseGroupSpeedupMs,
+        });
         const spawnedAt = Date.now();
         const deadlineAt = spawnedAt + fallMs;
         const nextTarget: ChaseTarget = {
@@ -287,6 +299,7 @@ export function useChaseTrainingSession({
         userInputRef.current = '';
         setUserInput('');
         setTarget(nextTarget);
+        targetRef.current = nextTarget;
 
         const playback = await audio.playMorse(group, mySession);
         if (playback.status === 'failed' || playback.status === 'suspended') {
@@ -338,7 +351,7 @@ export function useChaseTrainingSession({
         nextBestStreak = Math.max(nextBestStreak, nextStreak);
         nextCorrectInLevel = resolved.correct ? nextCorrectInLevel + 1 : nextCorrectInLevel;
 
-        if (nextCorrectInLevel >= CHASE_GROUPS_PER_LEVEL) {
+        if (nextCorrectInLevel >= groupsPerLevel) {
           nextLevel += 1;
           nextCorrectInLevel = 0;
           showToastRef.current({
@@ -361,6 +374,7 @@ export function useChaseTrainingSession({
           scoreDelta: resolved.scoreDelta,
         });
         setTarget(null);
+        targetRef.current = null;
 
         targetIndex += 1;
         await audio.sleepCancelable(FEEDBACK_PAUSE_MS, mySession);
@@ -390,9 +404,18 @@ export function useChaseTrainingSession({
   }, [audio, clearPendingTarget, processResults, releaseLock, takeLock, waitForTarget]);
 
   const handleInputChange = useCallback((value: string): void => {
-    const normalized = value.toUpperCase().replace(ALLOWED_CHASE_INPUT, '');
+    const currentTarget = targetRef.current;
+    const maxLength = currentTarget?.group.length ?? Number.POSITIVE_INFINITY;
+    const normalized = value.toUpperCase().replace(ALLOWED_CHASE_INPUT, '').slice(0, maxLength);
     userInputRef.current = normalized;
     setUserInput(normalized);
+    if (currentTarget && normalized.length >= currentTarget.group.length) {
+      pendingResolverRef.current?.({
+        status: 'answered',
+        received: normalized,
+        answeredAt: Date.now(),
+      });
+    }
   }, []);
 
   const submitAnswer = useCallback((): void => {
@@ -421,7 +444,7 @@ export function useChaseTrainingSession({
     streak,
     bestStreak,
     correctInLevel,
-    levelProgress: computeChaseLevelProgress(correctInLevel),
+    levelProgress: computeChaseLevelProgress(correctInLevel, settings.chaseGroupsPerLevel),
     groupsCompleted,
     ...(sessionIssueMessage !== undefined ? { sessionIssueMessage } : {}),
     lastSessionResult,

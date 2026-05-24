@@ -118,6 +118,29 @@ describe('trainingSettingsSchema', () => {
     expect(result.receiverBackgroundOffsetModRateHz).toBe(0.32);
   });
 
+  it('defaults Chase settings when omitted', () => {
+    const result = trainingSettingsSchema.parse(buildValidSettings());
+
+    expect(result.chaseLives).toBe(3);
+    expect(result.chaseAutoLevelEnabled).toBe(true);
+    expect(result.chaseGroupsPerLevel).toBe(5);
+    expect(result.chaseStartFallMs).toBe(7200);
+    expect(result.chaseMinFallMs).toBe(1800);
+    expect(result.chaseLevelSpeedupMs).toBe(430);
+    expect(result.chaseGroupSpeedupMs).toBe(28);
+  });
+
+  it('rejects invalid Chase settings', () => {
+    const result = trainingSettingsSchema.safeParse({
+      ...buildValidSettings(),
+      chaseLives: 7,
+      chaseStartFallMs: 1000,
+      chaseMinFallMs: 2000,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('rejects when sideToneMax is less than sideToneMin', () => {
     const candidate = {
       ...buildValidSettings(),

@@ -23,8 +23,12 @@ describe('normalizeTrainingSettings', () => {
     expect(normalizeTrainingSettings('string', DEFAULT_TRAINING_SETTINGS)).toEqual(
       DEFAULT_TRAINING_SETTINGS,
     );
-    expect(normalizeTrainingSettings(123, DEFAULT_TRAINING_SETTINGS)).toEqual(DEFAULT_TRAINING_SETTINGS);
-    expect(normalizeTrainingSettings([], DEFAULT_TRAINING_SETTINGS)).toEqual(DEFAULT_TRAINING_SETTINGS);
+    expect(normalizeTrainingSettings(123, DEFAULT_TRAINING_SETTINGS)).toEqual(
+      DEFAULT_TRAINING_SETTINGS,
+    );
+    expect(normalizeTrainingSettings([], DEFAULT_TRAINING_SETTINGS)).toEqual(
+      DEFAULT_TRAINING_SETTINGS,
+    );
   });
 
   it('normalizes valid settings', () => {
@@ -60,13 +64,27 @@ describe('normalizeTrainingSettings', () => {
   });
 
   it('normalizes digitsLevel within bounds', () => {
-    expect(normalizeTrainingSettings({ digitsLevel: 5 }, DEFAULT_TRAINING_SETTINGS).digitsLevel).toBe(5);
-    expect(normalizeTrainingSettings({ digitsLevel: 1 }, DEFAULT_TRAINING_SETTINGS).digitsLevel).toBe(1);
-    expect(normalizeTrainingSettings({ digitsLevel: 10 }, DEFAULT_TRAINING_SETTINGS).digitsLevel).toBe(10);
-    expect(normalizeTrainingSettings({ digitsLevel: 0 }, DEFAULT_TRAINING_SETTINGS).digitsLevel).toBe(1);
-    expect(normalizeTrainingSettings({ digitsLevel: 15 }, DEFAULT_TRAINING_SETTINGS).digitsLevel).toBe(10);
-    expect(normalizeTrainingSettings({ digitsLevel: -5 }, DEFAULT_TRAINING_SETTINGS).digitsLevel).toBe(1);
-    expect(normalizeTrainingSettings({ digitsLevel: 5.7 }, DEFAULT_TRAINING_SETTINGS).digitsLevel).toBe(5);
+    expect(
+      normalizeTrainingSettings({ digitsLevel: 5 }, DEFAULT_TRAINING_SETTINGS).digitsLevel,
+    ).toBe(5);
+    expect(
+      normalizeTrainingSettings({ digitsLevel: 1 }, DEFAULT_TRAINING_SETTINGS).digitsLevel,
+    ).toBe(1);
+    expect(
+      normalizeTrainingSettings({ digitsLevel: 10 }, DEFAULT_TRAINING_SETTINGS).digitsLevel,
+    ).toBe(10);
+    expect(
+      normalizeTrainingSettings({ digitsLevel: 0 }, DEFAULT_TRAINING_SETTINGS).digitsLevel,
+    ).toBe(1);
+    expect(
+      normalizeTrainingSettings({ digitsLevel: 15 }, DEFAULT_TRAINING_SETTINGS).digitsLevel,
+    ).toBe(10);
+    expect(
+      normalizeTrainingSettings({ digitsLevel: -5 }, DEFAULT_TRAINING_SETTINGS).digitsLevel,
+    ).toBe(1);
+    expect(
+      normalizeTrainingSettings({ digitsLevel: 5.7 }, DEFAULT_TRAINING_SETTINGS).digitsLevel,
+    ).toBe(5);
   });
 
   it('normalizes customSet correctly', () => {
@@ -140,6 +158,42 @@ describe('normalizeTrainingSettings', () => {
     expect(result.receiverBackgroundOffsetHz).toBe(1000);
     expect(result.receiverBackgroundOffsetModDepthHz).toBe(1000);
     expect(result.receiverBackgroundOffsetModRateHz).toBe(20);
+  });
+
+  it('normalizes Chase settings within bounds', () => {
+    const result = normalizeTrainingSettings(
+      {
+        chaseLives: 10,
+        chaseAutoLevelEnabled: false,
+        chaseGroupsPerLevel: 200,
+        chaseStartFallMs: 100,
+        chaseMinFallMs: 90000,
+        chaseLevelSpeedupMs: 9000,
+        chaseGroupSpeedupMs: -10,
+      },
+      DEFAULT_TRAINING_SETTINGS,
+    );
+
+    expect(result.chaseLives).toBe(6);
+    expect(result.chaseAutoLevelEnabled).toBe(false);
+    expect(result.chaseGroupsPerLevel).toBe(50);
+    expect(result.chaseStartFallMs).toBe(60000);
+    expect(result.chaseMinFallMs).toBe(60000);
+    expect(result.chaseLevelSpeedupMs).toBe(5000);
+    expect(result.chaseGroupSpeedupMs).toBe(0);
+  });
+
+  it('repairs Chase start fall time below minimum fall time', () => {
+    const result = normalizeTrainingSettings(
+      {
+        chaseStartFallMs: 1000,
+        chaseMinFallMs: 2000,
+      },
+      DEFAULT_TRAINING_SETTINGS,
+    );
+
+    expect(result.chaseStartFallMs).toBe(2000);
+    expect(result.chaseMinFallMs).toBe(2000);
   });
 
   it('falls back for invalid QRM profile', () => {
@@ -282,4 +336,3 @@ describe('hasSettingsChanged', () => {
     expect(hasSettingsChanged(current, previous)).toBe(false);
   });
 });
-
