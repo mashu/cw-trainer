@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 
 import type { ChaseResolvedTarget, ChaseTarget } from '@/hooks/useChaseTrainingSession';
+import { alignGroup } from '@/lib/groupAlignment';
 
 interface ChaseTrainingViewProps {
   readonly target: ChaseTarget | null;
@@ -59,6 +60,57 @@ function getThreatClasses(groupLength: number): {
     meter: 'bg-cyan-300',
     name: 'Light',
   };
+}
+
+function ChaseAnswerComparison({
+  sent,
+  received,
+}: {
+  readonly sent: string;
+  readonly received: string;
+}): JSX.Element {
+  const alignment = alignGroup(sent, received);
+  const boxClass =
+    'inline-flex h-9 min-w-9 items-center justify-center rounded-lg border px-2 font-mono text-lg font-black';
+
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <div className="grid grid-cols-[4.5rem_1fr] items-center gap-x-2 gap-y-1">
+        <p className="text-xs font-bold uppercase tracking-wide text-cyan-200/80">Answer</p>
+        <div className="flex gap-1">
+          {alignment.map((pair, index) => (
+            <span
+              key={`sent-${index}`}
+              className={`${boxClass} border-cyan-300/35 bg-cyan-950/50 text-cyan-50`}
+            >
+              {pair.sentChar ?? ' '}
+            </span>
+          ))}
+        </div>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-300/80">Typed</p>
+        <div className="flex gap-1">
+          {alignment.map((pair, index) => {
+            const isExtra = pair.sentChar === null;
+            const typed = pair.receivedChar ?? '_';
+            return (
+              <span
+                key={`received-${index}`}
+                className={`${boxClass} ${
+                  pair.match
+                    ? 'border-slate-500/50 bg-slate-900/70 text-slate-100'
+                    : isExtra
+                      ? 'border-rose-300 bg-rose-900/80 text-rose-100 line-through'
+                      : 'border-rose-300 bg-rose-900/80 text-rose-100'
+                }`}
+              >
+                {typed}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ChaseTrainingView({
@@ -188,6 +240,17 @@ export function ChaseTrainingView({
             </span>
           ) : null}
         </div>
+        {lastResolvedTarget && dangerFlash ? (
+          <div className="mb-3 rounded-2xl border border-rose-300/50 bg-rose-950/70 p-3 shadow-[0_0_30px_rgba(244,63,94,0.25)]">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-rose-200">
+              {lastResolvedTarget.outcome === 'missed' ? 'Missed group' : 'Wrong group'}
+            </p>
+            <ChaseAnswerComparison
+              sent={lastResolvedTarget.sent}
+              received={lastResolvedTarget.received}
+            />
+          </div>
+        ) : null}
         <form
           onSubmit={(event) => {
             event.preventDefault();

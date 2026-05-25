@@ -51,6 +51,30 @@ describe('ChaseTrainingView', () => {
     );
 
     expect(screen.getByText(/Missed target/i)).toBeInTheDocument();
-    expect(screen.getByText('KMU')).toBeInTheDocument();
+    expect(screen.getByText(/Missed group/i)).toBeInTheDocument();
+    expect(screen.getByText('Answer')).toBeInTheDocument();
+    expect(screen.getByText('Typed')).toBeInTheDocument();
+    expect(screen.getAllByText('_').length).toBe(3);
+  });
+
+  it('shows the true answer and typed answer for wrong targets', () => {
+    render(
+      <ChaseTrainingView
+        {...baseProps}
+        target={null}
+        lastResolvedTarget={{
+          sent: 'KMU',
+          received: 'KMM',
+          outcome: 'wrong',
+          scoreDelta: 0,
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/Wrong group/i)).toBeInTheDocument();
+    expect(screen.getByText('Answer')).toBeInTheDocument();
+    expect(screen.getByText('Typed')).toBeInTheDocument();
+    expect(screen.getAllByText('K').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('M').length).toBeGreaterThan(1);
   });
 });
