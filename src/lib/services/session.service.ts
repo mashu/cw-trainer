@@ -49,7 +49,15 @@ export class SessionService {
     }
 
     const validated = result.data;
-    const { firestoreId, groupTimings, mode, ...rest } = validated;
+    const {
+      firestoreId,
+      groupTimings,
+      mode,
+      kochLevel,
+      digitsLevel,
+      charSetMode,
+      ...rest
+    } = validated;
     const normalized: SessionResult = {
       ...rest,
       groupTimings: groupTimings.map(t => ({
@@ -58,6 +66,9 @@ export class SessionService {
       })),
       ...(mode !== undefined ? { mode } : {}),
       ...(firestoreId !== undefined ? { firestoreId } : {}),
+      ...(kochLevel !== undefined ? { kochLevel } : {}),
+      ...(digitsLevel !== undefined ? { digitsLevel } : {}),
+      ...(charSetMode !== undefined ? { charSetMode } : {}),
     };
 
     // Try to get existing sessions, but don't fail if Firebase is down

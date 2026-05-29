@@ -9,6 +9,7 @@ import {
   computeAverageResponseMs,
   computeSessionScore,
 } from '@/lib/score';
+import type { SessionLevelSnapshot } from '@/lib/sessionLevelSnapshot';
 import type { SessionResult, SessionGroup, SessionTiming } from '@/types';
 
 export interface BuildSessionResultInput {
@@ -17,6 +18,7 @@ export interface BuildSessionResultInput {
   readonly startedAt: number;
   readonly groupTimings: readonly SessionTiming[];
   readonly mode?: 'group' | 'echo' | 'chase';
+  readonly levelSnapshot?: SessionLevelSnapshot;
 }
 
 /**
@@ -24,7 +26,7 @@ export interface BuildSessionResultInput {
  * Pure function — no React, no side effects.
  */
 export function buildSessionResult(input: BuildSessionResultInput): SessionResult {
-  const { sentGroups, answers, startedAt, groupTimings, mode } = input;
+  const { sentGroups, answers, startedAt, groupTimings, mode, levelSnapshot } = input;
 
   const groups: SessionGroup[] = sentGroups.map((sent, idx) => ({
     sent,
@@ -69,5 +71,14 @@ export function buildSessionResult(input: BuildSessionResultInput): SessionResul
     avgResponseMs,
     score,
     ...(mode ? { mode } : {}),
+    ...(levelSnapshot
+      ? {
+          kochLevel: levelSnapshot.kochLevel,
+          charSetMode: levelSnapshot.charSetMode,
+          ...(levelSnapshot.digitsLevel !== undefined
+            ? { digitsLevel: levelSnapshot.digitsLevel }
+            : {}),
+        }
+      : {}),
   };
 }

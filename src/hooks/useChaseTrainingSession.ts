@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
+import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import {
   computeChaseFallMs,
   computeChaseLevelProgress,
@@ -184,6 +185,7 @@ export function useChaseTrainingSession({
         startedAt: startedAtRef.current ?? Date.now(),
         groupTimings: timings,
         mode: 'chase',
+        levelSnapshot: sessionLevelSnapshotFromSettings(settingsRef.current),
       });
       const survivedMs = Math.max(0, result.finishedAt - result.startedAt);
       setLastSessionResult({

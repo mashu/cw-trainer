@@ -177,6 +177,23 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
           avgResponseMs,
           totalChars,
         });
+  const charSetModeRaw = rawObj['charSetMode'];
+  const charSetMode =
+    charSetModeRaw === 'koch' ||
+    charSetModeRaw === 'digits' ||
+    charSetModeRaw === 'custom' ||
+    charSetModeRaw === 'mixed'
+      ? charSetModeRaw
+      : undefined;
+  const kochLevel =
+    typeof rawObj['kochLevel'] === 'number' && Number.isFinite(rawObj['kochLevel'])
+      ? Math.floor(rawObj['kochLevel'] as number)
+      : undefined;
+  const digitsLevel =
+    typeof rawObj['digitsLevel'] === 'number' && Number.isFinite(rawObj['digitsLevel'])
+      ? Math.floor(rawObj['digitsLevel'] as number)
+      : undefined;
+
   const result: SessionResult = {
     date,
     timestamp: ts,
@@ -195,6 +212,9 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
       ? { mode: rawObj['mode'] as 'echo' | 'chase' }
       : {}),
     ...(opts?.docId !== undefined ? { firestoreId: opts.docId } : {}),
+    ...(charSetMode !== undefined ? { charSetMode } : {}),
+    ...(kochLevel !== undefined ? { kochLevel } : {}),
+    ...(digitsLevel !== undefined ? { digitsLevel } : {}),
   };
   return result;
 };

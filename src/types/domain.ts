@@ -248,6 +248,12 @@ export interface SessionResult {
   readonly score: number;
   readonly mode?: SessionMode;
   readonly firestoreId?: string;
+  /** Koch / custom alphabet level at session time (when persisted). */
+  readonly kochLevel?: number;
+  /** Digits level at session time (digits / mixed modes). */
+  readonly digitsLevel?: number;
+  /** Character-set mode at session time. */
+  readonly charSetMode?: CharacterSetMode;
 }
 
 /** Aggregate statistics for calendar heatmap visualisations. */

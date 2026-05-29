@@ -18,6 +18,8 @@ const sessionTimingSchema = z.object({
   perCharMs: z.number().min(0).optional(),
 });
 
+const sessionCharSetModeSchema = z.enum(['koch', 'digits', 'custom', 'mixed']);
+
 export const sessionResultSchema = z
   .object({
     date: z.string().min(1),
@@ -35,6 +37,9 @@ export const sessionResultSchema = z
     score: z.number().min(0),
     mode: z.enum(['group', 'echo', 'chase']).optional(),
     firestoreId: z.string().min(1).optional(),
+    kochLevel: z.number().int().min(1).max(40).optional(),
+    digitsLevel: z.number().int().min(1).max(10).optional(),
+    charSetMode: sessionCharSetModeSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (value.groupTimings.length !== value.groups.length) {

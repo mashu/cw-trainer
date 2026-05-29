@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
+import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import { MAX_DIGITS_LEVEL, MAX_KOCH_LEVEL_GUESS } from '@/lib/constants';
 import { ensureAppError } from '@/lib/errors';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
@@ -439,12 +440,14 @@ export function useEchoTrainingSession({
         };
       });
 
+      const currentSettings = settingsRef.current;
       const result = buildSessionResult({
         sentGroups: groupsSent,
         answers: [...groupsReceived],
         startedAt: startedAtRef.current ?? Date.now(),
         groupTimings,
         mode: 'echo',
+        levelSnapshot: sessionLevelSnapshotFromSettings(currentSettings),
       });
 
       const sendingScore = nextCorrectChars - nextIncorrectChars;
@@ -462,7 +465,6 @@ export function useEchoTrainingSession({
       const currentSaveSession = saveSessionRef.current;
       const currentShowToast = showToastRef.current;
       const currentSetTrainingSettingsState = setTrainingSettingsStateRef.current;
-      const currentSettings = settingsRef.current;
 
       try {
         await currentSaveSession(result as SessionResultInput);

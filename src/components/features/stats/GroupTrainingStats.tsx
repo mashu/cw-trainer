@@ -31,6 +31,7 @@ import {
 } from '@/hooks/useStatsAnalytics';
 import { useTrainingSettingsState } from '@/hooks/useTrainingSettings';
 import { createGroupDisplayAlignment } from '@/lib/groupAlignment';
+import { formatSessionLevelLabel } from '@/lib/sessionLevelSnapshot';
 import { buildBigramHeatmapData, buildUnigramStats } from '@/lib/scoring/letterErrorStats';
 
 import { AchievementTrophyCase } from './AchievementTrophyCase';
@@ -1026,9 +1027,7 @@ export function GroupTrainingStats({
                       }
                       return `${seconds}s`;
                     };
-                    // Infer level from alphabetSize (for Koch method: level = alphabetSize - 1)
-                    // This is an approximation since we don't store the actual level
-                    const inferredLevel = s.alphabetSize > 0 ? s.alphabetSize - 1 : null;
+                    const levelLabel = formatSessionLevelLabel(s);
                     const groupCount = s.groups?.length || 0;
                     return (
                     <div key={s.timestamp} className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${selectedSessionTs === s.timestamp ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'} ${selectedForDeletion.has(s.timestamp) ? 'ring-1 ring-rose-200' : ''}`} onClick={() => setSelectedSessionTs(s.timestamp)}>
@@ -1046,7 +1045,9 @@ export function GroupTrainingStats({
                           <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                         <p className="text-xs text-slate-500">Accuracy: {(s.accuracy * 100).toFixed(1)}%</p>
                             {groupCount > 0 && <p className="text-xs text-slate-500">{groupCount} {groupCount === 1 ? 'group' : 'groups'}</p>}
-                            {inferredLevel !== null && <p className="text-xs text-slate-500">Level: {inferredLevel}</p>}
+                            {levelLabel !== null && (
+                              <p className="text-xs text-slate-500">Level: {levelLabel}</p>
+                            )}
                             {durationMs > 0 && <p className="text-xs text-slate-500">Time: {formatDuration(durationMs)}</p>}
                       </div>
                     </div>

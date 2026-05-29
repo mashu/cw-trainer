@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
+import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import {
   AUTO_CONFIRM_DELAY_MS,
   MAX_DIGITS_LEVEL,
@@ -309,6 +310,7 @@ export function useTrainingSession({
       answers,
       startedAt: startedAtRef.current || Date.now(),
       groupTimings,
+      levelSnapshot: sessionLevelSnapshotFromSettings(currentSettings),
     });
 
     const summary: SessionResultSummary = {
