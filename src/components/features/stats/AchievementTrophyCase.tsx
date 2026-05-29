@@ -2,62 +2,13 @@
 
 import React from 'react';
 
+import {
+  AchievementBadgeMedallion,
+  achievementTierCardClasses,
+} from '@/components/ui/achievements/AchievementBadgeMedallion';
 import { useAchievementsState } from '@/hooks/useAchievements';
 import { ACHIEVEMENT_BADGES } from '@/lib/achievements';
 import type { SessionResult } from '@/types';
-
-const tierClasses = {
-  bronze: 'border-amber-200 bg-amber-50 text-amber-800',
-  silver: 'border-slate-200 bg-slate-50 text-slate-800',
-  gold: 'border-yellow-200 bg-yellow-50 text-yellow-800',
-  platinum: 'border-indigo-200 bg-indigo-50 text-indigo-800',
-} as const;
-
-const tierIconClasses = {
-  bronze: 'bg-amber-100 text-amber-700 ring-amber-200',
-  silver: 'bg-slate-100 text-slate-700 ring-slate-200',
-  gold: 'bg-yellow-100 text-yellow-700 ring-yellow-200',
-  platinum: 'bg-indigo-100 text-indigo-700 ring-indigo-200',
-} as const;
-
-const categoryInitial = {
-  mastery: 'M',
-  performance: 'P',
-  consistency: 'C',
-  score: 'S',
-} as const;
-
-function BadgeMedallion({
-  tier,
-  category,
-  unlocked,
-}: {
-  readonly tier: keyof typeof tierIconClasses;
-  readonly category: keyof typeof categoryInitial;
-  readonly unlocked: boolean;
-}): JSX.Element {
-  return (
-    <div
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ring-1 ${
-        unlocked ? tierIconClasses[tier] : 'bg-slate-100 text-slate-400 ring-slate-200'
-      }`}
-      aria-hidden="true"
-    >
-      <svg className="h-7 w-7" viewBox="0 0 32 32" fill="none">
-        <circle cx="16" cy="13" r="8" stroke="currentColor" strokeWidth="2" />
-        <path
-          d="M11 20L8 29L16 25L24 29L21 20"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
-        <text x="16" y="16" textAnchor="middle" className="fill-current text-[9px] font-bold">
-          {categoryInitial[category]}
-        </text>
-      </svg>
-    </div>
-  );
-}
 
 export function AchievementTrophyCase({
   sessions,
@@ -126,13 +77,13 @@ export function AchievementTrophyCase({
                 key={badge.id}
                 className={`rounded-xl border p-4 transition ${
                   unlocked
-                    ? tierClasses[badge.tier]
+                    ? achievementTierCardClasses[badge.tier]
                     : 'border-slate-200 bg-slate-50 text-slate-500 opacity-75'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-3">
-                    <BadgeMedallion
+                    <AchievementBadgeMedallion
                       tier={badge.tier}
                       category={badge.category}
                       unlocked={Boolean(unlocked)}

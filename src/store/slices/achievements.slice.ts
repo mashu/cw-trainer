@@ -6,7 +6,7 @@ import type {
 import { calculateAchievementProgress } from '@/lib/achievements';
 import { ensureAppError } from '@/lib/errors';
 import type { AchievementService } from '@/lib/services/achievement.service';
-import type { SessionResult } from '@/types';
+import type { SessionResult, TrainingSettings } from '@/types';
 
 import type { AsyncStatus, StoreContextValue, StoreSetter } from '../types';
 
@@ -27,7 +27,9 @@ export interface AchievementsSlice {
 
 interface CreateAchievementsSliceParams {
   set: StoreSetter<AchievementsSlice>;
-  get: () => Pick<AchievementsSlice, 'achievements' | 'achievementsStatus'>;
+  get: () => Pick<AchievementsSlice, 'achievements' | 'achievementsStatus'> & {
+    readonly trainingSettings: TrainingSettings;
+  };
   getContext: () => StoreContextValue;
   service: AchievementService;
 }
@@ -89,7 +91,11 @@ export const createAchievementsSlice = ({
   ): Promise<AchievementEvaluationResult> => {
     set({ achievementsSyncing: true });
     try {
-      const result = await service.evaluateAndSave(getContext(), sessions);
+      const result = await service.evaluateAndSave(
+        getContext(),
+        sessions,
+        get().trainingSettings,
+      );
       set({
         achievements: [...result.unlocked],
         latestUnlockedAchievements: [...result.newlyUnlocked],
@@ -125,6 +131,7 @@ export const createAchievementsSlice = ({
         getContext(),
         sessions,
         get().achievements,
+        get().trainingSettings,
       );
       set({ achievementsSyncing: false });
       return profile;

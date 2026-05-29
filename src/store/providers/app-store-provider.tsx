@@ -186,8 +186,11 @@ export function AppStoreProvider({
               console.error('[app-store-provider] loadTrainingSettings error:', error);
             });
       const sessionsPromise = state.loadSessions().catch(() => undefined);
+      const achievementsPromise = state.loadAchievements().catch(() => undefined);
       void state.loadIcrSessions().catch(() => undefined);
-      void Promise.all([settingsPromise, sessionsPromise]).then(() => markSyncCompleted());
+      void Promise.all([settingsPromise, sessionsPromise, achievementsPromise]).then(() =>
+        markSyncCompleted(),
+      );
     }, 50);
   };
 

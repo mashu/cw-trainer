@@ -10,7 +10,21 @@ import type {
 } from '@/lib/db/repositories';
 import { ValidationError } from '@/lib/errors';
 import { unlockedAchievementSchema } from '@/lib/validators';
-import type { SessionResult } from '@/types';
+import type { SessionResult, TrainingSettings } from '@/types';
+
+const wpmFromSettings = (
+  settings: TrainingSettings,
+): {
+  readonly charWpmMin: number;
+  readonly charWpmMax: number;
+  readonly effectiveWpmMin: number;
+  readonly effectiveWpmMax: number;
+} => ({
+  charWpmMin: settings.charWpmMin,
+  charWpmMax: settings.charWpmMax,
+  effectiveWpmMin: settings.effectiveWpmMin,
+  effectiveWpmMax: settings.effectiveWpmMax,
+});
 
 export class AchievementService {
   constructor(private readonly repository: AchievementRepository) {}
@@ -22,6 +36,7 @@ export class AchievementService {
   async evaluateAndSave(
     context: AchievementRepositoryContext,
     sessions: readonly SessionResult[],
+    settings: TrainingSettings,
     now = Date.now(),
   ): Promise<AchievementEvaluationResult> {
     const existing = await this.repository.getAll(context);
@@ -34,7 +49,7 @@ export class AchievementService {
       return validation.data;
     });
     await this.repository.saveAll(context, parsed);
-    await this.publishPublicProfile(context, sessions, parsed, now).catch((error) => {
+    await this.publishPublicProfile(context, sessions, parsed, settings, now).catch((error) => {
       console.warn('[AchievementService] Failed to publish public profile:', error);
     });
     return {
@@ -48,18 +63,22 @@ export class AchievementService {
     context: AchievementRepositoryContext,
     sessions: readonly SessionResult[],
     achievements: readonly UnlockedAchievement[],
+    settings: TrainingSettings,
     now = Date.now(),
   ): Promise<PublicAchievementProfile | null> {
     const identity = await this.repository.getPublicIdentity(context);
     if (!identity) {
       return null;
     }
-    const progress = evaluateAchievements(sessions, achievements, now).progress;
+    const stored =
+      achievements.length > 0 ? achievements : await this.repository.getAll(context);
+    const evaluation = evaluateAchievements(sessions, stored, now);
     const profile = buildPublicAchievementProfile({
       publicId: identity.publicId,
       ...(identity.callSign ? { callSign: identity.callSign } : {}),
-      unlocked: achievements,
-      progress,
+      unlocked: evaluation.unlocked,
+      progress: evaluation.progress,
+      wpm: wpmFromSettings(settings),
       now,
       shareEnabled: true,
     });

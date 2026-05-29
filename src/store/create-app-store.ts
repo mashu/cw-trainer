@@ -111,6 +111,7 @@ export const createAppStore = ({
       get: () => ({
         achievements: get().achievements,
         achievementsStatus: get().achievementsStatus,
+        trainingSettings: get().trainingSettings,
       }),
       set: (partial, replace) => set(partial as Partial<AppStore>, replace),
     });

@@ -49,6 +49,10 @@ export const publicAchievementProfileSchema = z.object({
   masteredCharacterCount: z.number().int().nonnegative(),
   totalKnownCharacterCount: z.number().int().positive(),
   practiceDays: z.number().int().nonnegative(),
+  charWpmMin: z.number().min(1).optional(),
+  charWpmMax: z.number().min(1).optional(),
+  effectiveWpmMin: z.number().min(1).optional(),
+  effectiveWpmMax: z.number().min(1).optional(),
   updatedAt: z.number().int().nonnegative(),
   shareEnabled: z.boolean(),
 });

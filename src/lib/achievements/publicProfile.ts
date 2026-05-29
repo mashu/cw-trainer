@@ -9,6 +9,13 @@ export type PublicAchievementBadge = {
   readonly unlockedAt: number;
 };
 
+export type PublicProfileWpm = {
+  readonly charWpmMin: number;
+  readonly charWpmMax: number;
+  readonly effectiveWpmMin: number;
+  readonly effectiveWpmMax: number;
+};
+
 export type PublicAchievementProfile = {
   readonly publicId: number;
   readonly callSign?: string | undefined;
@@ -19,6 +26,10 @@ export type PublicAchievementProfile = {
   readonly masteredCharacterCount: number;
   readonly totalKnownCharacterCount: number;
   readonly practiceDays: number;
+  readonly charWpmMin?: number;
+  readonly charWpmMax?: number;
+  readonly effectiveWpmMin?: number;
+  readonly effectiveWpmMax?: number;
   readonly updatedAt: number;
   readonly shareEnabled: boolean;
 };
@@ -28,6 +39,7 @@ export const buildPublicAchievementProfile = ({
   callSign,
   unlocked,
   progress,
+  wpm,
   now = Date.now(),
   shareEnabled = true,
 }: {
@@ -35,6 +47,7 @@ export const buildPublicAchievementProfile = ({
   readonly callSign?: string;
   readonly unlocked: readonly UnlockedAchievement[];
   readonly progress: AchievementProgress;
+  readonly wpm?: PublicProfileWpm;
   readonly now?: number;
   readonly shareEnabled?: boolean;
 }): PublicAchievementProfile => {
@@ -67,6 +80,14 @@ export const buildPublicAchievementProfile = ({
     masteredCharacterCount: progress.masteredLetterCount + progress.masteredDigitCount,
     totalKnownCharacterCount: progress.totalLetterCount + progress.totalDigitCount,
     practiceDays: progress.practiceDays,
+    ...(wpm
+      ? {
+          charWpmMin: wpm.charWpmMin,
+          charWpmMax: wpm.charWpmMax,
+          effectiveWpmMin: wpm.effectiveWpmMin,
+          effectiveWpmMax: wpm.effectiveWpmMax,
+        }
+      : {}),
     updatedAt: now,
     shareEnabled,
   };

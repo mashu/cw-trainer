@@ -227,7 +227,7 @@ describe('useTrainingSession', () => {
 
   it('waits for scheduled playback duration before unlocking input', async () => {
     const audio = createMockAudio();
-    audio.playMorse = jest.fn().mockResolvedValue({ status: 'played', durationSec: 2.5 });
+    jest.mocked(audio.playMorse).mockResolvedValue({ status: 'played', durationSec: 2.5 });
     mockUseTrainingAudio.mockReturnValue(audio);
 
     const { result } = renderSessionHook();

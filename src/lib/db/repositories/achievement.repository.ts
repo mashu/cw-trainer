@@ -75,7 +75,24 @@ const parseStoredPublicProfile = (raw: unknown): PublicAchievementProfile | null
   if (!parsed.success || !parsed.data.shareEnabled) {
     return null;
   }
-  return parsed.data;
+  const data = parsed.data;
+  return {
+    publicId: data.publicId,
+    badgeCount: data.badgeCount,
+    featuredBadges: data.featuredBadges,
+    bestScore: data.bestScore,
+    bestAccuracy: data.bestAccuracy,
+    masteredCharacterCount: data.masteredCharacterCount,
+    totalKnownCharacterCount: data.totalKnownCharacterCount,
+    practiceDays: data.practiceDays,
+    updatedAt: data.updatedAt,
+    shareEnabled: data.shareEnabled,
+    ...(data.callSign ? { callSign: data.callSign } : {}),
+    ...(data.charWpmMin !== undefined ? { charWpmMin: data.charWpmMin } : {}),
+    ...(data.charWpmMax !== undefined ? { charWpmMax: data.charWpmMax } : {}),
+    ...(data.effectiveWpmMin !== undefined ? { effectiveWpmMin: data.effectiveWpmMin } : {}),
+    ...(data.effectiveWpmMax !== undefined ? { effectiveWpmMax: data.effectiveWpmMax } : {}),
+  };
 };
 
 const mergeAchievements = (
