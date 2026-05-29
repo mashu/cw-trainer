@@ -144,6 +144,10 @@ export function TrainingRouter({
         confirmedGroups={training.confirmedGroups}
         currentFocusedGroup={training.currentFocusedGroup}
         isTraining={sessionUiLocked}
+        currentGroupInputLocked={
+          (settings.lockInputDuringGroupPlayback ?? true) &&
+          training.runtimeStatus === 'playingGroup'
+        }
         inputRefs={training.inputRefs}
         inputRefCallback={training.inputRefCallback}
         onChange={training.handleAnswerChange}

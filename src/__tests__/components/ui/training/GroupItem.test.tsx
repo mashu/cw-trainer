@@ -86,6 +86,27 @@ describe('GroupItem', () => {
     expect(input).toBeDisabled();
   });
 
+  it('should show lock icon and listening placeholder while group is playing', () => {
+    render(<GroupItem {...defaultProps} inputLocked={true} isFocused={true} />);
+
+    const input = screen.getByPlaceholderText('Listening...');
+    expect(input).toHaveAttribute('readonly');
+    expect(input).not.toBeDisabled();
+    expect(screen.getByTitle('Input locked until the group finishes playing')).toBeInTheDocument();
+  });
+
+  it('should not call onChange when input is locked during playback', async () => {
+    const user = userEvent.setup();
+    const onChange = jest.fn();
+
+    render(<GroupItem {...defaultProps} inputLocked={true} onChange={onChange} />);
+
+    const input = screen.getByPlaceholderText('Listening...');
+    await user.type(input, 'A');
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('should call onFocus when input is focused', async () => {
     const user = userEvent.setup();
     const onFocus = jest.fn();

@@ -27,6 +27,7 @@ export const DEFAULT_TRAINING_SETTINGS: TrainingSettings = {
   echoKeyerMode: 'manual',
   extraWordSpaceMultiplier: 1,
   groupTimeout: 10,
+  lockInputDuringGroupPlayback: true,
   minGroupSize: 2,
   maxGroupSize: 3,
   linkGroupSize: false,

@@ -372,6 +372,10 @@ export const normalizeTrainingSettings = (
       typeof candidate['linkGroupSize'] === 'boolean'
         ? candidate['linkGroupSize']
         : fallback.linkGroupSize,
+    lockInputDuringGroupPlayback:
+      typeof candidate['lockInputDuringGroupPlayback'] === 'boolean'
+        ? candidate['lockInputDuringGroupPlayback']
+        : (fallback.lockInputDuringGroupPlayback ?? true),
     playerAnnounceLetters:
       typeof candidate['playerAnnounceLetters'] === 'boolean'
         ? candidate['playerAnnounceLetters']
@@ -637,6 +641,10 @@ export const normalizeTrainingSettings = (
     typeof candidate['linkGroupSize'] === 'boolean'
       ? candidate['linkGroupSize']
       : fallback.linkGroupSize;
+  partialResult.lockInputDuringGroupPlayback =
+    typeof candidate['lockInputDuringGroupPlayback'] === 'boolean'
+      ? candidate['lockInputDuringGroupPlayback']
+      : (fallback.lockInputDuringGroupPlayback ?? true);
   if (typeof candidate['errorWeightStrength'] === 'number')
     partialResult.errorWeightStrength = candidate['errorWeightStrength'];
   partialResult.playerAnnounceLetters =

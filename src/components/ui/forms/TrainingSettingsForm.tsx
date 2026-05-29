@@ -51,6 +51,7 @@ export interface FormTrainingSettings {
   echoKeyerMode?: 'manual' | 'iambic-b';
   extraWordSpaceMultiplier?: number;
   groupTimeout: number;
+  lockInputDuringGroupPlayback?: boolean;
   minGroupSize: number;
   maxGroupSize: number;
   linkGroupSize: boolean;
@@ -1076,6 +1077,30 @@ export function TrainingSettingsForm({
                 {...groupTimeoutField.inputProps}
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               />
+            </div>
+            <div className="sm:col-span-2">
+              <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                <input
+                  id="lockInputDuringGroupPlayback"
+                  type="checkbox"
+                  checked={settings.lockInputDuringGroupPlayback ?? true}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      lockInputDuringGroupPlayback: event.target.checked,
+                    })
+                  }
+                  className="mt-0.5 w-4 h-4"
+                />
+                <label htmlFor="lockInputDuringGroupPlayback" className="text-sm text-gray-700">
+                  <span className="font-medium">Lock input while group plays</span>
+                  <span className="mt-0.5 block text-xs text-slate-600">
+                    Group training only. Keeps the active answer field locked until the whole group
+                    has finished sending, so you copy the full word from memory instead of typing
+                    letter by letter.
+                  </span>
+                </label>
+              </div>
             </div>
             <div className="sm:col-span-2">
               <LinkedRangeInput

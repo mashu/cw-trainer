@@ -486,12 +486,19 @@ export function useTrainingSession({
           break;
         }
         const durationSec = playback.status === 'played' ? playback.durationSec : 0;
+        if (playback.status === 'played' && durationSec > 0) {
+          await audio.sleepCancelable(
+            Math.max(0, Math.ceil(durationSec * 1000) + 60),
+            mySession,
+          );
+        }
         const groupEndedAt = startTs + Math.max(0, Math.round(durationSec * 1000));
         groupEndAtRef.current[i] = groupEndedAt;
         recordRuntimeGroupEnd(i, groupEndedAt);
         if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
 
         setRuntimeStatus('waitingForAnswer');
+        focusInput(i);
         const { timedOut } = await waitForGroupCompletion(i);
         if (timedOut && !confirmedGroupsRef.current[i]) {
           autoConfirmOnTimeout(i, groups);
@@ -578,8 +585,13 @@ export function useTrainingSession({
     audio.stopAudio();
   };
 
+  const isGroupInputLockedDuringPlayback = (index: number): boolean =>
+    (settings.lockInputDuringGroupPlayback ?? true) &&
+    runtime.status === 'playingGroup' &&
+    index === currentGroup;
+
   const confirmGroupAnswer = (index: number, overrideValue?: string): void => {
-    if (!sentGroups.length) return;
+    if (!sentGroups.length || isGroupInputLockedDuringPlayback(index)) return;
     const normalized = (overrideValue ?? userInput[index] ?? '').trim().toUpperCase();
     const nextAnswers = [...userInput];
     nextAnswers[index] = normalized;
@@ -612,6 +624,7 @@ export function useTrainingSession({
   };
 
   const handleAnswerChange = (index: number, value: string): void => {
+    if (isGroupInputLockedDuringPlayback(index)) return;
     const nextAnswers = [...userInput];
     nextAnswers[index] = value;
     userInputRef.current = nextAnswers;

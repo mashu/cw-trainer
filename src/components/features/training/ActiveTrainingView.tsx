@@ -14,6 +14,7 @@ export interface ActiveTrainingViewProps {
   readonly confirmedGroups: Record<number, boolean>;
   readonly currentFocusedGroup: number;
   readonly isTraining: boolean;
+  readonly currentGroupInputLocked?: boolean;
   readonly inputRefs: React.MutableRefObject<Array<HTMLInputElement | null>>;
   readonly inputRefCallback: (
     idx: number,
@@ -35,6 +36,7 @@ export function ActiveTrainingView({
   confirmedGroups,
   currentFocusedGroup,
   isTraining,
+  currentGroupInputLocked = false,
   inputRefs,
   inputRefCallback,
   onChange,
@@ -92,6 +94,7 @@ export function ActiveTrainingView({
           currentFocusedGroup={currentFocusedGroup}
           currentActiveGroup={currentGroup}
           isTraining={isTraining}
+          currentGroupInputLocked={currentGroupInputLocked}
           onChange={onChange}
           onConfirm={onConfirm}
           onFocus={onFocus}

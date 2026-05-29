@@ -11,6 +11,7 @@ interface GroupsListProps {
   currentFocusedGroup: number;
   currentActiveGroup?: number;
   isTraining?: boolean;
+  currentGroupInputLocked?: boolean;
   onChange: (index: number, value: string) => void;
   onConfirm: (index: number) => void;
   onFocus: (index: number) => void;
@@ -24,6 +25,7 @@ export function GroupsList({
   currentFocusedGroup,
   currentActiveGroup,
   isTraining = false,
+  currentGroupInputLocked = false,
   onChange,
   onConfirm,
   onFocus,
@@ -38,6 +40,7 @@ export function GroupsList({
           const isActiveGroup = currentActiveGroup !== undefined && idx === currentActiveGroup;
           // Disable only if: training is active, not the active group, and not confirmed
           const isDisabled = isTraining && !isActiveGroup && !confirmedGroups[idx];
+          const inputLocked = Boolean(currentGroupInputLocked && isActiveGroup && !confirmedGroups[idx]);
           return (
             <GroupItem
               key={idx}
@@ -47,6 +50,7 @@ export function GroupsList({
               confirmed={!!confirmedGroups[idx]}
               isFocused={currentFocusedGroup === idx}
               disabled={isDisabled}
+              inputLocked={inputLocked}
               onChange={(v) => onChange(idx, v)}
               onConfirm={() => onConfirm(idx)}
               onFocus={() => onFocus(idx)}

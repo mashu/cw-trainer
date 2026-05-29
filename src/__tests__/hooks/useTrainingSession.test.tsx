@@ -225,6 +225,28 @@ describe('useTrainingSession', () => {
     expect(result.current.userInput[0]).toBe('A');
   });
 
+  it('waits for scheduled playback duration before unlocking input', async () => {
+    const audio = createMockAudio();
+    audio.playMorse = jest.fn().mockResolvedValue({ status: 'played', durationSec: 2.5 });
+    mockUseTrainingAudio.mockReturnValue(audio);
+
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    expect(audio.sleepCancelable).toHaveBeenCalledWith(
+      Math.ceil(2.5 * 1000) + 60,
+      expect.any(Number),
+    );
+  });
+
   it('stopTraining during session cancels without showing results', async () => {
     const { result } = renderSessionHook();
     await waitForInitialLoads();

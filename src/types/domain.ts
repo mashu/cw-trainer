@@ -149,6 +149,8 @@ export interface TrainingSettings {
   /** Scales standard word-space timing between groups (Group/Echo) and at spaces (Player). */
   readonly extraWordSpaceMultiplier: number;
   readonly groupTimeout: number;
+  /** Group-only: block typing in the active group until Morse playback finishes. Default true. */
+  readonly lockInputDuringGroupPlayback?: boolean;
   readonly minGroupSize: number;
   readonly maxGroupSize: number;
   readonly linkGroupSize: boolean;

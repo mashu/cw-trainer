@@ -109,6 +109,7 @@ export const trainingSettingsSchema = z
     echoKeyerMode: echoKeyerModeSchema.optional().default('manual'),
     extraWordSpaceMultiplier: z.number().min(EXTRA_SPACING_MULTIPLIER_MIN),
     groupTimeout: z.number().min(GROUP_TIMEOUT_MIN),
+    lockInputDuringGroupPlayback: z.boolean().default(true),
     minGroupSize: z.number().int().min(GROUP_SIZE_MIN).max(GROUP_SIZE_MAX),
     maxGroupSize: z.number().int().min(GROUP_SIZE_MIN).max(GROUP_SIZE_MAX),
     linkGroupSize: z.boolean(),
