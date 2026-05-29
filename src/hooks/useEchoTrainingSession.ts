@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
-import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import { MAX_DIGITS_LEVEL, MAX_KOCH_LEVEL_GUESS } from '@/lib/constants';
 import { ensureAppError } from '@/lib/errors';
+import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { playMorseCodeControlled, resumeAudioContextFromUserGesture } from '@/lib/morseAudio';
@@ -16,8 +16,8 @@ import {
   keyboardInputToMorseSignal,
   type MorseSignal,
 } from '@/lib/morseSignals';
+import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
-import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import { computeTrainingGroupGapMs, pickTrainingToneHz } from '@/lib/trainingSessionPlayback';
 import type { SessionResultInput } from '@/lib/validators';
 import type { SessionResult, TrainingSettings } from '@/types';

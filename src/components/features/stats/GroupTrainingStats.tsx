@@ -31,8 +31,8 @@ import {
 } from '@/hooks/useStatsAnalytics';
 import { useTrainingSettingsState } from '@/hooks/useTrainingSettings';
 import { createGroupDisplayAlignment } from '@/lib/groupAlignment';
-import { formatSessionLevelLabel } from '@/lib/sessionLevelSnapshot';
 import { buildBigramHeatmapData, buildUnigramStats } from '@/lib/scoring/letterErrorStats';
+import { formatSessionLevelLabel } from '@/lib/sessionLevelSnapshot';
 
 import { AchievementTrophyCase } from './AchievementTrophyCase';
 import { BigramHeatmapView } from './BigramHeatmap';

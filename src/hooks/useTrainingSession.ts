@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
-import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import {
   AUTO_CONFIRM_DELAY_MS,
   MAX_DIGITS_LEVEL,
@@ -12,6 +11,7 @@ import {
 import { ensureAppError } from '@/lib/errors';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
+import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import { isGroupTrainingRuntimeActive } from '@/lib/training/groupSessionMachine';
 import type {
   GroupSessionResultSummary,

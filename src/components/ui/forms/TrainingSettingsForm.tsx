@@ -2,12 +2,12 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 
+import { useNumberField } from '@/hooks/useNumberField';
 import {
   EXTRA_SPACING_LABEL,
   EXTRA_SPACING_MULTIPLIER_MIN,
   EXTRA_SPACING_SETTINGS_HELP,
 } from '@/lib/extraSpacing';
-import { useNumberField } from '@/hooks/useNumberField';
 import { LCWO_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
 import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
 import { computeCharPool } from '@/lib/trainingUtils';

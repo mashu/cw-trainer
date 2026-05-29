@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
-import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import {
   computeChaseFallMs,
   computeChaseLevelProgress,
@@ -12,6 +11,7 @@ import {
   type ChaseResolveOutcome,
 } from '@/lib/chase';
 import { ensureAppError } from '@/lib/errors';
+import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import type { SessionResultInput } from '@/lib/validators';
 import type { SessionResult, TrainingSettings } from '@/types';
