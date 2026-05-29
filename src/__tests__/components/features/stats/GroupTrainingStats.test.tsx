@@ -361,6 +361,90 @@ describe('GroupTrainingStats', (): void => {
     });
   });
 
+  it('should delete selected sessions via clear selected', async (): Promise<void> => {
+    const user = userEvent.setup();
+    let mockSessions = [
+      {
+        date: '2024-01-01',
+        timestamp: Date.now() - 2000,
+        groups: [{ sent: 'ABC', received: 'ABC', correct: true }],
+        groupTimings: [{ timeToCompleteMs: 1000 }],
+        accuracy: 1.0,
+        letterAccuracy: {},
+        alphabetSize: 3,
+        totalChars: 3,
+        effectiveAlphabetSize: 3,
+        avgResponseMs: 1000,
+        score: 100,
+        startedAt: Date.now() - 5000,
+        finishedAt: Date.now(),
+      },
+      {
+        date: '2024-01-02',
+        timestamp: Date.now() - 1000,
+        groups: [{ sent: 'DEF', received: 'DEF', correct: true }],
+        groupTimings: [{ timeToCompleteMs: 900 }],
+        accuracy: 1.0,
+        letterAccuracy: {},
+        alphabetSize: 3,
+        totalChars: 3,
+        effectiveAlphabetSize: 3,
+        avgResponseMs: 900,
+        score: 100,
+        startedAt: Date.now() - 5000,
+        finishedAt: Date.now(),
+      },
+    ];
+
+    const mockDeleteSession = jest.fn().mockImplementation(async (_context, timestamp: number) => {
+      mockSessions = mockSessions.filter((session) => session.timestamp !== timestamp);
+      return [...mockSessions];
+    });
+
+    mockSessionService.deleteSession = mockDeleteSession;
+    mockSessionService.listSessions = jest.fn().mockImplementation(() => Promise.resolve([...mockSessions]));
+
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Avg Accuracy/i)).toBeInTheDocument();
+    });
+
+    const sessionsTab = screen.getByRole('button', { name: /sessions/i });
+    await user.click(sessionsTab);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Select all sessions/i)).toBeInTheDocument();
+    });
+
+    const sessionCheckboxes = screen.getAllByRole('checkbox', {
+      name: /Select session .* for deletion/i,
+    });
+    expect(sessionCheckboxes.length).toBe(2);
+
+    await user.click(sessionCheckboxes[0]!);
+    await user.click(sessionCheckboxes[1]!);
+
+    const clearSelectedButton = screen.getByRole('button', { name: /Clear selected \(2\)/i });
+    await user.click(clearSelectedButton);
+
+    await waitFor(() => {
+      expect(mockDeleteSession).toHaveBeenCalledTimes(2);
+    });
+
+    confirmSpy.mockRestore();
+  });
+
   it('should call removeSessionByTimestamp when delete button is clicked', async (): Promise<void> => {
     const user = userEvent.setup();
     const mockDeleteSession = jest.fn().mockResolvedValue([]);

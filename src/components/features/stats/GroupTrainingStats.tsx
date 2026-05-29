@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -135,6 +135,10 @@ export function GroupTrainingStats({
   embedded,
 }: GroupTrainingStatsProps): JSX.Element {
   const [selectedSessionTs, setSelectedSessionTs] = useState<number | null>(null);
+  const [selectedForDeletion, setSelectedForDeletion] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const [range, setRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
   const [tab, setTab] = useState<StatsTab>('overview');
 
@@ -144,7 +148,7 @@ export function GroupTrainingStats({
     sessionsError,
     sessionsSyncing,
   } = useSessionsState();
-  const { removeSessionByTimestamp, replaceSessions } = useSessionsActions();
+  const { removeSessionByTimestamp } = useSessionsActions();
 
   const sessionResults = sessions;
   const isLoading = sessionsStatus === 'loading';
@@ -173,6 +177,12 @@ export function GroupTrainingStats({
       try {
         await removeSessionByTimestamp(timestamp);
         setSelectedSessionTs((current) => (current === timestamp ? null : current));
+        setSelectedForDeletion((current) => {
+          if (!current.has(timestamp)) return current;
+          const next = new Set(current);
+          next.delete(timestamp);
+          return next;
+        });
       } catch (error) {
         console.error('[GroupTrainingStats] Failed to delete session', error);
       }
@@ -180,20 +190,74 @@ export function GroupTrainingStats({
     [removeSessionByTimestamp],
   );
 
-  const handleClearAllSessions = useCallback(async (): Promise<void> => {
-    const count = sessionResults.length;
-    if (count === 0) return;
+  const displayedSessions = useMemo(
+    () => sessionsSorted.slice().sort((a, b) => b.timestamp - a.timestamp),
+    [sessionsSorted],
+  );
+
+  const allDisplayedSelected =
+    displayedSessions.length > 0 &&
+    displayedSessions.every((session) => selectedForDeletion.has(session.timestamp));
+
+  const someDisplayedSelected = displayedSessions.some((session) =>
+    selectedForDeletion.has(session.timestamp),
+  );
+
+  useEffect(() => {
+    const validTimestamps = new Set(sessionResults.map((session) => session.timestamp));
+    setSelectedForDeletion((current) => {
+      const next = new Set([...current].filter((timestamp) => validTimestamps.has(timestamp)));
+      return next.size === current.size ? current : next;
+    });
+  }, [sessionResults]);
+
+  useEffect(() => {
+    const checkbox = selectAllCheckboxRef.current;
+    if (!checkbox) return;
+    checkbox.indeterminate = someDisplayedSelected && !allDisplayedSelected;
+  }, [someDisplayedSelected, allDisplayedSelected]);
+
+  const toggleSelectAllSessions = useCallback((): void => {
+    if (allDisplayedSelected) {
+      setSelectedForDeletion(new Set());
+      return;
+    }
+    setSelectedForDeletion(new Set(displayedSessions.map((session) => session.timestamp)));
+  }, [allDisplayedSelected, displayedSessions]);
+
+  const toggleSessionDeletionSelection = useCallback((timestamp: number): void => {
+    setSelectedForDeletion((current) => {
+      const next = new Set(current);
+      if (next.has(timestamp)) {
+        next.delete(timestamp);
+      } else {
+        next.add(timestamp);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleClearSelectedSessions = useCallback(async (): Promise<void> => {
+    const timestamps = [...selectedForDeletion];
+    if (timestamps.length === 0) return;
     const confirmed = window.confirm(
-      `Clear all ${count} session${count === 1 ? '' : 's'}? This cannot be undone.`,
+      `Delete ${timestamps.length} selected session${timestamps.length === 1 ? '' : 's'}? This cannot be undone.`,
     );
     if (!confirmed) return;
     try {
-      await replaceSessions([]);
-      setSelectedSessionTs(null);
+      for (const timestamp of timestamps) {
+        await removeSessionByTimestamp(timestamp);
+        setSelectedForDeletion((current) => {
+          const next = new Set(current);
+          next.delete(timestamp);
+          return next;
+        });
+        setSelectedSessionTs((current) => (current === timestamp ? null : current));
+      }
     } catch (error) {
-      console.error('[GroupTrainingStats] Failed to clear sessions', error);
+      console.error('[GroupTrainingStats] Failed to delete selected sessions', error);
     }
-  }, [sessionResults.length, replaceSessions]);
+  }, [removeSessionByTimestamp, selectedForDeletion]);
 
   const aggregateLetterStats = useCallback((sessionsToAggregate: typeof sessionsSorted): LetterStatsPoint[] => {
     const letterStats: Record<string, { correct: number; total: number }> = {};
@@ -893,22 +957,38 @@ export function GroupTrainingStats({
             <div className="flex flex-col lg:flex-row gap-4">
               {/* Session List */}
               <div className="lg:w-1/2">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <h3 className="text-lg font-semibold text-slate-700">Sessions</h3>
-                  {hasTrainingSessions && (
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-3">
+                    {hasTrainingSessions && (
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+                        <input
+                          ref={selectAllCheckboxRef}
+                          type="checkbox"
+                          checked={allDisplayedSelected}
+                          onChange={toggleSelectAllSessions}
+                          disabled={sessionsSyncing}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          aria-label="Select all sessions"
+                        />
+                        Select all
+                      </label>
+                    )}
+                    <h3 className="text-lg font-semibold text-slate-700">Sessions</h3>
+                  </div>
+                  {selectedForDeletion.size > 0 && (
                     <button
                       type="button"
-                      onClick={() => void handleClearAllSessions()}
+                      onClick={() => void handleClearSelectedSessions()}
                       disabled={sessionsSyncing}
-                      className="px-2.5 py-1.5 text-xs rounded-md border border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-rose-200 hover:text-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                      title="Clear all sessions"
+                      className="px-2.5 py-1.5 text-xs rounded-md border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                      title="Delete selected sessions"
                     >
-                      Clear all
+                      Clear selected ({selectedForDeletion.size})
                     </button>
                   )}
                 </div>
                 <div className="max-h-[500px] overflow-auto pr-1 space-y-2">
-                  {sessionsSorted.slice().sort((a, b) => b.timestamp - a.timestamp).map((s) => {
+                  {displayedSessions.map((s) => {
                     // Format duration
                     const durationMs = s.finishedAt && s.startedAt ? s.finishedAt - s.startedAt : 0;
                     const formatDuration = (ms: number): string => {
@@ -929,8 +1009,17 @@ export function GroupTrainingStats({
                     const inferredLevel = s.alphabetSize > 0 ? s.alphabetSize - 1 : null;
                     const groupCount = s.groups?.length || 0;
                     return (
-                    <div key={s.timestamp} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-colors ${selectedSessionTs === s.timestamp ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`} onClick={() => setSelectedSessionTs(s.timestamp)}>
-                        <div className="flex-1">
+                    <div key={s.timestamp} className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${selectedSessionTs === s.timestamp ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'} ${selectedForDeletion.has(s.timestamp) ? 'ring-1 ring-rose-200' : ''}`} onClick={() => setSelectedSessionTs(s.timestamp)}>
+                        <input
+                          type="checkbox"
+                          checked={selectedForDeletion.has(s.timestamp)}
+                          onChange={() => toggleSessionDeletionSelection(s.timestamp)}
+                          onClick={(e) => e.stopPropagation()}
+                          disabled={sessionsSyncing}
+                          className="shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          aria-label={`Select session ${formatSessionDate(s.timestamp)} for deletion`}
+                        />
+                        <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">{formatSessionDate(s.timestamp)}</p>
                           <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                         <p className="text-xs text-slate-500">Accuracy: {(s.accuracy * 100).toFixed(1)}%</p>
