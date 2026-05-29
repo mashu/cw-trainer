@@ -12,6 +12,7 @@ import { TrainingModeCarousel } from '@/components/ui/navigation/TrainingModeCar
 import { useAchievementsActions, useAchievementsState } from '@/hooks/useAchievements';
 import type { AuthUserSummary } from '@/hooks/useAuth';
 import { useSessionsActions } from '@/hooks/useSessions';
+import { isFirestorePermissionDenied } from '@/lib/errors/firebase-errors';
 import { initFirebase } from '@/lib/firebaseClient';
 import { getUserCallSign, setUserCallSign } from '@/lib/sessionPersistence';
 import { tryCopyTextToClipboard, tryNavigatorShare } from '@/lib/utils/share-url';
@@ -172,6 +173,12 @@ export function Sidebar({
       profile = await publishAchievementProfile(sessions);
     } catch (error) {
       console.warn('Failed to publish profile', error);
+      if (isFirestorePermissionDenied(error)) {
+        setShareStatus(
+          'Firestore blocked publishing. Deploy firestore.rules to your Firebase project (see docs/FIRESTORE.md), then try again.',
+        );
+        return;
+      }
       setShareStatus('Unable to publish profile. Check your connection and try again.');
       return;
     }

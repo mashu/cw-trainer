@@ -17,13 +17,11 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Public trophy/profile snapshots contain no email or private session history.
-    match /publicProfiles/{publicId} {
+    // Public trophy/profile snapshots (doc id = Firebase uid; publicId is a field for URLs).
+    match /publicProfiles/{profileUid} {
       allow read: if true;
-      allow create, update: if request.auth != null
-        && request.resource.data.ownerUid == request.auth.uid;
-      allow delete: if request.auth != null
-        && resource.data.ownerUid == request.auth.uid;
+      allow create, update: if request.auth != null && request.auth.uid == profileUid;
+      allow delete: if request.auth != null && request.auth.uid == profileUid;
     }
 
     // Protect all other user data - users can only access their own data

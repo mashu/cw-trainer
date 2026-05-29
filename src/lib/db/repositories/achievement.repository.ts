@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
 
 import type { PublicAchievementProfile, UnlockedAchievement } from '@/lib/achievements';
 import { derivePublicIdFromUid } from '@/lib/score';
@@ -68,6 +68,14 @@ const writeLocal = (user: AppUser | null, achievements: readonly UnlockedAchieve
   } catch {
     /* localStorage may be unavailable in private mode. */
   }
+};
+
+const parseStoredPublicProfile = (raw: unknown): PublicAchievementProfile | null => {
+  const parsed = publicAchievementProfileSchema.safeParse(raw);
+  if (!parsed.success || !parsed.data.shareEnabled) {
+    return null;
+  }
+  return parsed.data;
 };
 
 const mergeAchievements = (
@@ -156,10 +164,14 @@ export class FirebaseAchievementRepository implements AchievementRepository {
     }
 
     const parsed = publicAchievementProfileSchema.parse(profile);
-    await setDoc(doc(db, 'publicProfiles', String(parsed.publicId)), {
-      ...parsed,
-      ownerUid: uid,
-    });
+    await setDoc(
+      doc(db, 'publicProfiles', uid),
+      {
+        ...parsed,
+        ownerUid: uid,
+      },
+      { merge: true },
+    );
   }
 
   async getPublicProfile(publicId: number): Promise<PublicAchievementProfile | null> {
@@ -170,14 +182,21 @@ export class FirebaseAchievementRepository implements AchievementRepository {
       return null;
     }
 
-    const snap = await getDoc(doc(db, 'publicProfiles', String(publicId)));
-    if (!snap.exists()) {
+    const byPublicId = await getDocs(
+      query(collection(db, 'publicProfiles'), where('publicId', '==', publicId), limit(1)),
+    );
+    for (const docSnap of byPublicId.docs) {
+      const profile = parseStoredPublicProfile(docSnap.data());
+      if (profile) {
+        return profile;
+      }
+    }
+
+    // Legacy docs keyed by numeric publicId (before uid-keyed storage).
+    const legacySnap = await getDoc(doc(db, 'publicProfiles', String(publicId)));
+    if (!legacySnap.exists()) {
       return null;
     }
-    const parsed = publicAchievementProfileSchema.safeParse(snap.data());
-    if (!parsed.success || !parsed.data.shareEnabled) {
-      return null;
-    }
-    return parsed.data;
+    return parseStoredPublicProfile(legacySnap.data());
   }
 }
