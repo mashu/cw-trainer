@@ -103,7 +103,9 @@ describe('BigramHeatmapView', () => {
     await user.click(heatmapCount.closest('td')!);
 
     expect(screen.getByRole('button', { name: /close details/i })).toBeInTheDocument();
-    const detailPanel = screen.getByRole('button', { name: /close details/i }).closest('div.mt-4')!;
+    const detailPanel = screen
+      .getByRole('button', { name: /close details/i })
+      .closest('div.mt-4') as HTMLElement;
     expect(within(detailPanel).getByText(/Total Occurrences/i)).toBeInTheDocument();
     expect(within(detailPanel).getByText('8')).toBeInTheDocument();
 

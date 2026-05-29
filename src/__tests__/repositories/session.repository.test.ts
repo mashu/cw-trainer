@@ -4,6 +4,7 @@ import {
   flushPendingOps,
   loadSessions,
   saveSessions,
+  type FirebaseServicesLite,
 } from '@/lib/sessionPersistence';
 import type { SessionResult, AppUser } from '@/types';
 
@@ -22,6 +23,7 @@ const mockDeleteSessionPersisted = deleteSessionPersisted as jest.MockedFunction
 const mockFlushPendingOps = flushPendingOps as jest.MockedFunction<typeof flushPendingOps>;
 
 const user: AppUser = { id: 'uid-1', email: 'op@example.com', provider: 'google' };
+const firebaseServices = { db: {}, auth: {} } as NonNullable<FirebaseServicesLite>;
 const session: SessionResult = {
   date: '2025-01-01',
   timestamp: 1000,
@@ -50,13 +52,13 @@ describe('FirebaseSessionRepository', () => {
   });
 
   it('loads sessions via persistence with mapped firebase user', async () => {
-    const result = await repository.getAll({ user, firebase: { hasAuth: true, hasDb: true } });
+    const result = await repository.getAll({ user, firebase: firebaseServices });
 
     expect(result).toEqual([session]);
-    expect(mockLoadSessions).toHaveBeenCalledWith(
-      { hasAuth: true, hasDb: true },
-      { uid: 'uid-1', email: 'op@example.com' },
-    );
+    expect(mockLoadSessions).toHaveBeenCalledWith(firebaseServices, {
+      uid: 'uid-1',
+      email: 'op@example.com',
+    });
   });
 
   it('passes null firebase user when not signed in', async () => {

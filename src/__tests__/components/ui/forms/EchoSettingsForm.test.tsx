@@ -5,7 +5,12 @@ import { EchoSettingsForm } from '@/components/ui/forms/EchoSettingsForm';
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
 
-const baseSettings: FormTrainingSettings = { ...DEFAULT_TRAINING_SETTINGS };
+const { customSet, customSequence, ...defaultSettings } = DEFAULT_TRAINING_SETTINGS;
+const baseSettings: FormTrainingSettings = {
+  ...defaultSettings,
+  customSet: [...customSet],
+  ...(customSequence !== undefined ? { customSequence: [...customSequence] } : {}),
+};
 
 describe('EchoSettingsForm', () => {
   it('renders manual keyer by default', () => {

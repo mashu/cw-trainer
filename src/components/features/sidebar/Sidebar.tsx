@@ -14,6 +14,7 @@ import type { AuthUserSummary } from '@/hooks/useAuth';
 import { useSessionsActions } from '@/hooks/useSessions';
 import { initFirebase } from '@/lib/firebaseClient';
 import { getUserCallSign, setUserCallSign } from '@/lib/sessionPersistence';
+import { tryCopyTextToClipboard, tryNavigatorShare } from '@/lib/utils/share-url';
 import { useAppStore } from '@/store';
 import type { IcrSettings, TrainingMode } from '@/types';
 
@@ -165,30 +166,41 @@ export function Sidebar({
 
   const handleShareProfile = async (): Promise<void> => {
     setShareStatus(null);
+
+    let profile;
     try {
-      const profile = await publishAchievementProfile(sessions);
-      if (!profile) {
-        setShareStatus('Sign in with Firebase enabled to publish a public profile.');
-        return;
-      }
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const shareUrl = `${origin}/profile/?u=${profile.publicId}`;
-      if (navigator.share) {
-        await navigator.share({
-          title: 'CW-Trainer profile',
-          text: `My CW-Trainer trophy case: ${profile.badgeCount} badges, best score ${Math.round(profile.bestScore)}.`,
-          url: shareUrl,
-        });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl);
-        setShareStatus('Profile link copied to clipboard.');
-      } else {
-        setShareStatus(shareUrl);
-      }
+      profile = await publishAchievementProfile(sessions);
     } catch (error) {
-      console.warn('Failed to share profile', error);
-      setShareStatus('Unable to share profile right now.');
+      console.warn('Failed to publish profile', error);
+      setShareStatus('Unable to publish profile. Check your connection and try again.');
+      return;
     }
+
+    if (!profile) {
+      setShareStatus('Sign in with Firebase enabled to publish a public profile.');
+      return;
+    }
+
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareUrl = `${origin}/profile/?u=${profile.publicId}`;
+    const sharePayload = {
+      title: 'CW-Trainer profile',
+      text: `My CW-Trainer trophy case: ${profile.badgeCount} badges, best score ${Math.round(profile.bestScore)}.`,
+      url: shareUrl,
+    };
+
+    const shareResult = await tryNavigatorShare(sharePayload);
+    if (shareResult === 'shared' || shareResult === 'cancelled') {
+      return;
+    }
+
+    const copied = await tryCopyTextToClipboard(shareUrl);
+    if (copied) {
+      setShareStatus('Profile link copied to clipboard.');
+      return;
+    }
+
+    setShareStatus(shareUrl);
   };
 
   useEffect(() => {

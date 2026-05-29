@@ -26,7 +26,12 @@ jest.mock('@/lib/morseAudio', () => ({
 
 const mockPlayMorse = playMorseCodeControlled as jest.MockedFunction<typeof playMorseCodeControlled>;
 
-const baseSettings: FormTrainingSettings = { ...DEFAULT_TRAINING_SETTINGS };
+const { customSet, customSequence, ...defaultSettings } = DEFAULT_TRAINING_SETTINGS;
+const baseSettings: FormTrainingSettings = {
+  ...defaultSettings,
+  customSet: [...customSet],
+  ...(customSequence !== undefined ? { customSequence: [...customSequence] } : {}),
+};
 
 describe('ToneEnvelopeSection', () => {
   beforeEach(() => {

@@ -40,17 +40,22 @@ export const buildPublicAchievementProfile = ({
 }): PublicAchievementProfile => {
   const featuredBadges = [...unlocked]
     .sort((a, b) => b.unlockedAt - a.unlockedAt)
-    .slice(0, 6)
-    .map((achievement) => {
+    .flatMap((achievement) => {
       const badge = ACHIEVEMENT_BADGE_BY_ID[achievement.id];
-      return {
-        id: achievement.id,
-        title: badge.title,
-        tier: badge.tier,
-        rarity: badge.rarity,
-        unlockedAt: achievement.unlockedAt,
-      };
-    });
+      if (!badge) {
+        return [];
+      }
+      return [
+        {
+          id: achievement.id,
+          title: badge.title,
+          tier: badge.tier,
+          rarity: badge.rarity,
+          unlockedAt: achievement.unlockedAt,
+        },
+      ];
+    })
+    .slice(0, 6);
 
   return {
     publicId,

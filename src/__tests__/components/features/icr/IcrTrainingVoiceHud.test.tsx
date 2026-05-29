@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react';
-import { createRef } from 'react';
+import type { MutableRefObject } from 'react';
 
 import { IcrTrainingVoiceHud } from '@/components/features/icr/IcrTrainingVoiceHud';
+
+const armedRef = (value: boolean): MutableRefObject<boolean> => ({ current: value });
 
 describe('IcrTrainingVoiceHud', () => {
   let rafCount = 0;
@@ -23,14 +25,11 @@ describe('IcrTrainingVoiceHud', () => {
   });
 
   it('returns null when inactive', () => {
-    const armedRef = createRef<boolean>();
-    armedRef.current = false;
-
     const { container } = render(
       <IcrTrainingVoiceHud
         active={false}
         measureInputLevel={() => 0}
-        armedRef={armedRef}
+        armedRef={armedRef(false)}
         vadThreshold={0.1}
         vadHoldMs={60}
         listeningPaused={false}
@@ -43,14 +42,11 @@ describe('IcrTrainingVoiceHud', () => {
   });
 
   it('shows locked reaction time after voice stop', () => {
-    const armedRef = createRef<boolean>();
-    armedRef.current = true;
-
     render(
       <IcrTrainingVoiceHud
         active
         measureInputLevel={() => 0.5}
-        armedRef={armedRef}
+        armedRef={armedRef(true)}
         vadThreshold={0.1}
         vadHoldMs={60}
         listeningPaused={false}
@@ -65,14 +61,11 @@ describe('IcrTrainingVoiceHud', () => {
   });
 
   it('shows ready status when listening is paused', () => {
-    const armedRef = createRef<boolean>();
-    armedRef.current = true;
-
     render(
       <IcrTrainingVoiceHud
         active
         measureInputLevel={() => 0}
-        armedRef={armedRef}
+        armedRef={armedRef(true)}
         vadThreshold={0.1}
         vadHoldMs={60}
         listeningPaused
