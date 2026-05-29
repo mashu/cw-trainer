@@ -1,13 +1,19 @@
-import { PublicProfileView } from '@/components/features/profile/PublicProfileView';
+import { Suspense } from 'react';
 
-export default function ProfilePage({
-  searchParams,
-}: {
-  readonly searchParams?: Readonly<Record<string, string | string[] | undefined>>;
-}): JSX.Element {
-  const raw = searchParams?.['u'];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  const publicId = value && /^\d+$/.test(value) ? Number(value) : null;
+import { PublicProfilePageClient } from '@/components/features/profile/PublicProfilePageClient';
 
-  return <PublicProfileView publicId={publicId} />;
+export default function ProfilePage(): JSX.Element {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50 px-4 py-8">
+          <div className="mx-auto max-w-4xl">
+            <p className="text-sm text-slate-600">Loading profile...</p>
+          </div>
+        </main>
+      }
+    >
+      <PublicProfilePageClient />
+    </Suspense>
+  );
 }
