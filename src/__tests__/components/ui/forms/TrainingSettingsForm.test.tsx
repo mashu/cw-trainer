@@ -228,12 +228,12 @@ describe('TrainingSettingsForm', () => {
     expect(setSettings).toHaveBeenCalled();
   });
 
-  it('should call setSettings when extra word space multiplier changes', async () => {
+  it('should call setSettings when extra spacing multiplier changes', async () => {
     const user = userEvent.setup();
     const setSettings = jest.fn();
     render(<TrainingSettingsForm settings={defaultSettings} setSettings={setSettings} />);
 
-    const extraWordSpaceLabel = screen.getAllByText(/Extra Word Spacing/i)[0]!;
+    const extraWordSpaceLabel = screen.getAllByText(/Extra spacing/i)[0]!;
     const extraWordSpaceInput = extraWordSpaceLabel.parentElement?.querySelector('input[type="number"]') as HTMLInputElement;
     expect(extraWordSpaceInput).toBeInTheDocument();
     

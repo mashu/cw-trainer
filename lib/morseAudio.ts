@@ -7,6 +7,7 @@ import {
   PCM_INT16_MIN,
   PCM_INT16_MAX,
 } from './constants';
+import { clampExtraSpacingMultiplier } from './extraSpacing';
 import { MORSE_CODE } from './morseConstants';
 
 export interface AudioSettings {
@@ -17,7 +18,8 @@ export interface AudioSettings {
   effectiveWpm?: number; // overall perceived speed via extended spacing (fixed)
   effectiveWpmMin?: number; // minimum effective WPM for random selection
   effectiveWpmMax?: number; // maximum effective WPM for random selection
-  extraWordSpaceMultiplier?: number; // >=0.1, scales word gap; default 1.0
+  /** Scales standard word-space timing (between words in Player; see also group gap in training). */
+  extraWordSpaceMultiplier?: number;
   // Tone & envelope
   sideTone: number;
   steepness: number;
@@ -119,7 +121,7 @@ export async function playMorseCodeControlled(
   // Determine timing based on Farnsworth (supports random ranges)
   const resolvedCharWpm = resolveCharWpm(settings);
   const resolvedEffWpm = resolveEffectiveWpm(settings, resolvedCharWpm);
-  const extraWordSpaceMultiplier = Math.max(0.1, settings.extraWordSpaceMultiplier ?? 1);
+  const extraWordSpaceMultiplier = clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier);
 
   const dotChar = 1.2 / resolvedCharWpm; // seconds
   const dotEff = 1.2 / resolvedEffWpm; // seconds
@@ -303,7 +305,7 @@ export function renderMorseToWavBlob(text: string, options: RenderWavOptions): B
   const sampleRate = Math.max(MIN_SAMPLE_RATE, Math.floor(options.sampleRate ?? DEFAULT_SAMPLE_RATE));
   const resolvedCharWpm = resolveCharWpm(options);
   const resolvedEffWpm = resolveEffectiveWpm(options, resolvedCharWpm);
-  const extraWordSpaceMultiplier = Math.max(1, options.extraWordSpaceMultiplier ?? 1);
+  const extraWordSpaceMultiplier = clampExtraSpacingMultiplier(options.extraWordSpaceMultiplier);
 
   const dotChar = 1.2 / resolvedCharWpm; // seconds
   const dotEff = 1.2 / resolvedEffWpm; // seconds

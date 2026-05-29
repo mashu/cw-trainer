@@ -149,7 +149,7 @@ type PlaybackMetaProps = {
   readonly charWpmLabel: string;
   readonly effWpmLabel: string;
   readonly toneHz: number;
-  readonly extraWordSpace: number;
+  readonly extraSpacing: number;
   readonly durationSec: number;
   readonly statusLine?: string | undefined;
 };
@@ -158,7 +158,7 @@ export function PlaybackMeta({
   charWpmLabel,
   effWpmLabel,
   toneHz,
-  extraWordSpace,
+  extraSpacing,
   durationSec,
   statusLine,
 }: PlaybackMetaProps): JSX.Element {
@@ -185,9 +185,9 @@ export function PlaybackMeta({
         </div>
         <div>
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Word spacing
+            Extra spacing
           </span>
-          <p className="mt-0.5 font-semibold text-slate-900">×{extraWordSpace}</p>
+          <p className="mt-0.5 font-semibold text-slate-900">×{extraSpacing}</p>
         </div>
       </div>
       {durationSec > 0 && (

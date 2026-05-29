@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 import { useNumberField } from '@/hooks/useNumberField';
+import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import { playMorseCodeControlled } from '@/lib/morseAudio';
 
 import { LinkedRangeInput } from '../LinkedRangeInput';
@@ -81,7 +82,7 @@ export function ToneEnvelopeSection({
         {
           charWpmMin: Math.max(1, settings.charWpmMin), charWpmMax: Math.max(1, settings.charWpmMax),
           effectiveWpmMin: Math.max(1, settings.effectiveWpmMin), effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
-          extraWordSpaceMultiplier: Math.max(0.1, settings.extraWordSpaceMultiplier ?? 1),
+          extraWordSpaceMultiplier: clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier),
           sideTone: pickToneHz(), steepness: settings.steepness, envelopeSmoothing: settings.envelopeSmoothing ?? 0,
           volumeMin: settings.volumeMin ?? 1, volumeMax: settings.volumeMax ?? 1, linkVolume: settings.linkVolume ?? true,
         },

@@ -2,6 +2,11 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 
+import {
+  EXTRA_SPACING_LABEL,
+  EXTRA_SPACING_MULTIPLIER_MIN,
+  EXTRA_SPACING_SETTINGS_HELP,
+} from '@/lib/extraSpacing';
 import { useNumberField } from '@/hooks/useNumberField';
 import { LCWO_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
 import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
@@ -219,7 +224,7 @@ export function TrainingSettingsForm({
   });
 
   const extraWordSpaceField = useNumberField(settings.extraWordSpaceMultiplier ?? 1, {
-    min: 0.1,
+    min: EXTRA_SPACING_MULTIPLIER_MIN,
     max: 100,
     step: 0.1,
     fieldName: 'extraWordSpaceMultiplier',
@@ -816,8 +821,8 @@ export function TrainingSettingsForm({
                   letters (Farnsworth). Lower = longer gaps. Link to keep equal to character speed.
                 </li>
                 <li>
-                  <span className="font-medium">Extra word spacing</span>: Multiplies the gap
-                  between words. Used in Player mode (text with spaces).
+                  <span className="font-medium">{EXTRA_SPACING_LABEL}</span>:{' '}
+                  {EXTRA_SPACING_SETTINGS_HELP}
                 </li>
                 <li>
                   <span className="font-medium">Number of groups</span>: How many groups per
@@ -1058,7 +1063,7 @@ export function TrainingSettingsForm({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Extra Word Spacing
+                {EXTRA_SPACING_LABEL}
               </label>
               <input
                 {...extraWordSpaceField.inputProps}

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { EXTRA_SPACING_MULTIPLIER_MIN } from '@/lib/extraSpacing';
 import type { CharacterSetMode } from '@/types';
 
 const KOCH_LEVEL_MIN = 1; // Level 1 = 2 characters, Level 2 = 3 characters, etc.
@@ -7,7 +8,6 @@ const KOCH_LEVEL_MAX = 40;
 const DIGITS_LEVEL_MIN = 1;
 const DIGITS_LEVEL_MAX = 10;
 const WPM_MIN = 1;
-const WORD_SPACE_MIN = 0.1;
 const GROUP_SIZE_MIN = 1;
 const GROUP_SIZE_MAX = 10;
 const GROUP_TIMEOUT_MIN = 0;
@@ -107,7 +107,7 @@ export const trainingSettingsSchema = z
     linkEffectiveWpm: z.boolean(),
     linkCharToEffective: z.boolean(),
     echoKeyerMode: echoKeyerModeSchema.optional().default('manual'),
-    extraWordSpaceMultiplier: z.number().min(WORD_SPACE_MIN),
+    extraWordSpaceMultiplier: z.number().min(EXTRA_SPACING_MULTIPLIER_MIN),
     groupTimeout: z.number().min(GROUP_TIMEOUT_MIN),
     minGroupSize: z.number().int().min(GROUP_SIZE_MIN).max(GROUP_SIZE_MAX),
     maxGroupSize: z.number().int().min(GROUP_SIZE_MIN).max(GROUP_SIZE_MAX),

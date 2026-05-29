@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
+import { clampExtraSpacingMultiplier, EXTRA_SPACING_LABEL } from '@/lib/extraSpacing';
 import { playMorseCodeControlled, resumeAudioContextFromUserGesture } from '@/lib/morseAudio';
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
 import { computeCharPool } from '@/lib/trainingUtils';
@@ -188,7 +189,7 @@ export function TextPlayerModal({
           charWpmMax: Math.max(1, settings.charWpmMax),
           effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
           effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
-          extraWordSpaceMultiplier: Math.max(0.1, settings.extraWordSpaceMultiplier ?? 1),
+          extraWordSpaceMultiplier: clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier),
           sideTone: toneHz,
           steepness: settings.steepness,
           envelopeSmoothing: settings.envelopeSmoothing ?? 0,
@@ -300,8 +301,8 @@ export function TextPlayerModal({
                   : `${settings.effectiveWpmMin}-${settings.effectiveWpmMax}`}
               </div>
               <div>
-                Tone: {toneHz} Hz • Extra Word Space: ×
-                {Math.max(1, settings.extraWordSpaceMultiplier ?? 1)}
+                Tone: {toneHz} Hz • {EXTRA_SPACING_LABEL}: ×
+                {clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier)}
               </div>
               {durationSec > 0 && (
                 <div className="text-[11px] text-slate-500">

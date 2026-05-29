@@ -5,6 +5,7 @@ import {
   type BandConditionsAudio,
   type BandConditionsSettings,
 } from '@/lib/audio/bandConditions';
+import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import {
   playMorseCodeControlled,
   resumeAudioContextFromUserGesture,
@@ -206,7 +207,9 @@ export function BandConditionsSection({
             charWpmMax: Math.max(1, currentSettings.charWpmMax),
             effectiveWpmMin: Math.max(1, currentSettings.effectiveWpmMin),
             effectiveWpmMax: Math.max(1, currentSettings.effectiveWpmMax),
-            extraWordSpaceMultiplier: Math.max(0.1, currentSettings.extraWordSpaceMultiplier ?? 1),
+            extraWordSpaceMultiplier: clampExtraSpacingMultiplier(
+              currentSettings.extraWordSpaceMultiplier,
+            ),
             sideTone,
             steepness: currentSettings.steepness,
             envelopeSmoothing: currentSettings.envelopeSmoothing ?? 0,

@@ -1,3 +1,4 @@
+import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import type { TrainingSettings } from '@/types';
 
 export function pickTrainingToneHz(settings: Pick<TrainingSettings, 'sideToneMin' | 'sideToneMax'>): number {
@@ -15,6 +16,6 @@ export function computeTrainingGroupGapMs(
   const effectiveWpm = Math.max(1, settings.effectiveWpmMin || settings.charWpmMin || 20);
   const dotEffectiveSec = 1.2 / effectiveWpm;
   const wordSpaceSec =
-    7 * dotEffectiveSec * Math.max(1, settings.extraWordSpaceMultiplier || 1);
+    7 * dotEffectiveSec * clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier);
   return Math.round(wordSpaceSec * 1000);
 }

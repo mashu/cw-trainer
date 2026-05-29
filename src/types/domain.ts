@@ -146,6 +146,7 @@ export interface TrainingSettings {
   readonly linkEffectiveWpm: boolean;
   readonly linkCharToEffective: boolean;
   readonly echoKeyerMode?: EchoKeyerMode;
+  /** Scales standard word-space timing between groups (Group/Echo) and at spaces (Player). */
   readonly extraWordSpaceMultiplier: number;
   readonly groupTimeout: number;
   readonly minGroupSize: number;

@@ -5,6 +5,7 @@ import {
   type BandConditionsAudio,
 } from '@/lib/audio/bandConditions';
 import { SLEEP_CANCELABLE_STEP_MS } from '@/lib/constants';
+import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import {
   playMorseCodeControlled,
   resumeAudioContextFromUserGesture,
@@ -132,9 +133,8 @@ export function useTrainingAudio(
             charWpmMax: Math.max(1, settings.charWpmMax),
             effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
             effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
-            extraWordSpaceMultiplier: Math.max(
-              0.1,
-              settings.extraWordSpaceMultiplier ?? 1,
+            extraWordSpaceMultiplier: clampExtraSpacingMultiplier(
+              settings.extraWordSpaceMultiplier,
             ),
             sideTone: pickTrainingToneHz(settings),
             steepness: settings.steepness,

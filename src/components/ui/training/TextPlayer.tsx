@@ -11,6 +11,7 @@ import {
   type TextPlayerMode,
 } from '@/components/ui/training/text-player-ui';
 import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
+import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import {
   playMorseCodeControlled,
   renderMorseToWavBlob,
@@ -438,7 +439,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
               charWpmMax: Math.max(1, settings.charWpmMax),
               effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
               effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
-              extraWordSpaceMultiplier: Math.max(0.1, settings.extraWordSpaceMultiplier ?? 1),
+              extraWordSpaceMultiplier: clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier),
               sideTone: toneHz,
               steepness: settings.steepness,
               envelopeSmoothing: settings.envelopeSmoothing ?? 0,
@@ -507,7 +508,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
           charWpmMax: Math.max(1, settings.charWpmMax),
           effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
           effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
-          extraWordSpaceMultiplier: Math.max(0.1, settings.extraWordSpaceMultiplier ?? 1),
+          extraWordSpaceMultiplier: clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier),
           sideTone: toneHz,
           steepness: settings.steepness,
           envelopeSmoothing: settings.envelopeSmoothing ?? 0,
@@ -573,7 +574,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         charWpmMax: Math.max(1, settings.charWpmMax),
         effectiveWpmMin: Math.max(1, settings.effectiveWpmMin),
         effectiveWpmMax: Math.max(1, settings.effectiveWpmMax),
-        extraWordSpaceMultiplier: Math.max(0.1, settings.extraWordSpaceMultiplier ?? 1),
+        extraWordSpaceMultiplier: clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier),
         sideTone: toneHz,
         steepness: settings.steepness,
         envelopeSmoothing: settings.envelopeSmoothing ?? 0,
@@ -674,7 +675,8 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
               title="How play text works"
             >
               <p>
-                Type or paste any text. Spaces create word gaps. Press{' '}
+                Type or paste any text. Spaces add extra spacing between words (see{' '}
+                <span className="font-semibold">Extra spacing</span> in settings). Press{' '}
                 <span className="font-semibold">Enter</span> to append a line of random groups from
                 your current Koch / character settings. Use <span className="font-semibold">Pre-fill</span>{' '}
                 for several lines at once, or download a WAV to listen offline.
@@ -744,7 +746,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
             charWpmLabel={charWpmLabel}
             effWpmLabel={effWpmLabel}
             toneHz={toneHz}
-            extraWordSpace={Math.max(1, settings.extraWordSpaceMultiplier ?? 1)}
+            extraSpacing={clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier)}
             durationSec={durationSec}
             statusLine={listeningStatusLine}
           />
