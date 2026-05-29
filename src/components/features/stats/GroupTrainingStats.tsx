@@ -18,6 +18,8 @@ import {
 } from 'recharts';
 
 import { ActivityHeatmap } from '@/components/ui/charts/ActivityHeatmap';
+import { AutoLevelAdjustProgressCard } from '@/components/ui/training/AutoLevelAdjustProgressCard';
+import { useAutoLevelAdjustProgress } from '@/hooks/useAutoLevelAdjustProgress';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { useSessionsActions, useSessionsState } from '@/hooks/useSessions';
 import {
@@ -27,6 +29,7 @@ import {
   type LetterTimingStats,
   type SessionFatiguePoint,
 } from '@/hooks/useStatsAnalytics';
+import { useTrainingSettingsState } from '@/hooks/useTrainingSettings';
 import { createGroupDisplayAlignment } from '@/lib/groupAlignment';
 import { buildBigramHeatmapData, buildUnigramStats } from '@/lib/scoring/letterErrorStats';
 
@@ -148,9 +151,24 @@ export function GroupTrainingStats({
     sessionsError,
     sessionsSyncing,
   } = useSessionsState();
+  const { trainingSettings } = useTrainingSettingsState();
   const { removeSessionByTimestamp } = useSessionsActions();
 
   const sessionResults = sessions;
+  const groupSessions = useMemo(
+    () => sessionResults.filter((session) => (session.mode ?? 'group') === 'group'),
+    [sessionResults],
+  );
+  const lastGroupAccuracyPercent = useMemo(() => {
+    const sorted = [...groupSessions].sort((a, b) => a.timestamp - b.timestamp);
+    const last = sorted[sorted.length - 1];
+    return last && Number.isFinite(last.accuracy) ? Math.round(last.accuracy * 100) : 0;
+  }, [groupSessions]);
+  const levelAdjustProgress = useAutoLevelAdjustProgress(
+    trainingSettings,
+    'group',
+    groupSessions.length + lastGroupAccuracyPercent,
+  );
   const isLoading = sessionsStatus === 'loading';
   const hasTrainingSessions = sessionResults.length > 0;
   const hasMounted = useHasMounted();
@@ -635,6 +653,10 @@ export function GroupTrainingStats({
         {/* ==================== OVERVIEW TAB ==================== */}
         {tab === 'overview' && (
           <div className="space-y-6">
+            {levelAdjustProgress !== null ? (
+              <AutoLevelAdjustProgressCard progress={levelAdjustProgress} profileLabel="Group" />
+            ) : null}
+
             {/* Activity Heatmap */}
             {hasTrainingSessions && (
               <ActivityHeatmap sessions={activitySessions} />

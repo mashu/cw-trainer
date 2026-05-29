@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 
 import { GroupTrainingStats } from '@/components/features/stats/GroupTrainingStats';
+import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
 import type { IcrSessionService } from '@/lib/services/icr-session.service';
 import type { SessionService } from '@/lib/services/session.service';
 import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
@@ -358,6 +359,35 @@ describe('GroupTrainingStats', (): void => {
         await user.click(firstButton);
         // Range should be applied (no error means it worked)
       }
+    });
+  });
+
+  it('should show auto level progress on overview when group auto-adjust is enabled', async (): Promise<void> => {
+    mockTrainingSettingsService.getSettings = jest.fn().mockResolvedValue({
+      ...DEFAULT_TRAINING_SETTINGS,
+      autoAdjustKoch: true,
+      charSetMode: 'koch',
+      kochLevel: 4,
+      autoAdjustThreshold: 90,
+      autoAdjustAboveThresholdCount: 2,
+      autoAdjustBelowThresholdCount: 1,
+    });
+
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <GroupTrainingStats onBack={onBack} />
+        </TestWrapper>,
+      );
+    });
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/automatic level adjustment progress/i)).toBeInTheDocument();
+      expect(screen.getByText('Group')).toBeInTheDocument();
+      expect(screen.getByRole('progressbar', { name: 'Up' })).toBeInTheDocument();
+      expect(screen.getByRole('progressbar', { name: 'Down' })).toBeInTheDocument();
     });
   });
 
