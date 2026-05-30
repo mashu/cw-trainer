@@ -14,6 +14,7 @@ const DEFAULT_TIPS = [
   'Hear the group first, then type it—let it buffer so you recognize whole letters and words.',
   'Stay relaxed; short, regular sessions work better than long cramming.',
   'If you fall behind, skip to the next group to keep rhythm and avoid pile-up.',
+  'If you miss a letter, learn to let it go.',
 ];
 
 const ROTATE_MS = 5000;
