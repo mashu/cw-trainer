@@ -71,7 +71,12 @@ class FakeAudioContext {
 describe('createBandConditionsAudio', () => {
   it('creates and stops a disabled ambience graph', () => {
     const ctx = new FakeAudioContext();
-    const audio = createBandConditionsAudio(ctx as unknown as AudioContext, DEFAULT_TRAINING_SETTINGS);
+    const audio = createBandConditionsAudio(ctx as unknown as AudioContext, {
+      ...DEFAULT_TRAINING_SETTINGS,
+      qsbEnabled: false,
+      qrnEnabled: false,
+      qrmEnabled: false,
+    });
 
     expect(audio.morseOutput).toBeDefined();
     expect(ctx.createdSources).toHaveLength(0);

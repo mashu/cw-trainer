@@ -114,12 +114,12 @@ export const trainingSettingsSchema = z
     maxGroupSize: z.number().int().min(GROUP_SIZE_MIN).max(GROUP_SIZE_MAX),
     linkGroupSize: z.boolean(),
     envelopeSmoothing: z.number().min(ENVELOPE_SMOOTHING_MIN).max(ENVELOPE_SMOOTHING_MAX),
-    qsbEnabled: z.boolean().default(false),
+    qsbEnabled: z.boolean().default(true),
     qsbDepth: z.number().min(AUDIO_REALISM_LEVEL_MIN).max(AUDIO_REALISM_LEVEL_MAX).default(0.35),
     qsbRateHz: z.number().min(QSB_RATE_MIN).max(QSB_RATE_MAX).default(0.12),
-    qrnEnabled: z.boolean().default(false),
+    qrnEnabled: z.boolean().default(true),
     qrnLevel: z.number().min(AUDIO_REALISM_LEVEL_MIN).max(AUDIO_REALISM_LEVEL_MAX).default(0.25),
-    qrmEnabled: z.boolean().default(false),
+    qrmEnabled: z.boolean().default(true),
     qrmLevel: z.number().min(AUDIO_REALISM_LEVEL_MIN).max(AUDIO_REALISM_LEVEL_MAX).default(0.2),
     qrmProfile: qrmProfileSchema.default('mixed'),
     receiverBackgroundGain: z.number().min(RECEIVER_GAIN_MIN).max(RECEIVER_GAIN_MAX).default(20),
@@ -160,27 +160,27 @@ export const trainingSettingsSchema = z
       .int()
       .min(AUTO_ADJUST_COUNT_MIN)
       .max(AUTO_ADJUST_COUNT_MAX)
-      .default(0),
+      .default(1),
     autoAdjustAboveThresholdCount: z
       .number()
       .int()
       .min(AUTO_ADJUST_COUNT_MIN)
       .max(AUTO_ADJUST_COUNT_MAX)
-      .default(0),
-    echoAutoAdjustKoch: z.boolean().default(false),
+      .default(5),
+    echoAutoAdjustKoch: z.boolean().default(true),
     echoAutoAdjustThreshold: z.number().min(AUTO_THRESHOLD_MIN).max(AUTO_THRESHOLD_MAX).default(90),
     echoAutoAdjustBelowThresholdCount: z
       .number()
       .int()
       .min(AUTO_ADJUST_COUNT_MIN)
       .max(AUTO_ADJUST_COUNT_MAX)
-      .default(0),
+      .default(1),
     echoAutoAdjustAboveThresholdCount: z
       .number()
       .int()
       .min(AUTO_ADJUST_COUNT_MIN)
       .max(AUTO_ADJUST_COUNT_MAX)
-      .default(0),
+      .default(5),
     chaseLives: z.number().int().min(CHASE_LIVES_MIN).max(CHASE_LIVES_MAX).default(3),
     chaseAutoLevelEnabled: z.boolean().default(true),
     chaseGroupsPerLevel: z
@@ -203,7 +203,7 @@ export const trainingSettingsSchema = z
       .min(CHASE_SPEEDUP_MS_MIN)
       .max(CHASE_SPEEDUP_MS_MAX)
       .default(28),
-    errorWeightStrength: z.number().min(0).max(5).default(0),
+    errorWeightStrength: z.number().min(0).max(5).default(3),
     playerAnnounceLetters: z.boolean().default(false),
     playerLetterRepeatCount: z
       .number()

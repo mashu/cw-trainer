@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
+import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
 import { useNumberField } from '@/hooks/useNumberField';
 import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import { playMorseCodeControlled } from '@/lib/morseAudio';
@@ -99,7 +100,13 @@ export function ToneEnvelopeSection({
   }, [isPlayingTestTone, settings, pickToneHz]);
 
   const handleResetToneEnvelope = useCallback((): void => {
-    setSettings({ ...settings, sideToneMin: 600, sideToneMax: 600, steepness: 5, envelopeSmoothing: 0 });
+    setSettings({
+      ...settings,
+      sideToneMin: DEFAULT_TRAINING_SETTINGS.sideToneMin,
+      sideToneMax: DEFAULT_TRAINING_SETTINGS.sideToneMax,
+      steepness: DEFAULT_TRAINING_SETTINGS.steepness,
+      envelopeSmoothing: DEFAULT_TRAINING_SETTINGS.envelopeSmoothing,
+    });
   }, [settings, setSettings]);
 
   const previewCharWpm = Math.max(1, settings.charWpmMin || settings.effectiveWpmMin || 20);

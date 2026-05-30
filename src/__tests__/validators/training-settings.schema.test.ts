@@ -101,12 +101,12 @@ describe('trainingSettingsSchema', () => {
 
     const result = trainingSettingsSchema.parse(rest);
 
-    expect(result.qsbEnabled).toBe(false);
+    expect(result.qsbEnabled).toBe(true);
     expect(result.qsbDepth).toBe(0.35);
     expect(result.qsbRateHz).toBe(0.12);
-    expect(result.qrnEnabled).toBe(false);
+    expect(result.qrnEnabled).toBe(true);
     expect(result.qrnLevel).toBe(0.25);
-    expect(result.qrmEnabled).toBe(false);
+    expect(result.qrmEnabled).toBe(true);
     expect(result.qrmLevel).toBe(0.2);
     expect(result.qrmProfile).toBe('mixed');
     expect(result.receiverBackgroundGain).toBe(20);

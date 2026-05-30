@@ -80,10 +80,10 @@ describe('ToneEnvelopeSection', () => {
 
     expect(setSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        sideToneMin: 600,
-        sideToneMax: 600,
-        steepness: 5,
-        envelopeSmoothing: 0,
+        sideToneMin: DEFAULT_TRAINING_SETTINGS.sideToneMin,
+        sideToneMax: DEFAULT_TRAINING_SETTINGS.sideToneMax,
+        steepness: DEFAULT_TRAINING_SETTINGS.steepness,
+        envelopeSmoothing: DEFAULT_TRAINING_SETTINGS.envelopeSmoothing,
       }),
     );
   });
