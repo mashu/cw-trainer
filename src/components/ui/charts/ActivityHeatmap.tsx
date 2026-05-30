@@ -4,6 +4,13 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useHasMounted } from '@/hooks/useHasMounted';
+import {
+  ACCURACY_LEGEND_STOPS,
+  type ActivityHeatmapColorMode,
+  computeActivityCellColor,
+  formatAccuracyLegendLabel,
+  volumeLegendStops,
+} from '@/lib/charts/activityHeatmapColors';
 import type { HeatmapSession } from '@/types';
 
 type TooltipData = {
@@ -20,12 +27,14 @@ type DayCellWithTooltip = DayCellInMonth;
 function CellWithTooltip({
   cell,
   color,
+  colorMode,
   isSelected,
   onCellClick,
   formatDate,
 }: {
   cell: DayCellWithTooltip;
   color: string;
+  colorMode: ActivityHeatmapColorMode;
   isSelected: boolean;
   onCellClick: (key: string) => void;
   formatDate: (d: Date) => string;
@@ -86,7 +95,11 @@ function CellWithTooltip({
             backgroundColor: color,
             boxShadow: isSelected ? '0 0 0 1px rgba(16,185,129,0.6)' : undefined,
           }}
-          aria-label={`${formatDate(cell.date)} — ${cell.count} characters, ${cell.sessionCount} sessions`}
+          aria-label={
+            colorMode === 'accuracy' && cell.avgAccuracy !== undefined
+              ? `${formatDate(cell.date)} — ${(cell.avgAccuracy * 100).toFixed(1)}% accuracy, ${cell.sessionCount} sessions`
+              : `${formatDate(cell.date)} — ${cell.count} characters, ${cell.sessionCount} sessions`
+          }
           onClick={() => onCellClick(cell.key)}
         />
       </div>
@@ -290,14 +303,6 @@ function getWeekStart(d: Date, startOfWeek: 0 | 1): Date {
   return res;
 }
 
-function computeColorForCount(count: number, maxCount: number): string {
-  if (count <= 0) return '#e5e7eb'; // slate-200
-  const n = Math.min(1, count / Math.max(1, maxCount));
-  // Hue 0 (red) to 120 (green), keep fairly saturated and medium lightness
-  const hue = 120 * n; // 0 -> red, 120 -> green
-  return `hsl(${hue}, 75%, 45%)`;
-}
-
 export function ActivityHeatmap({
   sessions,
   monthsPerPage = 3,
@@ -343,6 +348,7 @@ export function ActivityHeatmap({
   const [anchorMonthStart, setAnchorMonthStart] = useState<Date>(startOfMonth(new Date())); // latest month in window
   const [selectedLocalYmd, setSelectedLocalYmd] = useState<string | null>(selectedDate ?? null);
   const [autoFit, setAutoFit] = useState<boolean>(true);
+  const [colorMode, setColorMode] = useState<ActivityHeatmapColorMode>('volume');
   const monthsContainerRef = useRef<HTMLDivElement | null>(null);
   const hasMounted = useHasMounted();
   const formatDate = useMemo(
@@ -450,11 +456,13 @@ export function ActivityHeatmap({
 
   const canGoBackward = true; // allow exploring older months
 
-  // Legend values: 0, ceil(max/3), ceil(2*max/3), max
-  const legendStops = useMemo<number[]>(() => {
-    const step = Math.max(1, Math.ceil(maxCountInWindow / 3));
-    return [0, step, step * 2, maxCountInWindow];
-  }, [maxCountInWindow]);
+  const volumeLegendValues = useMemo(
+    () => volumeLegendStops(maxCountInWindow),
+    [maxCountInWindow],
+  );
+
+  const chartTitle =
+    colorMode === 'volume' ? 'Activity (characters per day)' : 'Activity (accuracy per day)';
 
   const weekdayLabels = useMemo<string[]>(() => {
     const namesMon = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -560,8 +568,29 @@ export function ActivityHeatmap({
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/70 p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700">Activity (characters per day)</h3>
+        <h3 className="text-sm font-semibold text-slate-700">{chartTitle}</h3>
         <div className="flex items-center gap-2 flex-wrap">
+          <div
+            className="inline-flex rounded-md border border-slate-300 overflow-hidden text-[11px]"
+            role="group"
+            aria-label="Heatmap color mode"
+          >
+            {(['volume', 'accuracy'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={colorMode === mode}
+                className={`px-2 py-1 capitalize ${
+                  colorMode === mode
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+                onClick={() => setColorMode(mode)}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
           <div className="flex items-center gap-2 text-[11px]">
             <label className="inline-flex items-center gap-1">
               <input
@@ -645,7 +674,12 @@ export function ActivityHeatmap({
                 {block.weeks.map((week, wi) => (
                   <div key={wi} className="flex flex-col" style={{ gap: 2 }}>
                     {week.map((cell) => {
-                      const color = computeColorForCount(cell.count, maxCountInWindow);
+                      const color = computeActivityCellColor(colorMode, {
+                        count: cell.count,
+                        sessionCount: cell.sessionCount,
+                        maxCountInWindow,
+                        ...(cell.avgAccuracy !== undefined ? { avgAccuracy: cell.avgAccuracy } : {}),
+                      });
                       if (!cell.inMonth) {
                         return (
                           <div
@@ -660,6 +694,7 @@ export function ActivityHeatmap({
                           key={cell.key}
                           cell={cell}
                           color={color}
+                          colorMode={colorMode}
                           isSelected={isSelected}
                           onCellClick={handleCellClick}
                           formatDate={formatDate}
@@ -676,18 +711,43 @@ export function ActivityHeatmap({
 
       {/* Legend */}
       <div className="mt-3 flex items-center justify-end gap-2 text-[10px] text-slate-500">
-        <span>Less</span>
+        <span>{colorMode === 'volume' ? 'Less' : 'Lower'}</span>
         <div className="flex items-center gap-1">
-          {legendStops.map((v, i) => (
-            <div
-              key={i}
-              className="w-3 h-3 rounded-sm border border-white/40"
-              style={{ backgroundColor: computeColorForCount(v, maxCountInWindow) }}
-              title={`${v} characters`}
-            />
-          ))}
+          {colorMode === 'volume'
+            ? volumeLegendValues.map((v, i) => (
+                <div
+                  key={i}
+                  className="w-3 h-3 rounded-sm border border-white/40"
+                  style={{
+                    backgroundColor: computeActivityCellColor('volume', {
+                      count: v,
+                      sessionCount: v > 0 ? 1 : 0,
+                      maxCountInWindow,
+                    }),
+                  }}
+                  title={`${v} characters`}
+                />
+              ))
+            : ACCURACY_LEGEND_STOPS.map((v, i) => (
+                <div
+                  key={i}
+                  className="w-3 h-3 rounded-sm border border-white/40"
+                  style={{
+                    backgroundColor: computeActivityCellColor('accuracy', {
+                      count: 0,
+                      sessionCount: 1,
+                      maxCountInWindow,
+                      avgAccuracy: v,
+                    }),
+                  }}
+                  title={formatAccuracyLegendLabel(v)}
+                />
+              ))}
         </div>
-        <span>More</span>
+        <span>{colorMode === 'volume' ? 'More' : 'Higher'}</span>
+        {colorMode === 'accuracy' && (
+          <span className="text-slate-400 ml-1">(no practice = gray)</span>
+        )}
       </div>
     </div>
   );

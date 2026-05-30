@@ -70,5 +70,20 @@ describe('ActivityHeatmap', (): void => {
 
     expect(screen.getByText(/Activity/i)).toBeInTheDocument();
   });
+
+  it('should switch between volume and accuracy color modes', async (): Promise<void> => {
+    const user = userEvent.setup();
+    const sessionsWithAccuracy: HeatmapSession[] = [
+      { date: '2024-01-15', timestamp: 1705276800000, count: 5, accuracy: 0.9 },
+    ];
+    render(<ActivityHeatmap sessions={sessionsWithAccuracy} />);
+
+    expect(screen.getByText(/characters per day/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'accuracy' }));
+
+    expect(screen.getByText(/accuracy per day/i)).toBeInTheDocument();
+    expect(screen.getByText(/no practice = gray/i)).toBeInTheDocument();
+  });
 });
 
