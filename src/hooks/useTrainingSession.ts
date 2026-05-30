@@ -169,6 +169,17 @@ export function useTrainingSession({
   >({});
   const confirmTimeoutRef = useRef<Record<number, TimeoutId | undefined>>({});
 
+  // If the runtime was cleared while the async loop is still running, stop audio immediately.
+  useEffect(() => {
+    if (hasActiveSession || !isTrainingRef.current) {
+      return;
+    }
+    audio.trainingAbortRef.current = true;
+    isTrainingRef.current = false;
+    setRuntimeAudioStatus('closed');
+    audio.stopAudio();
+  }, [audio, hasActiveSession, setRuntimeAudioStatus]);
+
   // ── Unmount cleanup ──────────────────────────────────────────────────
   useEffect(() => {
     return (): void => {

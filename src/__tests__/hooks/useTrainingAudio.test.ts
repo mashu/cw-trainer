@@ -54,6 +54,39 @@ describe('useTrainingAudio', () => {
     expect(mockPlayMorse).toHaveBeenCalled();
   });
 
+  it('registers stop callback before playMorse resolves', async () => {
+    let capturedStop: (() => void) | null = null;
+    mockPlayMorse.mockImplementation(
+      async (
+        _ctx,
+        _text,
+        _settings,
+        _shouldStop,
+        _output,
+        onStopReady?: (stop: () => void) => void,
+      ) => {
+        const stop = jest.fn();
+        onStopReady?.(stop);
+        capturedStop = stop;
+        return { durationSec: 0.5, startTime: 0, stop };
+      },
+    );
+
+    const { result } = renderHook(() => useTrainingAudio(settings));
+    const playPromise = result.current.playMorse('KM', 0);
+
+    await Promise.resolve();
+    expect(capturedStop).not.toBeNull();
+    expect(result.current.stopCurrentPlayback).toBeDefined();
+
+    act(() => {
+      result.current.stopCurrentPlayback();
+    });
+    expect(capturedStop).toHaveBeenCalled();
+
+    await playPromise;
+  });
+
   it('resumes suspended AudioContext before playback', async () => {
     const { result } = renderHook(() => useTrainingAudio(settings));
 

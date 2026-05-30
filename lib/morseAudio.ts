@@ -113,6 +113,7 @@ export async function playMorseCodeControlled(
   settings: AudioSettings,
   shouldStop: () => boolean,
   outputNode?: AudioNode,
+  onStopReady?: (stop: () => void) => void,
 ): Promise<{ durationSec: number; startTime: number; stop: () => void }> {
   if (shouldStop()) return { durationSec: 0, startTime: ctx.currentTime, stop: () => {} };
 
@@ -159,6 +160,7 @@ export async function playMorseCodeControlled(
       console.error('[morseAudio] Error stopping audio playback', e);
     }
   };
+  onStopReady?.(stop);
 
   let currentTime = ctx.currentTime;
   const startTime = ctx.currentTime;

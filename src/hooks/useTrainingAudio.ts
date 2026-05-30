@@ -146,6 +146,9 @@ export function useTrainingAudio(
           () =>
             trainingAbortRef.current || sessionIdRef.current !== sessionId,
           bandConditions.morseOutput,
+          (stopFn) => {
+            currentStopRef.current = stopFn;
+          },
         );
         currentStopRef.current = stop;
         return { status: 'played', durationSec };

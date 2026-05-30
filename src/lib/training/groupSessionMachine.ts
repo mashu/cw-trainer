@@ -86,7 +86,8 @@ export const isGroupTrainingRuntimeBlockingSync = (
   state.status === 'playingGroup' ||
   state.status === 'waitingForAnswer' ||
   state.status === 'paused' ||
-  state.status === 'completing';
+  state.status === 'completing' ||
+  state.status === 'failed';
 
 export function beginGroupTrainingSession(
   input: BeginGroupTrainingSessionInput,

@@ -303,6 +303,9 @@ function getWeekStart(d: Date, startOfWeek: 0 | 1): Date {
   return res;
 }
 
+/** Stable anchor for SSR/first paint so month labels match between server and client. */
+const HYDRATION_PLACEHOLDER_ANCHOR = new Date(2020, 0, 1);
+
 export function ActivityHeatmap({
   sessions,
   monthsPerPage = 3,
@@ -345,16 +348,21 @@ export function ActivityHeatmap({
   }, [sessions]);
 
   const [monthsToShow, setMonthsToShow] = useState(Math.max(1, monthsPerPage || 3));
-  const [anchorMonthStart, setAnchorMonthStart] = useState<Date>(startOfMonth(new Date())); // latest month in window
+  const [anchorMonthStart, setAnchorMonthStart] = useState<Date>(() =>
+    startOfMonth(HYDRATION_PLACEHOLDER_ANCHOR),
+  );
   const [selectedLocalYmd, setSelectedLocalYmd] = useState<string | null>(selectedDate ?? null);
   const [autoFit, setAutoFit] = useState<boolean>(true);
   const [colorMode, setColorMode] = useState<ActivityHeatmapColorMode>('volume');
   const monthsContainerRef = useRef<HTMLDivElement | null>(null);
   const hasMounted = useHasMounted();
+
+  useEffect(() => {
+    setAnchorMonthStart(startOfMonth(new Date()));
+  }, []);
   const formatDate = useMemo(
     (): ((d: Date) => string) =>
-      (d) =>
-        hasMounted ? d.toLocaleDateString() : d.toISOString().slice(0, 10),
+      (d) => (hasMounted ? d.toLocaleDateString() : formatYmd(d)),
     [hasMounted],
   );
   const formatMonthLabel = useMemo(
@@ -366,6 +374,10 @@ export function ActivityHeatmap({
     [hasMounted],
   );
 
+  const layoutAnchorMonthStart = hasMounted
+    ? anchorMonthStart
+    : startOfMonth(HYDRATION_PLACEHOLDER_ANCHOR);
+
   // Compute visible window: months blocks (separate mini-heatmaps per month)
   const { monthsBlocks, maxCountInWindow } = useMemo<{
     monthsBlocks: MonthBlock[];
@@ -374,7 +386,7 @@ export function ActivityHeatmap({
     // Build ascending month starts for the window (oldest on the left)
     const starts: Date[] = [];
     for (let i = monthsToShow - 1; i >= 0; i--) {
-      starts.push(addMonths(anchorMonthStart, -i));
+      starts.push(addMonths(layoutAnchorMonthStart, -i));
     }
 
     const blocks: Array<{ label: string; yearMonthKey: string; weeks: DayCellInMonth[][] }> = [];
@@ -442,9 +454,22 @@ export function ActivityHeatmap({
     }
 
     return { monthsBlocks: blocks, maxCountInWindow: Math.max(1, maxRef.v) };
-  }, [countByDate, sessionCountByDate, durationByDate, groupCountByDate, accuracyByDate, monthsToShow, anchorMonthStart, startOfWeek, formatMonthLabel]);
+  }, [
+    countByDate,
+    sessionCountByDate,
+    durationByDate,
+    groupCountByDate,
+    accuracyByDate,
+    monthsToShow,
+    layoutAnchorMonthStart,
+    startOfWeek,
+    formatMonthLabel,
+  ]);
 
   const canGoForward = useMemo<boolean>(() => {
+    if (!hasMounted) {
+      return false;
+    }
     // Cannot move beyond current month
     const currentMonthStart = startOfMonth(new Date());
     return (
@@ -452,7 +477,7 @@ export function ActivityHeatmap({
       (anchorMonthStart.getFullYear() === currentMonthStart.getFullYear() &&
         anchorMonthStart.getMonth() < currentMonthStart.getMonth())
     );
-  }, [anchorMonthStart]);
+  }, [anchorMonthStart, hasMounted]);
 
   const canGoBackward = true; // allow exploring older months
 
@@ -506,7 +531,7 @@ export function ActivityHeatmap({
 
   // Auto-fit number of months to available width (largest that fits up to 12)
   React.useEffect(() => {
-    if (!autoFit) return;
+    if (!hasMounted || !autoFit) return;
     const el = monthsContainerRef.current;
     if (!el) return;
 
@@ -563,7 +588,7 @@ export function ActivityHeatmap({
         ro?.disconnect();
       } catch {}
     };
-  }, [autoFit, anchorMonthStart, startOfWeek, monthsToShow]);
+  }, [autoFit, anchorMonthStart, startOfWeek, monthsToShow, hasMounted]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/70 p-4">
@@ -629,8 +654,12 @@ export function ActivityHeatmap({
             <input
               type="month"
               className="px-2 py-1 text-xs rounded-md border border-slate-300 text-slate-700"
-              max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`}
-              value={`${anchorMonthStart.getFullYear()}-${String(anchorMonthStart.getMonth() + 1).padStart(2, '0')}`}
+              max={
+                hasMounted
+                  ? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+                  : '2020-12'
+              }
+              value={`${layoutAnchorMonthStart.getFullYear()}-${String(layoutAnchorMonthStart.getMonth() + 1).padStart(2, '0')}`}
               onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                 handleJumpMonthChange(event.target.value)
               }
@@ -661,49 +690,60 @@ export function ActivityHeatmap({
           <span>{weekdayLabels[4]}</span>
         </div>
 
-        {/* Month blocks: each with its own grid (columns = weeks, rows fixed 7 with invisible placeholders) */}
+        {/* Month blocks: calendar cells use local TZ — render only after mount to avoid SSR/client text mismatch (#418). */}
         <div
           ref={monthsContainerRef}
           className="flex flex-1 min-w-0 overflow-x-auto"
           style={{ gap: 16 }}
+          aria-busy={!hasMounted}
         >
           {monthsBlocks.map((block) => (
             <div key={block.yearMonthKey} className="flex flex-col">
               <div className="text-[11px] text-slate-600 font-medium mb-1">{block.label}</div>
-              <div className="flex" style={{ gap: 2 }}>
-                {block.weeks.map((week, wi) => (
-                  <div key={wi} className="flex flex-col" style={{ gap: 2 }}>
-                    {week.map((cell) => {
-                      const color = computeActivityCellColor(colorMode, {
-                        count: cell.count,
-                        sessionCount: cell.sessionCount,
-                        maxCountInWindow,
-                        ...(cell.avgAccuracy !== undefined ? { avgAccuracy: cell.avgAccuracy } : {}),
-                      });
-                      if (!cell.inMonth) {
+              {hasMounted ? (
+                <div className="flex" style={{ gap: 2 }}>
+                  {block.weeks.map((week, wi) => (
+                    <div key={wi} className="flex flex-col" style={{ gap: 2 }}>
+                      {week.map((cell) => {
+                        const color = computeActivityCellColor(colorMode, {
+                          count: cell.count,
+                          sessionCount: cell.sessionCount,
+                          maxCountInWindow,
+                          ...(cell.avgAccuracy !== undefined
+                            ? { avgAccuracy: cell.avgAccuracy }
+                            : {}),
+                        });
+                        if (!cell.inMonth) {
+                          return (
+                            <div
+                              key={`${cell.key}-placeholder`}
+                              className="w-3 h-3 rounded-sm invisible"
+                            />
+                          );
+                        }
+                        const isSelected = selectedLocalYmd === cell.key;
                         return (
-                          <div
-                            key={`${cell.key}-placeholder`}
-                            className="w-3 h-3 rounded-sm invisible"
+                          <CellWithTooltip
+                            key={cell.key}
+                            cell={cell}
+                            color={color}
+                            colorMode={colorMode}
+                            isSelected={isSelected}
+                            onCellClick={handleCellClick}
+                            formatDate={formatDate}
                           />
                         );
-                      }
-                      const isSelected = selectedLocalYmd === cell.key;
-                      return (
-                        <CellWithTooltip
-                          key={cell.key}
-                          cell={cell}
-                          color={color}
-                          colorMode={colorMode}
-                          isSelected={isSelected}
-                          onCellClick={handleCellClick}
-                          formatDate={formatDate}
-                        />
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
+                      })}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  className="flex rounded-sm bg-slate-100/80"
+                  style={{ gap: 2, width: 52, height: 84 }}
+                  aria-hidden
+                />
+              )}
             </div>
           ))}
         </div>

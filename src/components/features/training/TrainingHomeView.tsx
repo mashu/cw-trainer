@@ -41,22 +41,12 @@ function TrainingTipsCarousel({
       <span className="text-amber-600 shrink-0" aria-hidden>
         💡
       </span>
-      <div className="flex-1 min-w-0 relative min-h-[1.5rem] overflow-hidden">
-        {tips.map((tip, i) => (
-          <p
-            key={i}
-            className="text-sm text-slate-700 absolute inset-0 transition-opacity duration-500 ease-in-out break-words overflow-hidden"
-            style={{
-              opacity: i === index ? 1 : 0,
-              pointerEvents: i === index ? 'auto' : 'none',
-            }}
-            aria-hidden={i !== index}
-            aria-live="polite"
-          >
-            {tip}
-          </p>
-        ))}
-      </div>
+      <p
+        className="flex-1 min-w-0 text-sm text-slate-700 break-words"
+        aria-live="polite"
+      >
+        {tips[index] ?? ''}
+      </p>
       <div className="flex gap-1 shrink-0" aria-hidden>
         {tips.map((_, i) => (
           <span
