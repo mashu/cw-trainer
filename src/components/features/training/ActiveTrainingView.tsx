@@ -26,6 +26,8 @@ export interface ActiveTrainingViewProps {
   readonly onSubmit: () => void;
   readonly onStop: () => void;
   readonly statusMessage?: string;
+  /** When true, all group inputs and Submit are disabled (reload restore — Stop only). */
+  readonly inputsFrozen?: boolean;
 }
 
 export function ActiveTrainingView({
@@ -45,7 +47,9 @@ export function ActiveTrainingView({
   onSubmit,
   onStop,
   statusMessage,
+  inputsFrozen = false,
 }: ActiveTrainingViewProps): JSX.Element {
+  const inputsLocked = isTraining || inputsFrozen;
   return (
     <div className="space-y-6">
       {statusMessage ? (
@@ -69,13 +73,13 @@ export function ActiveTrainingView({
             <select
               value={currentFocusedGroup}
               onChange={(e) => {
-                if (!isTraining) {
+                if (!inputsLocked) {
                   const groupIndex = parseInt(e.target.value);
                   onFocus(groupIndex);
                   inputRefs.current[groupIndex]?.focus();
                 }
               }}
-              disabled={isTraining}
+              disabled={inputsLocked}
               className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100"
             >
               {sentGroups.map((_, idx) => (
@@ -94,6 +98,7 @@ export function ActiveTrainingView({
           currentFocusedGroup={currentFocusedGroup}
           currentActiveGroup={currentGroup}
           isTraining={isTraining}
+          disableAllInputs={inputsFrozen}
           currentGroupInputLocked={currentGroupInputLocked}
           onChange={onChange}
           onConfirm={onConfirm}
@@ -101,12 +106,13 @@ export function ActiveTrainingView({
           inputRef={inputRefCallback}
         />
         <p className="text-xs text-slate-500 mt-2">
-          💡 Auto-advances when group is complete • Use Enter to confirm •
-          Scroll to review past groups
+          {inputsFrozen
+            ? 'Session was restored after a reload. Stop and start a new run when ready.'
+            : '💡 Auto-advances when group is complete • Use Enter to confirm • Scroll to review past groups'}
         </p>
       </div>
 
-      <TrainingControls onSubmit={onSubmit} onStop={onStop} />
+      <TrainingControls onSubmit={onSubmit} onStop={onStop} submitDisabled={inputsFrozen} />
     </div>
   );
 }

@@ -11,6 +11,8 @@ interface GroupsListProps {
   currentFocusedGroup: number;
   currentActiveGroup?: number;
   isTraining?: boolean;
+  /** Disables every input (reload restore — view-only until Stop). */
+  disableAllInputs?: boolean;
   currentGroupInputLocked?: boolean;
   onChange: (index: number, value: string) => void;
   onConfirm: (index: number) => void;
@@ -25,6 +27,7 @@ export function GroupsList({
   currentFocusedGroup,
   currentActiveGroup,
   isTraining = false,
+  disableAllInputs = false,
   currentGroupInputLocked = false,
   onChange,
   onConfirm,
@@ -39,8 +42,11 @@ export function GroupsList({
           // In interactive mode, allow typing in any group
           const isActiveGroup = currentActiveGroup !== undefined && idx === currentActiveGroup;
           // Disable only if: training is active, not the active group, and not confirmed
-          const isDisabled = isTraining && !isActiveGroup && !confirmedGroups[idx];
-          const inputLocked = Boolean(currentGroupInputLocked && isActiveGroup && !confirmedGroups[idx]);
+          const isDisabled =
+            disableAllInputs || (isTraining && !isActiveGroup && !confirmedGroups[idx]);
+          const inputLocked =
+            disableAllInputs ||
+            Boolean(currentGroupInputLocked && isActiveGroup && !confirmedGroups[idx]);
           return (
             <GroupItem
               key={idx}

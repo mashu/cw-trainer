@@ -12,7 +12,7 @@ import { ensureAppError } from '@/lib/errors';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
-import { isGroupTrainingRuntimeActive } from '@/lib/training/groupSessionMachine';
+import { isGroupTrainingPlaybackFrozen, isGroupTrainingRuntimeActive } from '@/lib/training/groupSessionMachine';
 import type {
   GroupSessionResultSummary,
   GroupTrainingRuntimeState,
@@ -46,6 +46,11 @@ export interface UseTrainingSessionReturn {
   /** True while playback stopped but results UI / persistence are still being prepared — avoids a routing flash to home. */
   readonly isCompletingSession: boolean;
   readonly hasActiveSession: boolean;
+  /**
+   * True when the session was paused without a live playback loop (reload restore).
+   * Inputs and Submit are disabled; only Stop is available.
+   */
+  readonly isPlaybackFrozen: boolean;
   readonly runtimeStatus: GroupTrainingRuntimeState['status'];
   readonly sessionIssueMessage?: string;
   readonly currentGroup: number;
@@ -105,7 +110,8 @@ export function useTrainingSession({
     runtime.status !== 'idle' && runtime.status !== 'results' ? runtime : null;
   const isCompletingSession = runtime.status === 'completing';
   const showResults = runtime.status === 'results';
-  const isTraining = hasActiveSession && !isCompletingSession;
+  const isPlaybackFrozen = isGroupTrainingPlaybackFrozen(runtime);
+  const isTraining = hasActiveSession && !isCompletingSession && !isPlaybackFrozen;
   const currentGroup = activeRuntime ? activeRuntime.currentGroup : 0;
   const sentGroups = activeRuntime ? [...activeRuntime.groups] : [];
   const userInput = activeRuntime ? [...activeRuntime.userInput] : [];
@@ -553,6 +559,7 @@ export function useTrainingSession({
   };
 
   const submitAnswer = (): void => {
+    if (isPlaybackFrozen) return;
     audio.trainingAbortRef.current = true;
     setRuntimeStatus('completing');
     isTrainingRef.current = false;
@@ -584,6 +591,7 @@ export function useTrainingSession({
     index === currentGroup;
 
   const confirmGroupAnswer = (index: number, overrideValue?: string): void => {
+    if (isPlaybackFrozen) return;
     if (!sentGroups.length || isGroupInputLockedDuringPlayback(index)) return;
     const normalized = (overrideValue ?? userInput[index] ?? '').trim().toUpperCase();
     const nextAnswers = [...userInput];
@@ -617,6 +625,7 @@ export function useTrainingSession({
   };
 
   const handleAnswerChange = (index: number, value: string): void => {
+    if (isPlaybackFrozen) return;
     if (isGroupInputLockedDuringPlayback(index)) return;
     const nextAnswers = [...userInput];
     nextAnswers[index] = value;
@@ -739,6 +748,7 @@ export function useTrainingSession({
     isTraining,
     isCompletingSession,
     hasActiveSession,
+    isPlaybackFrozen,
     runtimeStatus: runtime.status,
     currentGroup,
     sentGroups,

@@ -63,14 +63,16 @@ describe('groupRuntimePersistence', () => {
     expect(readGroupRuntime().status).toBe('idle');
   });
 
-  it('returns idle for corrupt JSON', () => {
+  it('returns idle for corrupt JSON and clears the stale key', () => {
     window.sessionStorage.setItem(STORAGE_KEY, '{not valid json');
     expect(readGroupRuntime().status).toBe('idle');
+    expect(window.sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('returns idle for schema-invalid JSON', () => {
+  it('returns idle for schema-invalid JSON and clears the stale key', () => {
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ status: 'nonsense' }));
     expect(readGroupRuntime().status).toBe('idle');
+    expect(window.sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it('never throws when storage access fails', () => {

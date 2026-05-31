@@ -27,7 +27,18 @@ export function readGroupRuntime(): GroupTrainingRuntimeState {
   try {
     const raw = store.getItem(STORAGE_KEY);
     if (!raw) return IDLE_GROUP_TRAINING_RUNTIME;
-    return rehydrateGroupTrainingRuntime(JSON.parse(raw));
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      clearGroupRuntime();
+      return IDLE_GROUP_TRAINING_RUNTIME;
+    }
+    const rehydrated = rehydrateGroupTrainingRuntime(parsed);
+    if (rehydrated.status === 'idle') {
+      clearGroupRuntime();
+    }
+    return rehydrated;
   } catch {
     return IDLE_GROUP_TRAINING_RUNTIME;
   }

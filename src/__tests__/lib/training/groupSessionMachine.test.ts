@@ -3,9 +3,11 @@ import {
   cancelGroupTrainingSession,
   completeGroupTrainingSession,
   confirmGroupTrainingAnswer,
+  isGroupTrainingPlaybackFrozen,
   isGroupTrainingRuntimeActive,
   REHYDRATED_SESSION_PAUSE_REASON,
   rehydrateGroupTrainingRuntime,
+  setGroupTrainingAudioStatus,
   setGroupTrainingGroups,
   transitionGroupTrainingStatus,
   updateGroupTrainingInput,
@@ -83,5 +85,50 @@ describe('rehydrateGroupTrainingRuntime', () => {
       expect(restored.pauseReason).toBe(REHYDRATED_SESSION_PAUSE_REASON);
     }
     expect(isGroupTrainingRuntimeActive(restored)).toBe(true);
+  });
+
+  it('appends the prior error message when rehydrating a failed session', () => {
+    const started = beginGroupTrainingSession({ sessionId: 1, startedAt: 100 });
+    const failed = transitionGroupTrainingStatus(started, 'failed', {
+      errorMessage: 'Audio suspended',
+    });
+
+    const restored = rehydrateGroupTrainingRuntime(JSON.parse(JSON.stringify(failed)));
+
+    expect(restored.status).toBe('paused');
+    if (restored.status === 'paused') {
+      expect(restored.pauseReason).toBe(
+        `${REHYDRATED_SESSION_PAUSE_REASON} (Audio suspended)`,
+      );
+    }
+  });
+});
+
+describe('isGroupTrainingPlaybackFrozen', () => {
+  it('is true for paused sessions with closed audio (reload restore)', () => {
+    const started = beginGroupTrainingSession({ sessionId: 1, startedAt: 100 });
+    const paused = transitionGroupTrainingStatus(
+      setGroupTrainingAudioStatus(started, 'closed'),
+      'paused',
+      { pauseReason: REHYDRATED_SESSION_PAUSE_REASON },
+    );
+
+    expect(isGroupTrainingPlaybackFrozen(paused)).toBe(true);
+  });
+
+  it('is false for tab-visibility pauses that keep audio suspended', () => {
+    const started = beginGroupTrainingSession({ sessionId: 1, startedAt: 100 });
+    const paused = transitionGroupTrainingStatus(
+      setGroupTrainingAudioStatus(started, 'suspended'),
+      'paused',
+      { pauseReason: 'Training paused while the page was hidden.' },
+    );
+
+    expect(isGroupTrainingPlaybackFrozen(paused)).toBe(false);
+  });
+
+  it('is false for non-paused active statuses', () => {
+    const started = beginGroupTrainingSession({ sessionId: 1, startedAt: 100 });
+    expect(isGroupTrainingPlaybackFrozen(started)).toBe(false);
   });
 });

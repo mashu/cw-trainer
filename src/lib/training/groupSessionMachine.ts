@@ -90,6 +90,18 @@ export const isGroupTrainingRuntimeBlockingSync = (
   state.status === 'completing' ||
   state.status === 'failed';
 
+/**
+ * True when the session was paused with no live audio loop (reload restore, unmount
+ * recovery). Playback refs are absent — inputs and Submit must be disabled; Stop only.
+ * Tab-visibility pauses during a live run keep audio non-closed and remain interactive.
+ */
+export function isGroupTrainingPlaybackFrozen(
+  state: GroupTrainingRuntimeState,
+): boolean {
+  if (state.status !== 'paused') return false;
+  return state.audioStatus === 'closed';
+}
+
 export function beginGroupTrainingSession(
   input: BeginGroupTrainingSessionInput,
 ): GroupTrainingRuntimeState {
@@ -271,6 +283,11 @@ export function rehydrateGroupTrainingRuntime(persisted: unknown): GroupTraining
   if (data.status === 'idle') return IDLE_GROUP_TRAINING_RUNTIME;
   if (data.status === 'results') return { status: 'results', result: data.result };
 
+  const pauseReason =
+    data.status === 'failed' && data.errorMessage
+      ? `${REHYDRATED_SESSION_PAUSE_REASON} (${data.errorMessage})`
+      : REHYDRATED_SESSION_PAUSE_REASON;
+
   return {
     status: 'paused',
     sessionId: data.sessionId,
@@ -284,7 +301,7 @@ export function rehydrateGroupTrainingRuntime(persisted: unknown): GroupTraining
     groupEndAt: [...data.groupEndAt],
     groupAnswerAt: [...data.groupAnswerAt],
     audioStatus: 'closed',
-    pauseReason: REHYDRATED_SESSION_PAUSE_REASON,
+    pauseReason,
   };
 }
 

@@ -5,6 +5,7 @@ jest.mock('@/lib/trainingSessionGroups', () => ({
 }));
 
 import { renderHook, act, waitFor, type RenderHookResult } from '@testing-library/react';
+import React from 'react';
 
 import { DEFAULT_TRAINING_SETTINGS } from '@/config/training.config';
 import { useTrainingAudio } from '@/hooks/useTrainingAudio';
@@ -17,6 +18,7 @@ import type {
   GroupTrainingAudioStatus,
   GroupTrainingRuntimeState,
 } from '@/lib/training/groupSessionMachine';
+import { rehydrateGroupTrainingRuntime } from '@/lib/training/groupSessionMachine';
 import { useAppStore } from '@/store';
 import { AppStoreProvider } from '@/store/providers/app-store-provider';
 import type { TrainingSettings } from '@/types';
@@ -223,6 +225,66 @@ describe('useTrainingSession', () => {
     });
 
     expect(result.current.userInput[0]).toBe('A');
+  });
+
+  it('blocks submit and input changes when playback is frozen after reload restore', async () => {
+    const frozenRuntime = rehydrateGroupTrainingRuntime({
+      status: 'playingGroup',
+      sessionId: 1,
+      startedAt: 100,
+      groups: ['AB'],
+      userInput: ['A'],
+      confirmedGroups: {},
+      currentGroup: 0,
+      currentFocusedGroup: 0,
+      groupStartAt: [100],
+      groupEndAt: [200],
+      groupAnswerAt: [],
+      audioStatus: 'running',
+    });
+
+    function RestoreFrozenWrapper({ children }: { children: React.ReactNode }): JSX.Element {
+      const restore = useAppStore((s) => s.restoreGroupTrainingRuntime);
+      React.useEffect(() => {
+        restore(frozenRuntime);
+      }, [restore]);
+      return <>{children}</>;
+    }
+
+    const { result } = renderHook(
+      () =>
+        useTrainingSession({
+          settings: sessionSettings,
+          sessions: [],
+          saveSession,
+          setTrainingSettingsState,
+          showToast,
+        }),
+      {
+        wrapper: ({ children }) => (
+          <TestWrapper>
+            <RestoreFrozenWrapper>{children}</RestoreFrozenWrapper>
+          </TestWrapper>
+        ),
+      },
+    );
+
+    await waitForInitialLoads();
+
+    await waitFor(() => {
+      expect(result.current.isPlaybackFrozen).toBe(true);
+      expect(result.current.isTraining).toBe(false);
+      expect(result.current.hasActiveSession).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleAnswerChange(0, 'AB');
+      result.current.submitAnswer();
+    });
+
+    expect(result.current.userInput[0]).toBe('A');
+    expect(result.current.showResults).toBe(false);
+    expect(saveSession).not.toHaveBeenCalled();
   });
 
   it('waits for scheduled playback duration before unlocking input', async () => {

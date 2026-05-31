@@ -136,7 +136,8 @@ export function TrainingRouter({
 
   // ── Group mode: active training ──
   if (training.hasActiveSession || training.isCompletingSession) {
-    const sessionUiLocked = training.hasActiveSession || training.isCompletingSession;
+    const sessionUiLocked =
+      (training.hasActiveSession || training.isCompletingSession) && !training.isPlaybackFrozen;
     return (
       <ActiveTrainingView
         currentGroup={training.currentGroup}
@@ -146,6 +147,7 @@ export function TrainingRouter({
         confirmedGroups={training.confirmedGroups}
         currentFocusedGroup={training.currentFocusedGroup}
         isTraining={sessionUiLocked}
+        inputsFrozen={training.isPlaybackFrozen}
         currentGroupInputLocked={
           (settings.lockInputDuringGroupPlayback ?? true) &&
           training.runtimeStatus === 'playingGroup'
