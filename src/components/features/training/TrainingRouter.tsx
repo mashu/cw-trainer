@@ -1,17 +1,19 @@
 'use client';
 
-import React, { Suspense, useState } from 'react';
+import { useState } from 'react';
 
 import { ChaseHomeView } from '@/components/features/chase/ChaseHomeView';
 import { ChaseResultsView } from '@/components/features/chase/ChaseResultsView';
 import { ChaseTrainingView } from '@/components/features/chase/ChaseTrainingView';
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import { LazyBoundary } from '@/components/ui/layouts/LazyBoundary';
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
 import type { UseChaseTrainingSessionReturn } from '@/hooks/useChaseTrainingSession';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
 import type { UseTrainingSessionReturn } from '@/hooks/useTrainingSession';
 import type { UnlockedAchievement } from '@/lib/achievements';
 import type { SharedAudioFromSettings } from '@/lib/settingsToSharedAudioProps';
+import { lazyWithRetry } from '@/lib/utils/lazyWithRetry';
 import type {
   HeatmapSession,
   IcrSettings,
@@ -21,18 +23,18 @@ import type {
 } from '@/types';
 
 // Lazy-loaded heavy views — only downloaded when the user navigates to them
-const ICRTrainer = React.lazy(() =>
+const ICRTrainer = lazyWithRetry(() =>
   import('@/components/features/icr/ICRTrainer').then((m) => ({ default: m.ICRTrainer })),
 );
-const GroupTrainingStats = React.lazy(() =>
+const GroupTrainingStats = lazyWithRetry(() =>
   import('@/components/features/stats/GroupTrainingStats').then((m) => ({
     default: m.GroupTrainingStats,
   })),
 );
-const TextPlayer = React.lazy(() =>
+const TextPlayer = lazyWithRetry(() =>
   import('@/components/ui/training/TextPlayer').then((m) => ({ default: m.TextPlayer })),
 );
-const TextPlayerModal = React.lazy(() =>
+const TextPlayerModal = lazyWithRetry(() =>
   import('@/components/ui/training/TextPlayerModal').then((m) => ({ default: m.TextPlayerModal })),
 );
 
@@ -311,9 +313,9 @@ export function TrainingRouter({
             Back to Training
           </button>
         </div>
-        <Suspense fallback={<LazyFallback />}>
+        <LazyBoundary name="lazy:group-stats" fallback={<LazyFallback />}>
           <GroupTrainingStats embedded onBack={() => setGroupTab('train')} />
-        </Suspense>
+        </LazyBoundary>
       </div>
     );
   }
@@ -340,9 +342,9 @@ export function TrainingRouter({
   if (activeMode === 'icr') {
     return (
       <SwipeContainer onSwipeLeft={() => handleMoveMode(1)} onSwipeRight={() => handleMoveMode(-1)}>
-        <Suspense fallback={<LazyFallback />}>
+        <LazyBoundary name="lazy:icr" fallback={<LazyFallback />}>
           <ICRTrainer sharedAudio={sharedAudio} icrSettings={icrSettings} showToast={showToast} />
-        </Suspense>
+        </LazyBoundary>
       </SwipeContainer>
     );
   }
@@ -361,16 +363,16 @@ export function TrainingRouter({
               Pop-out player
             </button>
           </div>
-          <Suspense fallback={<LazyFallback />}>
+          <LazyBoundary name="lazy:text-player" fallback={<LazyFallback />}>
             <TextPlayer settings={formSettings} />
-          </Suspense>
-          <Suspense fallback={null}>
+          </LazyBoundary>
+          <LazyBoundary name="lazy:text-player-modal" fallback={null}>
             <TextPlayerModal
               open={playerModalOpen}
               onClose={() => setPlayerModalOpen(false)}
               settings={formSettings}
             />
-          </Suspense>
+          </LazyBoundary>
         </div>
       </SwipeContainer>
     );

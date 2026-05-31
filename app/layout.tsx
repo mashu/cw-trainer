@@ -34,6 +34,16 @@ export default function RootLayout({
               (function() {
                 // Handle chunk loading errors (common with GitHub Pages after deployments)
                 if (typeof window !== 'undefined') {
+                  // Buffer errors that occur before React/the reporter is live so the
+                  // central reporter can drain them on mount (instead of swallowing silently).
+                  window.__cwErrorQueue = window.__cwErrorQueue || [];
+                  function enqueueError(message, source) {
+                    try {
+                      window.__cwErrorQueue.push({ message: String(message || 'Unknown error'), source: source || 'window' });
+                    } catch (_) {
+                      // ignore
+                    }
+                  }
                   function showChunkLoadBanner(message) {
                     try {
                       if (document.getElementById('cw-chunk-load-banner')) return;
@@ -78,6 +88,8 @@ export default function RootLayout({
                   window.addEventListener('error', function(e) {
                     if (e.message && e.message.includes('Failed to load chunk')) {
                       console.warn('[ChunkLoader] Chunk loading error detected, attempting recovery...');
+                      // Record it so the error is observable (no longer swallowed silently).
+                      enqueueError(e.message, 'window');
                       // Clear the error to prevent ErrorBoundary from catching it
                       e.preventDefault();
                       // Do NOT auto-reload: it can interrupt an active training session.
@@ -93,6 +105,7 @@ export default function RootLayout({
                         (e.reason.message.includes('Failed to load chunk') || 
                          e.reason.message.includes('Loading chunk'))) {
                       console.warn('[ChunkLoader] Chunk loading promise rejection, attempting recovery...');
+                      enqueueError(e.reason.message, 'unhandledrejection');
                       e.preventDefault();
                       // Do NOT auto-reload: it can interrupt an active training session.
                       // Instead, offer a user-triggered reload.

@@ -7,9 +7,11 @@ import type { StoreApi } from 'zustand/vanilla';
 
 import {
   FirebaseAchievementRepository,
+  FirebaseErrorRepository,
   FirebaseSessionRepository,
   FirebaseTrainingSettingsRepository,
 } from '@/lib/db/repositories';
+import { setRemoteErrorSink } from '@/lib/errors/reporter';
 import {
   AchievementService,
   IcrSessionService,
@@ -299,6 +301,28 @@ export function AppStoreProvider({
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
       }
+    };
+  }, []);
+
+  // Best-effort remote error delivery. Respects Firebase-optional: the sink
+  // writes only when Firestore is configured AND a user is signed in; otherwise
+  // errors stay local (ring buffer + console). Reads context at call time so it
+  // tracks sign-in/out without re-subscribing.
+  useEffect(() => {
+    const store = storeRef.current;
+    if (!store) {
+      return;
+    }
+    const repository = new FirebaseErrorRepository();
+    setRemoteErrorSink((report) => {
+      const context = store.getState().context;
+      if (!context.firebase?.db || !context.user) {
+        return;
+      }
+      void repository.record({ firebase: context.firebase, user: context.user }, report);
+    });
+    return (): void => {
+      setRemoteErrorSink(null);
     };
   }, []);
 

@@ -2,9 +2,21 @@
 
 import React, { Component } from 'react';
 
+import { reportError } from '@/lib/errors/reporter';
+
+/** Render-prop signature for fallbacks that need to trigger a recovery. */
+export type ErrorFallbackRender = (props: {
+  readonly reset: () => void;
+  readonly error: Error | null;
+}) => React.ReactNode;
+
 interface Props {
   readonly children: React.ReactNode;
-  readonly fallback?: React.ReactNode;
+  readonly fallback?: React.ReactNode | ErrorFallbackRender;
+  /** Identifies this boundary in error reports (e.g. 'root', 'app-shell', 'training-router'). */
+  readonly name?: string;
+  /** When any value in this array changes (after an error), the boundary auto-resets. */
+  readonly resetKeys?: readonly unknown[];
   readonly onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
 }
 
@@ -13,12 +25,30 @@ interface State {
   readonly error: Error | null;
 }
 
+const resetKeysChanged = (
+  prev: readonly unknown[] | undefined,
+  next: readonly unknown[] | undefined,
+): boolean => {
+  if (prev === undefined || next === undefined) {
+    return false;
+  }
+  if (prev.length !== next.length) {
+    return true;
+  }
+  return prev.some((value, index) => !Object.is(value, next[index]));
+};
+
 /**
  * ErrorBoundary catches React rendering errors and displays a fallback UI.
  * Prevents the entire app from crashing due to component errors.
  *
+ * Boundaries are composed hierarchically (root -> app-shell -> feature) so a
+ * localized failure is contained at the lowest level and the store / active
+ * training session above it survive. Every caught error is forwarded to the
+ * central reporter, tagged with this boundary's `name`.
+ *
  * Usage:
- * <ErrorBoundary>
+ * <ErrorBoundary name="feature" fallback={({ reset }) => <Retry onClick={reset} />}>
  *   <YourComponent />
  * </ErrorBoundary>
  */
@@ -34,12 +64,21 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   override componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    // Log error to console (in production, send to error tracking service)
-    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+    reportError(error, {
+      source: 'react',
+      ...(this.props.name !== undefined ? { boundary: this.props.name } : {}),
+      ...(errorInfo.componentStack ? { componentStack: errorInfo.componentStack } : {}),
+    });
 
     // Call custom error handler if provided
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
+    }
+  }
+
+  override componentDidUpdate(prevProps: Props): void {
+    if (this.state.hasError && resetKeysChanged(prevProps.resetKeys, this.props.resetKeys)) {
+      this.handleReset();
     }
   }
 
@@ -50,8 +89,10 @@ export class ErrorBoundary extends Component<Props, State> {
   override render(): React.ReactNode {
     if (this.state.hasError) {
       // Custom fallback UI if provided
-      if (this.props.fallback) {
-        return this.props.fallback;
+      if (this.props.fallback !== undefined) {
+        return typeof this.props.fallback === 'function'
+          ? this.props.fallback({ reset: this.handleReset, error: this.state.error })
+          : this.props.fallback;
       }
 
       // Default fallback UI
@@ -113,4 +154,38 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return this.props.children;
   }
+}
+
+interface FeatureErrorFallbackProps {
+  readonly reset: () => void;
+  readonly title?: string;
+  readonly message?: string;
+}
+
+/**
+ * Compact, inline fallback for feature-level boundaries. Unlike the full-screen
+ * default, this keeps the surrounding shell (and any active session) in place
+ * and offers a non-destructive "Try again" that re-renders just this subtree.
+ */
+export function FeatureErrorFallback({
+  reset,
+  title = 'This section ran into a problem',
+  message = 'You can keep your current session. Try reloading just this section.',
+}: FeatureErrorFallbackProps): JSX.Element {
+  return (
+    <div
+      className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"
+      role="alert"
+    >
+      <p className="font-semibold">{title}</p>
+      <p className="mt-1 text-rose-800/90">{message}</p>
+      <button
+        type="button"
+        onClick={reset}
+        className="mt-3 rounded-lg bg-rose-600 px-3 py-1.5 font-medium text-white shadow-sm hover:bg-rose-700"
+      >
+        Try again
+      </button>
+    </div>
+  );
 }

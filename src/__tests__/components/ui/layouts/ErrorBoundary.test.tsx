@@ -2,7 +2,12 @@ import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 
-import { ErrorBoundary } from '@/components/ui/layouts/ErrorBoundary';
+import { ErrorBoundary, FeatureErrorFallback } from '@/components/ui/layouts/ErrorBoundary';
+import { reportError } from '@/lib/errors/reporter';
+
+jest.mock('@/lib/errors/reporter', () => ({
+  reportError: jest.fn(),
+}));
 
 // Component that throws an error
 function ThrowError({ shouldThrow = false }: { shouldThrow?: boolean }): JSX.Element {
@@ -126,6 +131,58 @@ describe('ErrorBoundary', () => {
     // Verify button can be clicked (window.location.reload can't be mocked in jsdom)
     await user.click(reloadButton);
     expect(reloadButton).toBeInTheDocument();
+  });
+
+  it('reports caught errors to the central reporter with the boundary name', () => {
+    render(
+      <ErrorBoundary name="test-boundary">
+        <ThrowError shouldThrow={true} />
+      </ErrorBoundary>,
+    );
+
+    expect(reportError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ source: 'react', boundary: 'test-boundary' }),
+    );
+  });
+
+  it('renders a render-prop fallback and passes a reset function', () => {
+    render(
+      <ErrorBoundary fallback={({ reset }) => <button onClick={reset}>retry-btn</button>}>
+        <ThrowError shouldThrow={true} />
+      </ErrorBoundary>,
+    );
+
+    expect(screen.getByText('retry-btn')).toBeInTheDocument();
+  });
+
+  it('auto-resets when resetKeys change', () => {
+    const { rerender } = render(
+      <ErrorBoundary resetKeys={[0]} fallback={<div>fallback-shown</div>}>
+        <ThrowError shouldThrow={true} />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByText('fallback-shown')).toBeInTheDocument();
+
+    rerender(
+      <ErrorBoundary resetKeys={[1]} fallback={<div>fallback-shown</div>}>
+        <ThrowError shouldThrow={false} />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByText('No error')).toBeInTheDocument();
+  });
+});
+
+describe('FeatureErrorFallback', () => {
+  it('renders the message and calls reset when Try again is clicked', async () => {
+    const user = userEvent.setup();
+    const reset = jest.fn();
+
+    render(<FeatureErrorFallback reset={reset} />);
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    await user.click(screen.getByText('Try again'));
+    expect(reset).toHaveBeenCalledTimes(1);
   });
 });
 

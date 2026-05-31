@@ -11,3 +11,5 @@ export type {
   TrainingSettingsRepositoryContext,
 } from './training-settings.repository';
 export { FirebaseTrainingSettingsRepository } from './training-settings.repository';
+export type { ErrorRepository, ErrorRepositoryContext } from './error.repository';
+export { FirebaseErrorRepository } from './error.repository';

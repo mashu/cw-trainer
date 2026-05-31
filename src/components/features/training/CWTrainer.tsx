@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from '@/components/features/sidebar/Sidebar';
 import { TrainingRouter } from '@/components/features/training/TrainingRouter';
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
+import { ErrorBoundary, FeatureErrorFallback } from '@/components/ui/layouts/ErrorBoundary';
 import { SyncStatusIndicator } from '@/components/ui/training/SyncStatusIndicator';
 import { ToastOverlay } from '@/components/ui/training/ToastOverlay';
 import { useAchievementsActions, useAchievementsState } from '@/hooks/useAchievements';
@@ -372,32 +373,43 @@ export function CWTrainer(): JSX.Element {
       >
         <AppHeader onOpenSidebar={() => setSidebarOpen(true)} dark={chaseShellActive} />
 
-        <TrainingRouter
-          activeMode={activeMode}
-          groupTab={groupTab}
-          setGroupTab={setGroupTab}
-          setActiveMode={setActiveMode}
-          training={training}
-          echoTraining={echoTraining}
-          chaseTraining={chaseTraining}
-          settings={settings}
-          formSettings={formSettings}
-          groupHeatmapSessions={groupHeatmapSessions}
-          echoHeatmapSessions={echoHeatmapSessions}
-          groupSessions={groupSessions}
-          echoSessions={echoSessions}
-          chaseSessions={chaseSessions}
-          lastAccuracyPercent={lastAccuracyPercent}
-          lastEchoAccuracyPercent={lastEchoAccuracyPercent}
-          lastChaseAccuracyPercent={lastChaseAccuracyPercent}
-          stopTrainingIfActive={stopTrainingIfActive}
-          sharedAudio={sharedAudio}
-          icrSettings={icrSettings}
-          showToast={showToast}
-          handleMoveMode={handleMoveMode}
-          latestUnlockedAchievements={latestUnlockedAchievements}
-          onClearLatestUnlockedAchievements={clearLatestUnlockedAchievements}
-        />
+        <ErrorBoundary
+          name="training-router"
+          fallback={({ reset }): React.ReactNode => (
+            <FeatureErrorFallback
+              reset={reset}
+              title="This view hit an error"
+              message="Your training session is still active. Try reloading just this view, or stop the session if it persists."
+            />
+          )}
+        >
+          <TrainingRouter
+            activeMode={activeMode}
+            groupTab={groupTab}
+            setGroupTab={setGroupTab}
+            setActiveMode={setActiveMode}
+            training={training}
+            echoTraining={echoTraining}
+            chaseTraining={chaseTraining}
+            settings={settings}
+            formSettings={formSettings}
+            groupHeatmapSessions={groupHeatmapSessions}
+            echoHeatmapSessions={echoHeatmapSessions}
+            groupSessions={groupSessions}
+            echoSessions={echoSessions}
+            chaseSessions={chaseSessions}
+            lastAccuracyPercent={lastAccuracyPercent}
+            lastEchoAccuracyPercent={lastEchoAccuracyPercent}
+            lastChaseAccuracyPercent={lastChaseAccuracyPercent}
+            stopTrainingIfActive={stopTrainingIfActive}
+            sharedAudio={sharedAudio}
+            icrSettings={icrSettings}
+            showToast={showToast}
+            handleMoveMode={handleMoveMode}
+            latestUnlockedAchievements={latestUnlockedAchievements}
+            onClearLatestUnlockedAchievements={clearLatestUnlockedAchievements}
+          />
+        </ErrorBoundary>
       </div>
 
       <SyncStatusIndicator
