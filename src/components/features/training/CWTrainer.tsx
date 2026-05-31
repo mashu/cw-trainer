@@ -137,62 +137,6 @@ export function CWTrainer(): JSX.Element {
     prevSyncAtRef.current = lastSyncCompletedAt;
   }, [lastSyncCompletedAt, showToast]);
 
-  const trainingSessionActive = useAppStore((s) => s.trainingSessionActive);
-  const resetTrainingSessionLocks = useAppStore((s) => s.resetTrainingSessionLocks);
-
-  /** Snapshot used only for interrupt guard — keeps useEffect deps a fixed-length tuple (avoids React dev/HMR “deps changed size” warnings). */
-  const interruptedSessionGuardInputs = useMemo(
-    () => ({
-      trainingSessionActive,
-      trainingIsTraining: training.isTraining,
-      trainingHasActiveSession: training.hasActiveSession,
-      trainingCompletingSession: training.isCompletingSession,
-      trainingShowResults: training.showResults,
-      echoIsTraining: echoTraining.isTraining,
-      echoCompletingSession: echoTraining.isCompletingSession,
-      echoShowResults: echoTraining.showResults,
-      chaseIsTraining: chaseTraining.isTraining,
-      chaseShowResults: chaseTraining.status === 'results',
-      activeMode,
-      groupTab,
-    }),
-    [
-      trainingSessionActive,
-      training.isTraining,
-      training.hasActiveSession,
-      training.isCompletingSession,
-      training.showResults,
-      echoTraining.isTraining,
-      echoTraining.isCompletingSession,
-      echoTraining.showResults,
-      chaseTraining.isTraining,
-      chaseTraining.status,
-      activeMode,
-      groupTab,
-    ],
-  );
-
-  useEffect(() => {
-    const s = interruptedSessionGuardInputs;
-    if (
-      !s.trainingSessionActive ||
-      s.trainingIsTraining ||
-      s.trainingHasActiveSession ||
-      s.echoIsTraining ||
-      s.chaseIsTraining
-    )
-      return;
-    if (s.trainingCompletingSession || s.echoCompletingSession) return;
-    if (s.trainingShowResults || s.echoShowResults || s.chaseShowResults) return;
-    if (
-      (s.activeMode !== 'group' && s.activeMode !== 'echo' && s.activeMode !== 'chase') ||
-      s.groupTab !== 'train'
-    )
-      return;
-    resetTrainingSessionLocks();
-    showToast({ message: 'Session was interrupted. Start a new one when ready.', type: 'info' });
-  }, [interruptedSessionGuardInputs, resetTrainingSessionLocks, showToast]);
-
   const handleLogin = useCallback(async (): Promise<void> => {
     if (!firebaseReady || !firebaseServices) {
       showToast({ message: 'Firebase is not configured. Cannot sign in.', type: 'error' });

@@ -10,10 +10,10 @@ import {
   serializeTrainingSettings,
 } from '@/lib/utils/training-settings';
 import { trainingSettingsSchema, type TrainingSettingsInput } from '@/lib/validators';
-import { useAppStore } from '@/store';
 import type { TrainingSettings } from '@/types';
 
 import type { Toast } from './useToast';
+import { useTrainingSessionActive } from './useTrainingSessionActive';
 
 type TimeoutId = number;
 
@@ -44,7 +44,7 @@ export function useSettingsAutoSave({
   firebaseUserUid,
   showToast,
 }: UseSettingsAutoSaveOptions): UseSettingsAutoSaveReturn {
-  const trainingSessionActive = useAppStore((s) => s.trainingSessionActive);
+  const trainingSessionActive = useTrainingSessionActive();
   const latestSettingsRef = useRef<TrainingSettings>(settings);
   const lastSavedRef = useRef<string | null>(null);
   const initializedRef = useRef(false);

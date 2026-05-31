@@ -4,9 +4,9 @@ import type { AchievementService } from '@/lib/services/achievement.service';
 import type { IcrSessionService } from '@/lib/services/icr-session.service';
 import type { SessionService } from '@/lib/services/session.service';
 import type { TrainingSettingsService } from '@/lib/services/training-settings.service';
-import { isGroupTrainingRuntimeBlockingSync } from '@/lib/training/groupSessionMachine';
 
 import { contextEquals } from './context-utils';
+import { selectTrainingSessionActive } from './selectors';
 import { createAchievementsSlice, type AchievementsSlice } from './slices/achievements.slice';
 import { createIcrSessionsSlice, type IcrSessionsSlice } from './slices/icr-sessions.slice';
 import { createSessionsSlice, type SessionsSlice } from './slices/sessions.slice';
@@ -82,9 +82,7 @@ export const createAppStore = ({
       set: (partial, replace) => set(partial as Partial<AppStore>, replace),
     });
 
-    const isTrainingSessionActive = (): boolean =>
-      get().trainingSessionActive ||
-      isGroupTrainingRuntimeBlockingSync(get().groupTrainingRuntime);
+    const isTrainingSessionActive = (): boolean => selectTrainingSessionActive(get());
 
     const trainingSettingsSlice = createTrainingSettingsSlice({
       service: trainingSettingsService,

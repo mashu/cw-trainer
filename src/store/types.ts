@@ -15,11 +15,15 @@ export interface ContextSlice {
   lastSyncCompletedAt: number | undefined;
   setLastSyncCompletedAt: (t: number) => void;
   /**
-   * True while `trainingSessionLockCount > 0` — any feature may acquire a lock (group, echo, ICR,
-   * text player, letter preview). Refcounted so one UI cannot clear another’s lock by mistake.
+   * True while `trainingSessionLockCount > 0` — a non-group feature holds a lock (echo, chase,
+   * ICR, text player, letter preview). Refcounted so one UI cannot clear another’s lock by mistake.
+   *
+   * Group training is NOT included here: its blocking state is derived from `groupTrainingRuntime`.
+   * For the combined "is any training active" flag, use `selectTrainingSessionActive` /
+   * `useTrainingSessionActive`, never this field directly.
    */
   trainingSessionActive: boolean;
-  /** Number of active acquireTrainingSessionLock calls not yet released. */
+  /** Number of active acquireTrainingSessionLock calls not yet released (non-group features). */
   trainingSessionLockCount: number;
   acquireTrainingSessionLock: () => void;
   releaseTrainingSessionLock: () => void;

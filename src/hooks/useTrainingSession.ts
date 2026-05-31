@@ -25,7 +25,6 @@ import type { SessionResult, TrainingSettings } from '@/types';
 
 import type { Toast } from './useToast';
 import { useTrainingAudio } from './useTrainingAudio';
-import { useTrainingSessionLock } from './useTrainingSessionLock';
 
 // ── Public types ───────────────────────────────────────────────────────
 
@@ -77,8 +76,6 @@ export function useTrainingSession({
   showToast,
 }: UseTrainingSessionOptions): UseTrainingSessionReturn {
   type TimeoutId = number;
-
-  const { takeLock: takeSessionLock, releaseLock: dropSessionLock } = useTrainingSessionLock();
 
   // ── Shared audio engine ──────────────────────────────────────────────
   const audio = useTrainingAudio(settings);
@@ -187,7 +184,6 @@ export function useTrainingSession({
         audio.trainingAbortRef.current = true;
         isTrainingRef.current = false;
         setRuntimeStatus('paused', { pauseReason: 'Training view was remounted.' });
-        dropSessionLock();
       }
       Object.values(confirmTimeoutRef.current).forEach((id) => {
         if (id !== undefined) {
@@ -442,7 +438,6 @@ export function useTrainingSession({
       const mySession = audio.sessionIdRef.current + 1;
       audio.sessionIdRef.current = mySession;
       isTrainingRef.current = true;
-      takeSessionLock();
       const startedAt = Date.now();
       startedAtRef.current = startedAt;
       beginRuntimeSession({ sessionId: mySession, startedAt });
@@ -541,23 +536,15 @@ export function useTrainingSession({
             message: `Failed to process results: ${ensureAppError(error).message}`,
             type: 'error',
           });
-        } finally {
-          dropSessionLock();
         }
-      } else if (!resultsProcessedRef.current) {
+      } else if (!resultsProcessedRef.current && !sessionEndedDueToPlaybackIssue) {
         // Keep failed runtime (with errorMessage) visible until the user stops the session.
-        if (!sessionEndedDueToPlaybackIssue) {
-          cancelRuntimeSession();
-        }
-        dropSessionLock();
-      } else {
-        dropSessionLock();
+        cancelRuntimeSession();
       }
     } catch (error) {
       console.error('[Training] Unexpected training error:', error);
       showToast({ message: `Training error: ${ensureAppError(error).message}`, type: 'error' });
       isTrainingRef.current = false;
-      dropSessionLock();
       audio.trainingAbortRef.current = true;
       setRuntimeStatus('failed', { errorMessage: ensureAppError(error).message });
       setRuntimeAudioStatus('failed');
@@ -574,24 +561,19 @@ export function useTrainingSession({
     const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map((a) =>
       (a || '').trim().toUpperCase(),
     );
-    void processResults(answers, activeSentGroupsRef.current)
-      .catch((error) => {
-        console.error('[Training] Error processing results:', error);
-        showToast({
-          message: `Failed to process results: ${ensureAppError(error).message}`,
-          type: 'error',
-        });
-      })
-      .finally(() => {
-        dropSessionLock();
+    void processResults(answers, activeSentGroupsRef.current).catch((error) => {
+      console.error('[Training] Error processing results:', error);
+      showToast({
+        message: `Failed to process results: ${ensureAppError(error).message}`,
+        type: 'error',
       });
+    });
   };
 
   const stopTraining = (): void => {
     audio.trainingAbortRef.current = true;
     isTrainingRef.current = false;
     cancelRuntimeSession();
-    dropSessionLock();
     setRuntimeAudioStatus('closed');
     audio.stopAudio();
   };
