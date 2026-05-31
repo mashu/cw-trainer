@@ -48,11 +48,11 @@ function TestWrapper({ children }: { children: React.ReactNode }): JSX.Element {
 }
 
 function LockedWrapper({ children }: { children: React.ReactNode }): JSX.Element {
-  const acquire = useAppStore((s) => s.acquireTrainingSessionLock);
+  const beginPreviewPlayback = useAppStore((s) => s.beginPreviewPlayback);
   const acquiredRef = useRef(false);
   if (!acquiredRef.current) {
     acquiredRef.current = true;
-    acquire();
+    beginPreviewPlayback('text-player');
   }
 
   return <>{children}</>;
@@ -80,11 +80,11 @@ describe('useSettingsAutoSave', () => {
 
   afterEach(() => {
     jest.useRealTimers();
-    const releaseLock = renderHook(() => useAppStore((s) => s.releaseTrainingSessionLock), {
+    const cancelPreviewPlayback = renderHook(() => useAppStore((s) => s.cancelPreviewPlayback), {
       wrapper: TestWrapper,
     }).result.current;
     act(() => {
-      releaseLock();
+      cancelPreviewPlayback();
     });
   });
 

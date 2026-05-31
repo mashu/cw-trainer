@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
+import { usePreviewPlayback } from '@/hooks/usePreviewPlayback';
 import { defaultCharPreviewIndex, splitLettersAndDigits } from '@/lib/charPreviewUtils';
 import { playMorseCodeControlled } from '@/lib/morseAudio';
 import { computeCharPool } from '@/lib/trainingUtils';
@@ -74,7 +74,8 @@ function useSelectableIndex(defaultIndex: number): {
 }
 
 export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element | null {
-  const { takeLock, releaseLock } = useTrainingSessionLock();
+  const { takePlayback: takeLock, releasePlayback: releaseLock } =
+    usePreviewPlayback('letter-preview');
   const charSetMode = settings.charSetMode ?? 'koch';
   const isMixed = charSetMode === 'mixed';
   const isDigitsOnly = charSetMode === 'digits';

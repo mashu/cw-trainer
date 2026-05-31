@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
-import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
+import { usePreviewPlayback } from '@/hooks/usePreviewPlayback';
 import { clampExtraSpacingMultiplier, EXTRA_SPACING_LABEL } from '@/lib/extraSpacing';
 import { playMorseCodeControlled, resumeAudioContextFromUserGesture } from '@/lib/morseAudio';
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
@@ -22,7 +22,8 @@ export function TextPlayerModal({
   settings,
   initialText,
 }: TextPlayerModalProps): JSX.Element | null {
-  const { takeLock: takeModalLock, releaseLock: releaseModalLock } = useTrainingSessionLock();
+  const { takePlayback: takeModalLock, releasePlayback: releaseModalLock } =
+    usePreviewPlayback('text-player-modal');
 
   const [text, setText] = useState<string>(initialText || 'CQ CQ TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);

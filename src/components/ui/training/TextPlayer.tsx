@@ -10,7 +10,7 @@ import {
   PlaybackMeta,
   type TextPlayerMode,
 } from '@/components/ui/training/text-player-ui';
-import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
+import { usePreviewPlayback } from '@/hooks/usePreviewPlayback';
 import { clampExtraSpacingMultiplier } from '@/lib/extraSpacing';
 import {
   playMorseCodeControlled,
@@ -47,8 +47,8 @@ type NavigatorWithWakeLock = Navigator & {
 };
 
 export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Element {
-  const { takeLock: takeTextPlayerLock, releaseLock: releaseTextPlayerLock } =
-    useTrainingSessionLock();
+  const { takePlayback: takeTextPlayerLock, releasePlayback: releaseTextPlayerLock } =
+    usePreviewPlayback('text-player');
 
   const [text, setText] = useState<string>(initialText || 'CQ CQ DE TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);

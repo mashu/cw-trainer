@@ -57,6 +57,27 @@ import type {
   GroupTrainingAudioStatus,
   GroupTrainingRuntimeState,
 } from '@/lib/training/groupSessionMachine';
+import type {
+  BeginIcrTrainingSessionInput,
+  IcrTrainingRuntimeState,
+} from '@/lib/training/icrSessionMachine';
+import {
+  beginIcrTrainingSession,
+  cancelIcrTrainingSession,
+  IDLE_ICR_TRAINING_RUNTIME,
+  setIcrCountdown,
+  setIcrRunning,
+} from '@/lib/training/icrSessionMachine';
+import type {
+  PreviewPlaybackRuntimeState,
+  PreviewPlaybackSource,
+} from '@/lib/training/previewPlaybackMachine';
+import {
+  beginPreviewPlayback,
+  cancelPreviewPlayback,
+  endPreviewPlayback,
+  IDLE_PREVIEW_PLAYBACK_RUNTIME,
+} from '@/lib/training/previewPlaybackMachine';
 
 import type { StoreSetter } from '../types';
 
@@ -64,6 +85,8 @@ export interface TrainingRuntimeSlice {
   groupTrainingRuntime: GroupTrainingRuntimeState;
   echoTrainingRuntime: EchoTrainingRuntimeState;
   chaseTrainingRuntime: ChaseTrainingRuntimeState;
+  icrTrainingRuntime: IcrTrainingRuntimeState;
+  previewPlaybackRuntime: PreviewPlaybackRuntimeState;
   restoreGroupTrainingRuntime: (state: GroupTrainingRuntimeState) => void;
   beginGroupTrainingSession: (input: BeginGroupTrainingSessionInput) => void;
   setGroupTrainingGroups: (groups: readonly string[]) => void;
@@ -139,6 +162,13 @@ export interface TrainingRuntimeSlice {
   completeChaseTrainingSession: (result: ChaseSessionResultSummary) => void;
   cancelChaseTrainingSession: () => void;
   dismissChaseTrainingResults: () => void;
+  beginIcrTrainingSession: (input: BeginIcrTrainingSessionInput) => void;
+  setIcrCountdown: (countdown: number) => void;
+  setIcrRunning: () => void;
+  cancelIcrTrainingSession: () => void;
+  beginPreviewPlayback: (source: PreviewPlaybackSource) => void;
+  endPreviewPlayback: (source: PreviewPlaybackSource) => void;
+  cancelPreviewPlayback: () => void;
 }
 
 interface CreateTrainingRuntimeSliceParams {
@@ -151,6 +181,8 @@ export const createTrainingRuntimeSlice = ({
   groupTrainingRuntime: IDLE_GROUP_TRAINING_RUNTIME,
   echoTrainingRuntime: IDLE_ECHO_TRAINING_RUNTIME,
   chaseTrainingRuntime: IDLE_CHASE_TRAINING_RUNTIME,
+  icrTrainingRuntime: IDLE_ICR_TRAINING_RUNTIME,
+  previewPlaybackRuntime: IDLE_PREVIEW_PLAYBACK_RUNTIME,
 
   restoreGroupTrainingRuntime: (state): void => {
     set((current) =>
@@ -339,5 +371,41 @@ export const createTrainingRuntimeSlice = ({
 
   dismissChaseTrainingResults: (): void => {
     set({ chaseTrainingRuntime: dismissChaseTrainingResults() });
+  },
+
+  beginIcrTrainingSession: (input): void => {
+    set({ icrTrainingRuntime: beginIcrTrainingSession(input) });
+  },
+
+  setIcrCountdown: (countdown): void => {
+    set((state) => ({
+      icrTrainingRuntime: setIcrCountdown(state.icrTrainingRuntime, countdown),
+    }));
+  },
+
+  setIcrRunning: (): void => {
+    set((state) => ({
+      icrTrainingRuntime: setIcrRunning(state.icrTrainingRuntime),
+    }));
+  },
+
+  cancelIcrTrainingSession: (): void => {
+    set({ icrTrainingRuntime: cancelIcrTrainingSession() });
+  },
+
+  beginPreviewPlayback: (source): void => {
+    set((state) => ({
+      previewPlaybackRuntime: beginPreviewPlayback(state.previewPlaybackRuntime, source),
+    }));
+  },
+
+  endPreviewPlayback: (source): void => {
+    set((state) => ({
+      previewPlaybackRuntime: endPreviewPlayback(state.previewPlaybackRuntime, source),
+    }));
+  },
+
+  cancelPreviewPlayback: (): void => {
+    set({ previewPlaybackRuntime: cancelPreviewPlayback() });
   },
 });

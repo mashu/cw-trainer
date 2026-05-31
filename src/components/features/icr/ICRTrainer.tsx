@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ICRStats } from '@/components/features/stats/ICRStats';
 import { useICRMicrophone } from '@/hooks/useICRMicrophone';
 import { useIcrSessionsActions } from '@/hooks/useIcrSessions';
-import { useTrainingSessionLock } from '@/hooks/useTrainingSessionLock';
 import { useVAD, type VADConfig } from '@/hooks/useVAD';
 import {
   pickRandomChar,
@@ -20,6 +19,7 @@ import {
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
 import type { SharedAudioFromSettings } from '@/lib/settingsToSharedAudioProps';
 import { formatSession } from '@/lib/utils/icrSessionFormatter';
+import { useAppStore } from '@/store';
 import type { IcrSettings } from '@/types';
 
 import { IcrBucketLegend } from './IcrBucketLegend';
@@ -99,11 +99,15 @@ function TrialStatusStrip({
 // ── Main component ────────────────────────────────────────────────────
 
 export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerProps): JSX.Element {
-  const { takeLock: takeIcrSessionLock, releaseLock: releaseIcrSessionLock } =
-    useTrainingSessionLock();
+  const icrRuntime = useAppStore((s) => s.icrTrainingRuntime);
+  const beginIcrTrainingSession = useAppStore((s) => s.beginIcrTrainingSession);
+  const setIcrCountdown = useAppStore((s) => s.setIcrCountdown);
+  const setIcrRunning = useAppStore((s) => s.setIcrRunning);
+  const cancelIcrTrainingSession = useAppStore((s) => s.cancelIcrTrainingSession);
 
-  const [isRunning, setIsRunning] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const isRunning = icrRuntime.status === 'running';
+  const countdown = icrRuntime.status === 'countdown' ? icrRuntime.countdown : null;
+
   const { saveIcrSession } = useIcrSessionsActions();
   const [trials, setTrials] = useState<ICRTrial[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -208,8 +212,7 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
   // ── Session control ──────────────────────────────────────────────────
 
   const stopSession = useCallback((): void => {
-    setCountdown(null);
-    setIsRunning(false);
+    cancelIcrTrainingSession();
     isRunningRef.current = false;
     stopRef.current = true;
     sessionActiveRef.current = false;
@@ -217,7 +220,7 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     mic.stopMic();
     vad.clearAllResolvers();
     inputEventResolversRef.current = {};
-  }, [vad, mic]);
+  }, [vad, mic, cancelIcrTrainingSession]);
 
   const runSession = useCallback(async (): Promise<void> => {
     // Ref-based guard prevents double-start from rapid clicks
@@ -227,7 +230,7 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
     setCurrentIndex(0);
     currentIndexRef.current = 0;
     sessionActiveRef.current = true;
-    takeIcrSessionLock();
+    beginIcrTrainingSession({ sessionId: sessionTokenRef.current });
 
     try {
       if (!mic.audioContextRef.current) {
@@ -240,17 +243,14 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
       if (icrSettings.vadEnabled) {
         await mic.setupMic(icrSettings.micDeviceId);
       }
-      // Start session (and VAD rAF) only after mic → analyser exists, or measureInputLevel stays 0.
-      setIsRunning(true);
-
-      // Countdown 3..2..1
+      // Countdown 3..2..1 (blocking sync active via countdown runtime; VAD starts once sessionActiveForVad)
       for (let c = 3; c >= 1; c--) {
-        setCountdown(c);
+        setIcrCountdown(c);
         await new Promise((r) => setTimeout(r, 1000));
         if (!sessionActiveRef.current) break;
       }
-      setCountdown(null);
       if (!sessionActiveRef.current) return;
+      setIcrRunning();
 
       for (let i = 0; i < icrSettings.trialsPerSession; i++) {
         if (!sessionActiveRef.current) break;
@@ -361,9 +361,7 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
       showToast?.({ message: micErrorMessage(err), type: 'error' });
       return;
     } finally {
-      releaseIcrSessionLock();
-      setCountdown(null);
-      setIsRunning(false);
+      cancelIcrTrainingSession();
       isRunningRef.current = false;
       currentTrialHeardAtRef.current = null;
       if (trialsRef.current.length > 0) {
@@ -377,18 +375,19 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
       vad.clearAllResolvers();
       inputEventResolversRef.current = {};
     }
-  }, [icrSettings, sharedAudio, mic, playChar, vad, showToast, takeIcrSessionLock, releaseIcrSessionLock]);
+  }, [icrSettings, sharedAudio, mic, playChar, vad, showToast, beginIcrTrainingSession, setIcrCountdown, setIcrRunning, cancelIcrTrainingSession]);
 
   // Start VAD loop once when session runs — do NOT depend on `vad` object identity (new each render).
   // Otherwise every trials/currentIndex update stops/restarts the loop and start() clears armedRef,
   // so vad.arm() never sticks and voice never stops the timer.
+  const sessionActiveForVad = isRunning || countdown !== null;
   useEffect(() => {
-    if (!isRunning) return;
+    if (!sessionActiveForVad) return;
     vadApiRef.current.start();
     return (): void => {
       vadApiRef.current.stop();
     };
-  }, [isRunning]);
+  }, [sessionActiveForVad]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -402,7 +401,7 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
       vad.stop();
       sessionActiveRef.current = false;
       stopRef.current = true;
-      releaseIcrSessionLock();
+      cancelIcrTrainingSession();
     };
   // Unmount-only: use latest store setter; do not re-bind mic/vad
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -608,7 +607,7 @@ export function ICRTrainer({ sharedAudio, icrSettings, showToast }: ICRTrainerPr
                 void runSession();
               }
             }}
-            disabled={isRunning}
+            disabled={isRunning || countdown !== null}
           >
             Start
           </button>
