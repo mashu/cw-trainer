@@ -27,6 +27,8 @@ import type { StoreSetter } from '../types';
 
 export interface TrainingRuntimeSlice {
   groupTrainingRuntime: GroupTrainingRuntimeState;
+  /** Restore a persisted runtime after a hard reload. No-op unless the current runtime is idle. */
+  restoreGroupTrainingRuntime: (state: GroupTrainingRuntimeState) => void;
   beginGroupTrainingSession: (input: BeginGroupTrainingSessionInput) => void;
   setGroupTrainingGroups: (groups: readonly string[]) => void;
   setGroupTrainingStatus: (
@@ -57,6 +59,12 @@ export const createTrainingRuntimeSlice = ({
   set,
 }: CreateTrainingRuntimeSliceParams): TrainingRuntimeSlice => ({
   groupTrainingRuntime: IDLE_GROUP_TRAINING_RUNTIME,
+
+  restoreGroupTrainingRuntime: (state): void => {
+    set((current) =>
+      current.groupTrainingRuntime.status === 'idle' ? { groupTrainingRuntime: state } : {},
+    );
+  },
 
   beginGroupTrainingSession: (input): void => {
     set({ groupTrainingRuntime: beginGroupTrainingSession(input) });

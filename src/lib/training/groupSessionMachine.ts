@@ -1,3 +1,4 @@
+import { groupTrainingRuntimeSchema } from '@/lib/validators';
 import type { SessionTiming } from '@/types';
 
 export type GroupTrainingRuntimeStatus =
@@ -250,6 +251,41 @@ export function cancelGroupTrainingSession(): GroupTrainingRuntimeState {
 
 export function dismissGroupTrainingResults(): GroupTrainingRuntimeState {
   return IDLE_GROUP_TRAINING_RUNTIME;
+}
+
+/** Reason shown when a session is restored after a hard reload. */
+export const REHYDRATED_SESSION_PAUSE_REASON = 'Session was interrupted by a reload.';
+
+/**
+ * Maps a persisted (untrusted) runtime snapshot back into a safe in-memory state after a
+ * hard reload. Audio, timers, and the playback loop cannot survive a reload, so any
+ * in-progress (active) status is coerced to `paused` — the user keeps their typed answers
+ * and timings and can Stop and start a fresh run. `results` is preserved so an accidental
+ * reload on the results screen still shows the last result. Anything invalid resolves to idle.
+ */
+export function rehydrateGroupTrainingRuntime(persisted: unknown): GroupTrainingRuntimeState {
+  const parsed = groupTrainingRuntimeSchema.safeParse(persisted);
+  if (!parsed.success) return IDLE_GROUP_TRAINING_RUNTIME;
+  const data = parsed.data;
+
+  if (data.status === 'idle') return IDLE_GROUP_TRAINING_RUNTIME;
+  if (data.status === 'results') return { status: 'results', result: data.result };
+
+  return {
+    status: 'paused',
+    sessionId: data.sessionId,
+    startedAt: data.startedAt,
+    groups: [...data.groups],
+    userInput: [...data.userInput],
+    confirmedGroups: { ...data.confirmedGroups },
+    currentGroup: data.currentGroup,
+    currentFocusedGroup: data.currentFocusedGroup,
+    groupStartAt: [...data.groupStartAt],
+    groupEndAt: [...data.groupEndAt],
+    groupAnswerAt: [...data.groupAnswerAt],
+    audioStatus: 'closed',
+    pauseReason: REHYDRATED_SESSION_PAUSE_REASON,
+  };
 }
 
 export function buildGroupTrainingTimings(

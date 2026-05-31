@@ -13,6 +13,10 @@ import {
 } from '@/lib/db/repositories';
 import { setRemoteErrorSink } from '@/lib/errors/reporter';
 import {
+  readGroupRuntime,
+  writeGroupRuntime,
+} from '@/lib/persistence/groupRuntimePersistence';
+import {
   AchievementService,
   IcrSessionService,
   SessionService,
@@ -291,6 +295,28 @@ export function AppStoreProvider({
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
       }
+    };
+  }, []);
+
+  // Persist the group training runtime to sessionStorage so an in-progress session
+  // survives a hard reload. On mount we restore any persisted snapshot (coerced to a
+  // non-playing state by the machine, since audio cannot resume across a reload), then
+  // write through every subsequent runtime change. Runs client-only (post-mount).
+  useEffect(() => {
+    const store = storeRef.current;
+    if (!store) {
+      return;
+    }
+    store.getState().restoreGroupTrainingRuntime(readGroupRuntime());
+    let previousRuntime = store.getState().groupTrainingRuntime;
+    const unsubscribe = store.subscribe((state) => {
+      if (state.groupTrainingRuntime !== previousRuntime) {
+        previousRuntime = state.groupTrainingRuntime;
+        writeGroupRuntime(previousRuntime);
+      }
+    });
+    return (): void => {
+      unsubscribe();
     };
   }, []);
 
