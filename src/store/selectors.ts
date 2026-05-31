@@ -1,3 +1,5 @@
+import { isChaseTrainingRuntimeBlockingSync } from '@/lib/training/chaseSessionMachine';
+import { isEchoTrainingRuntimeBlockingSync } from '@/lib/training/echoSessionMachine';
 import { isGroupTrainingRuntimeBlockingSync } from '@/lib/training/groupSessionMachine';
 
 import type { AppStore } from './create-app-store';
@@ -5,16 +7,19 @@ import type { AppStore } from './create-app-store';
 /**
  * True when training-like activity should block background sync / settings auto-save.
  *
- * Two independent sources are OR'd:
- * - A non-group feature holds a refcount lock (echo, chase, ICR, text/letter players)
- *   via `trainingSessionLockCount`.
- * - The group training runtime machine is in a blocking state.
- *
- * Group training does NOT take a manual lock — its blocking state is derived directly
- * from `groupTrainingRuntime`, so the lock count and the machine can never desync.
+ * Three runtime machines (group, echo, chase) each expose a blocking state directly.
+ * A refcount lock remains only for ICR, text player, and letter preview.
  */
 export const selectTrainingSessionActive = (
-  state: Pick<AppStore, 'trainingSessionLockCount' | 'groupTrainingRuntime'>,
+  state: Pick<
+    AppStore,
+    | 'trainingSessionLockCount'
+    | 'groupTrainingRuntime'
+    | 'echoTrainingRuntime'
+    | 'chaseTrainingRuntime'
+  >,
 ): boolean =>
   state.trainingSessionLockCount > 0 ||
-  isGroupTrainingRuntimeBlockingSync(state.groupTrainingRuntime);
+  isGroupTrainingRuntimeBlockingSync(state.groupTrainingRuntime) ||
+  isEchoTrainingRuntimeBlockingSync(state.echoTrainingRuntime) ||
+  isChaseTrainingRuntimeBlockingSync(state.chaseTrainingRuntime);

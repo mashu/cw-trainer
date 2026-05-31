@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
 import { MAX_DIGITS_LEVEL, MAX_KOCH_LEVEL_GUESS } from '@/lib/constants';
@@ -17,32 +17,22 @@ import {
   type MorseSignal,
 } from '@/lib/morseSignals';
 import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
+import {
+  isEchoTrainingRuntimeActive,
+  type EchoCharacterProgress,
+  type EchoCharacterState,
+  type EchoSessionResultSummary,
+} from '@/lib/training/echoSessionMachine';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import { computeTrainingGroupGapMs, pickTrainingToneHz } from '@/lib/trainingSessionPlayback';
 import type { SessionResultInput } from '@/lib/validators';
+import { useAppStore } from '@/store';
 import type { SessionResult, TrainingSettings } from '@/types';
 
 import type { Toast } from './useToast';
 import { useTrainingAudio } from './useTrainingAudio';
-import { useTrainingSessionLock } from './useTrainingSessionLock';
 
-type EchoCharacterState = 'idle' | 'playing' | 'awaiting' | 'receiving' | 'correct' | 'error';
-type EchoAttemptOutcome = 'correct' | 'error' | 'timeout' | 'aborted';
-
-export interface EchoCharacterProgress {
-  readonly revealedCharacter: string | null;
-  readonly status: 'pending' | 'correct' | 'error';
-}
-
-export interface EchoSessionResultSummary {
-  readonly accuracy: number;
-  readonly groups: ReadonlyArray<{ sent: string; received: string; correct: boolean }>;
-  readonly avgResponseMs: number;
-  readonly score: number;
-  readonly sendingScore: number;
-  readonly correctCharacters: number;
-  readonly incorrectCharacters: number;
-}
+export type { EchoCharacterProgress, EchoCharacterState, EchoSessionResultSummary };
 
 export interface UseEchoTrainingSessionOptions {
   readonly settings: TrainingSettings;
@@ -56,7 +46,6 @@ export interface UseEchoTrainingSessionOptions {
 
 export interface UseEchoTrainingSessionReturn {
   readonly isTraining: boolean;
-  /** True while playback stopped but results UI / persistence are still being prepared — avoids a routing flash to home. */
   readonly isCompletingSession: boolean;
   readonly currentGroup: number;
   readonly sentGroups: string[];
@@ -76,7 +65,7 @@ export interface UseEchoTrainingSessionReturn {
 }
 
 interface EchoAttemptResult {
-  readonly outcome: EchoAttemptOutcome;
+  readonly outcome: 'correct' | 'error' | 'timeout' | 'aborted';
   readonly receivedCharacter: string;
   readonly durationMs: number;
 }
@@ -106,8 +95,43 @@ export function useEchoTrainingSession({
   setTrainingSettingsState,
   showToast,
 }: UseEchoTrainingSessionOptions): UseEchoTrainingSessionReturn {
-  const { takeLock: takeSessionLock, releaseLock: dropSessionLock } = useTrainingSessionLock();
   const audio = useTrainingAudio(settings);
+
+  const runtime = useAppStore((state) => state.echoTrainingRuntime);
+  const beginRuntimeSession = useAppStore((state) => state.beginEchoTrainingSession);
+  const setRuntimeGroups = useAppStore((state) => state.setEchoTrainingGroups);
+  const setRuntimeStatus = useAppStore((state) => state.setEchoTrainingStatus);
+  const setRuntimeCurrentGroup = useAppStore((state) => state.setEchoTrainingCurrentGroup);
+  const updateRuntimeCharacter = useAppStore((state) => state.updateEchoTrainingCharacter);
+  const setRuntimeScores = useAppStore((state) => state.setEchoTrainingScores);
+  const completeRuntimeSession = useAppStore((state) => state.completeEchoTrainingSession);
+  const cancelRuntimeSession = useAppStore((state) => state.cancelEchoTrainingSession);
+  const dismissRuntimeResults = useAppStore((state) => state.dismissEchoTrainingResults);
+
+  const hasActiveSession = isEchoTrainingRuntimeActive(runtime);
+  const activeRuntime =
+    runtime.status !== 'idle' && runtime.status !== 'results' ? runtime : null;
+  const isCompletingSession = runtime.status === 'completing';
+  const showResults = runtime.status === 'results';
+  const isTraining = hasActiveSession && !isCompletingSession;
+  const currentGroup = activeRuntime ? activeRuntime.currentGroup : 0;
+  const sentGroups = activeRuntime ? [...activeRuntime.sentGroups] : [];
+  const currentCharacterIndex = activeRuntime ? activeRuntime.currentCharacterIndex : 0;
+  const currentCharacterState = activeRuntime ? activeRuntime.currentCharacterState : 'idle';
+  const currentSymbols = activeRuntime ? activeRuntime.currentSymbols : '';
+  const revealedCharacter = activeRuntime ? activeRuntime.revealedCharacter : null;
+  const currentGroupProgress = activeRuntime ? [...activeRuntime.currentGroupProgress] : [];
+  const lastSessionResult = runtime.status === 'results' ? runtime.result : null;
+  const correctCharacters = activeRuntime
+    ? activeRuntime.correctCharacters
+    : lastSessionResult
+      ? lastSessionResult.correctCharacters
+      : 0;
+  const incorrectCharacters = activeRuntime
+    ? activeRuntime.incorrectCharacters
+    : lastSessionResult
+      ? lastSessionResult.incorrectCharacters
+      : 0;
 
   const settingsRef = useRef(settings);
   const saveSessionRef = useRef(saveSession);
@@ -126,22 +150,6 @@ export function useEchoTrainingSession({
     setTrainingSettingsStateRef.current = setTrainingSettingsState;
   }, [setTrainingSettingsState]);
 
-  const [isTraining, setIsTraining] = useState(false);
-  const [currentGroup, setCurrentGroup] = useState(0);
-  const [sentGroups, setSentGroups] = useState<string[]>([]);
-  const [currentCharacterIndex, setCurrentCharacterIndex] = useState(0);
-  const [currentCharacterState, setCurrentCharacterState] = useState<EchoCharacterState>('idle');
-  const [currentSymbols, setCurrentSymbols] = useState('');
-  const [revealedCharacter, setRevealedCharacter] = useState<string | null>(null);
-  const [currentGroupProgress, setCurrentGroupProgress] = useState<
-    readonly EchoCharacterProgress[]
-  >([]);
-  const [correctCharacters, setCorrectCharacters] = useState(0);
-  const [incorrectCharacters, setIncorrectCharacters] = useState(0);
-  const [showResults, setShowResults] = useState(false);
-  const [lastSessionResult, setLastSessionResult] = useState<EchoSessionResultSummary | null>(null);
-  const [isCompletingSession, setIsCompletingSession] = useState(false);
-
   const isTrainingRef = useRef(false);
   const startedAtRef = useRef<number | null>(null);
   const activeAttemptRef = useRef<ActiveAttempt | null>(null);
@@ -152,14 +160,12 @@ export function useEchoTrainingSession({
   const lastPressedPaddleRef = useRef<MorseSignal | null>(null);
   const squeezeLatchedRef = useRef(false);
 
-  /** Clears iambic/manual memory only. Paddle refs follow real keyup/keydown — do not clear on attempt settle or keys stay “up” in software while still held. */
   const resetKeyerMemory = useCallback((): void => {
     lastKeyerSignalRef.current = null;
     lastPressedPaddleRef.current = null;
     squeezeLatchedRef.current = false;
   }, []);
 
-  /** Full reset: training stop / session start / unmount. */
   const resetAllKeyerState = useCallback((): void => {
     paddleStateRef.current = { '.': false, '-': false };
     keyerRunningRef.current = false;
@@ -195,6 +201,9 @@ export function useEchoTrainingSession({
       isTrainingRef.current = false;
       resetAllKeyerState();
       settleActiveAttempt({ outcome: 'aborted', receivedCharacter: '', durationMs: 0 });
+      if (isTrainingRef.current) {
+        setRuntimeStatus('paused', { pauseReason: 'Echo training view was remounted.' });
+      }
       audio.stopAudio();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,8 +232,6 @@ export function useEchoTrainingSession({
         },
         () => audio.trainingAbortRef.current || audio.sessionIdRef.current !== sessionId,
       );
-      // Keep stop ref in the shared audio engine would require more complex changes;
-      // we use a local wait instead
       await audio.sleepCancelable(
         Math.max(0, Math.ceil((durationSec || 0) * 1000) + 60),
         sessionId,
@@ -266,8 +273,7 @@ export function useEchoTrainingSession({
       if (!activeAttempt || audio.trainingAbortRef.current) return;
       const nextPattern = `${activeAttempt.pattern}${signal}`;
       activeAttempt.pattern = nextPattern;
-      setCurrentSymbols(nextPattern);
-      setCurrentCharacterState('receiving');
+      updateRuntimeCharacter({ symbols: nextPattern, characterState: 'receiving' });
 
       if (!isMorsePrefix(activeAttempt.expectedPattern, nextPattern)) {
         settleActiveAttempt({
@@ -285,7 +291,7 @@ export function useEchoTrainingSession({
         });
       }
     },
-    [settleActiveAttempt, audio],
+    [settleActiveAttempt, audio, updateRuntimeCharacter],
   );
 
   const dispatchSignal = useCallback(
@@ -303,7 +309,6 @@ export function useEchoTrainingSession({
     return 1200 / Math.max(1, Math.round((min + max) / 2));
   }, [settings.charWpmMax, settings.charWpmMin]);
 
-  /** Iambic and manual keyboard paddle paths share the same timing and squeeze logic. */
   const chooseNextPaddleSignal = useCallback((): MorseSignal | null => {
     const ditPressed = paddleStateRef.current['.'];
     const dahPressed = paddleStateRef.current['-'];
@@ -451,7 +456,7 @@ export function useEchoTrainingSession({
       });
 
       const sendingScore = nextCorrectChars - nextIncorrectChars;
-      setLastSessionResult({
+      const summary: EchoSessionResultSummary = {
         accuracy: result.accuracy,
         groups: result.groups,
         avgResponseMs: result.avgResponseMs,
@@ -459,8 +464,8 @@ export function useEchoTrainingSession({
         sendingScore,
         correctCharacters: nextCorrectChars,
         incorrectCharacters: nextIncorrectChars,
-      });
-      setShowResults(true);
+      };
+      completeRuntimeSession(summary);
 
       const currentSaveSession = saveSessionRef.current;
       const currentShowToast = showToastRef.current;
@@ -523,24 +528,21 @@ export function useEchoTrainingSession({
         console.warn('[EchoTraining] Auto-adjust error:', autoAdjustError);
       }
     },
-    [],
+    [completeRuntimeSession],
   );
 
   const stopTraining = useCallback((): void => {
     audio.trainingAbortRef.current = true;
     isTrainingRef.current = false;
     resetAllKeyerState();
-    setIsTraining(false);
-    dropSessionLock();
+    cancelRuntimeSession();
     settleActiveAttempt({ outcome: 'aborted', receivedCharacter: '', durationMs: 0 });
     audio.stopAudio();
-    setCurrentCharacterState('idle');
-  }, [resetAllKeyerState, settleActiveAttempt, audio, dropSessionLock]);
+  }, [resetAllKeyerState, settleActiveAttempt, audio, cancelRuntimeSession]);
 
   const dismissResults = useCallback((): void => {
-    setShowResults(false);
-    setLastSessionResult(null);
-  }, []);
+    dismissRuntimeResults();
+  }, [dismissRuntimeResults]);
 
   const startTraining = useCallback(async (): Promise<void> => {
     if (isTrainingRef.current) return;
@@ -549,17 +551,7 @@ export function useEchoTrainingSession({
       audio.stopAudio();
       audio.trainingAbortRef.current = false;
       resetAllKeyerState();
-      setIsCompletingSession(false);
-      setShowResults(false);
-      setLastSessionResult(null);
-      setCurrentGroup(0);
-      setCurrentCharacterIndex(0);
-      setCurrentCharacterState('idle');
-      setCurrentSymbols('');
-      setRevealedCharacter(null);
-      setCurrentGroupProgress([]);
-      setCorrectCharacters(0);
-      setIncorrectCharacters(0);
+      cancelRuntimeSession();
 
       audio.ensureAudioReady();
 
@@ -567,13 +559,13 @@ export function useEchoTrainingSession({
       audio.sessionIdRef.current = mySession;
       startedAtRef.current = Date.now();
       isTrainingRef.current = true;
-      setIsTraining(true);
-      takeSessionLock();
+      beginRuntimeSession({ sessionId: mySession, startedAt: startedAtRef.current });
+      setRuntimeStatus('running');
 
       const groups = Array.from({ length: settings.numGroups }, () =>
         generateTrainingGroup(settings, historicalSessions),
       );
-      setSentGroups(groups);
+      setRuntimeGroups(groups);
 
       const receivedGroups: string[] = [];
       const groupResponseTimes: number[] = [];
@@ -584,10 +576,11 @@ export function useEchoTrainingSession({
         const group = groups[gi];
         if (!group || audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession)
           break;
-        setCurrentGroup(gi);
-        setCurrentGroupProgress(
-          group.split('').map(() => ({ revealedCharacter: null, status: 'pending' as const })),
-        );
+        let groupProgress: EchoCharacterProgress[] = group.split('').map(() => ({
+          revealedCharacter: null,
+          status: 'pending' as const,
+        }));
+        setRuntimeCurrentGroup(gi, groupProgress);
         if (gi > 0) await audio.sleepCancelable(computeTrainingGroupGapMs(settings), mySession);
 
         let receivedGroup = '';
@@ -597,17 +590,19 @@ export function useEchoTrainingSession({
           const target = group[ci];
           if (!target || audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession)
             break;
-          setCurrentCharacterIndex(ci);
-          setCurrentCharacterState('playing');
-          setCurrentSymbols('');
-          setRevealedCharacter(null);
+          updateRuntimeCharacter({
+            index: ci,
+            characterState: 'playing',
+            symbols: '',
+            revealedCharacter: null,
+          });
 
           await playCharacter(target, mySession);
           if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
           const expectedPattern = MORSE_CODE[target] ?? '';
           if (!expectedPattern) continue;
 
-          setCurrentCharacterState('awaiting');
+          updateRuntimeCharacter({ characterState: 'awaiting', symbols: '' });
           const attemptResult = await waitForAttempt(target, expectedPattern, mySession);
           if (
             attemptResult.outcome === 'aborted' ||
@@ -624,17 +619,17 @@ export function useEchoTrainingSession({
           groupTimeMs += attemptResult.durationMs;
           nextCorrect += success ? 1 : 0;
           nextIncorrect += success ? 0 : 1;
-          setCorrectCharacters(nextCorrect);
-          setIncorrectCharacters(nextIncorrect);
-          setRevealedCharacter(target);
-          setCurrentCharacterState(success ? 'correct' : 'error');
-          setCurrentGroupProgress((prev) =>
-            prev.map((item, idx) =>
-              idx === ci
-                ? { revealedCharacter: target, status: success ? 'correct' : 'error' }
-                : item,
-            ),
+          setRuntimeScores(nextCorrect, nextIncorrect);
+          groupProgress = groupProgress.map((item, idx) =>
+            idx === ci
+              ? { revealedCharacter: target, status: success ? ('correct' as const) : ('error' as const) }
+              : item,
           );
+          updateRuntimeCharacter({
+            revealedCharacter: target,
+            characterState: success ? 'correct' : 'error',
+            groupProgress,
+          });
           await audio.sleepCancelable(FEEDBACK_DELAY_MS, mySession);
         }
         receivedGroups.push(receivedGroup);
@@ -644,30 +639,23 @@ export function useEchoTrainingSession({
       const willProcessResults =
         !audio.trainingAbortRef.current && audio.sessionIdRef.current === mySession;
       if (willProcessResults) {
-        setIsCompletingSession(true);
+        setRuntimeStatus('completing');
       }
       isTrainingRef.current = false;
-      setIsTraining(false);
       resetAllKeyerState();
       audio.stopAudio();
-      setCurrentCharacterState('idle');
-      setCurrentSymbols('');
+      updateRuntimeCharacter({ characterState: 'idle', symbols: '' });
 
       if (willProcessResults) {
-        try {
-          await processResults(
-            groups,
-            receivedGroups,
-            groupResponseTimes,
-            nextCorrect,
-            nextIncorrect,
-          );
-        } finally {
-          dropSessionLock();
-          setIsCompletingSession(false);
-        }
+        await processResults(
+          groups,
+          receivedGroups,
+          groupResponseTimes,
+          nextCorrect,
+          nextIncorrect,
+        );
       } else {
-        dropSessionLock();
+        cancelRuntimeSession();
       }
     } catch (error) {
       console.error('[EchoTraining] Unexpected training error:', error);
@@ -687,8 +675,13 @@ export function useEchoTrainingSession({
     audio,
     stopTraining,
     waitForAttempt,
-    takeSessionLock,
-    dropSessionLock,
+    beginRuntimeSession,
+    cancelRuntimeSession,
+    setRuntimeGroups,
+    setRuntimeStatus,
+    setRuntimeCurrentGroup,
+    updateRuntimeCharacter,
+    setRuntimeScores,
   ]);
 
   return {

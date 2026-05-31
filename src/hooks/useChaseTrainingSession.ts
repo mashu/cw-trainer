@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
 import {
@@ -12,48 +12,25 @@ import {
 } from '@/lib/chase';
 import { ensureAppError } from '@/lib/errors';
 import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
+import {
+  type ChaseResolvedTargetSnapshot,
+  type ChaseSessionResultSummary,
+  type ChaseTargetSnapshot,
+} from '@/lib/training/chaseSessionMachine';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import type { SessionResultInput } from '@/lib/validators';
+import { useAppStore } from '@/store';
 import type { SessionResult, TrainingSettings } from '@/types';
 
 import type { Toast } from './useToast';
 import { useTrainingAudio } from './useTrainingAudio';
-import { useTrainingSessionLock } from './useTrainingSessionLock';
+
+export type ChaseTarget = ChaseTargetSnapshot;
+export type ChaseResolvedTarget = ChaseResolvedTargetSnapshot;
+export type { ChaseSessionResultSummary };
 
 const FEEDBACK_PAUSE_MS = 420;
 const ALLOWED_CHASE_INPUT = /[^A-Z0-9/=?.,+]/g;
-
-export interface ChaseTarget {
-  readonly id: number;
-  readonly group: string;
-  readonly lanePercent: number;
-  readonly level: number;
-  readonly spawnedAt: number;
-  readonly deadlineAt: number;
-  readonly fallMs: number;
-}
-
-export interface ChaseResolvedTarget {
-  readonly sent: string;
-  readonly received: string;
-  readonly outcome: ChaseResolveOutcome;
-  readonly scoreDelta: number;
-}
-
-export interface ChaseSessionResultSummary {
-  readonly accuracy: number;
-  readonly groups: ReadonlyArray<{
-    readonly sent: string;
-    readonly received: string;
-    readonly correct: boolean;
-  }>;
-  readonly avgResponseMs: number;
-  readonly score: number;
-  readonly maxLevel: number;
-  readonly survivedMs: number;
-  readonly bestStreak: number;
-  readonly livesLost: number;
-}
 
 export interface UseChaseTrainingSessionOptions {
   readonly settings: TrainingSettings;
@@ -62,8 +39,10 @@ export interface UseChaseTrainingSessionOptions {
   readonly showToast: (t: Toast) => void;
 }
 
+export type ChaseHookStatus = 'idle' | 'running' | 'completing' | 'results' | 'failed' | 'paused';
+
 export interface UseChaseTrainingSessionReturn {
-  readonly status: 'idle' | 'running' | 'completing' | 'results' | 'failed';
+  readonly status: ChaseHookStatus;
   readonly isTraining: boolean;
   readonly target: ChaseTarget | null;
   readonly lastResolvedTarget: ChaseResolvedTarget | null;
@@ -99,23 +78,43 @@ export function useChaseTrainingSession({
   showToast,
 }: UseChaseTrainingSessionOptions): UseChaseTrainingSessionReturn {
   const audio = useTrainingAudio(settings);
-  const { takeLock, releaseLock } = useTrainingSessionLock();
 
-  const [status, setStatus] = useState<UseChaseTrainingSessionReturn['status']>('idle');
-  const [target, setTarget] = useState<ChaseTarget | null>(null);
-  const [lastResolvedTarget, setLastResolvedTarget] = useState<ChaseResolvedTarget | null>(null);
-  const [userInput, setUserInput] = useState('');
-  const [lives, setLives] = useState(settings.chaseLives);
-  const [level, setLevel] = useState(1);
-  const [score, setScore] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [correctInLevel, setCorrectInLevel] = useState(0);
-  const [groupsCompleted, setGroupsCompleted] = useState(0);
-  const [sessionIssueMessage, setSessionIssueMessage] = useState<string | undefined>();
-  const [lastSessionResult, setLastSessionResult] = useState<ChaseSessionResultSummary | null>(
-    null,
-  );
+  const runtime = useAppStore((state) => state.chaseTrainingRuntime);
+  const beginRuntimeSession = useAppStore((state) => state.beginChaseTrainingSession);
+  const setRuntimeStatus = useAppStore((state) => state.setChaseTrainingStatus);
+  const patchRuntime = useAppStore((state) => state.patchChaseTrainingRuntime);
+  const completeRuntimeSession = useAppStore((state) => state.completeChaseTrainingSession);
+  const cancelRuntimeSession = useAppStore((state) => state.cancelChaseTrainingSession);
+  const dismissRuntimeResults = useAppStore((state) => state.dismissChaseTrainingResults);
+
+  const activeRuntime =
+    runtime.status !== 'idle' && runtime.status !== 'results' ? runtime : null;
+  const status: ChaseHookStatus =
+    runtime.status === 'idle'
+      ? 'idle'
+      : runtime.status === 'results'
+        ? 'results'
+        : runtime.status === 'starting'
+          ? 'running'
+          : runtime.status;
+  const isTraining = status === 'running' || status === 'completing';
+  const target = activeRuntime ? activeRuntime.target : null;
+  const lastResolvedTarget = activeRuntime ? activeRuntime.lastResolvedTarget : null;
+  const userInput = activeRuntime ? activeRuntime.userInput : '';
+  const lives = activeRuntime ? activeRuntime.lives : settings.chaseLives;
+  const level = activeRuntime ? activeRuntime.level : 1;
+  const score = activeRuntime ? activeRuntime.score : 0;
+  const streak = activeRuntime ? activeRuntime.streak : 0;
+  const bestStreak = activeRuntime ? activeRuntime.bestStreak : 0;
+  const correctInLevel = activeRuntime ? activeRuntime.correctInLevel : 0;
+  const groupsCompleted = activeRuntime ? activeRuntime.groupsCompleted : 0;
+  const sessionIssueMessage =
+    runtime.status === 'failed'
+      ? runtime.errorMessage
+      : runtime.status === 'paused'
+        ? runtime.pauseReason
+        : undefined;
+  const lastSessionResult = runtime.status === 'results' ? runtime.result : null;
 
   const settingsRef = useRef(settings);
   const sessionsRef = useRef(sessions);
@@ -188,7 +187,7 @@ export function useChaseTrainingSession({
         levelSnapshot: sessionLevelSnapshotFromSettings(settingsRef.current),
       });
       const survivedMs = Math.max(0, result.finishedAt - result.startedAt);
-      setLastSessionResult({
+      completeRuntimeSession({
         accuracy: result.accuracy,
         groups: result.groups,
         avgResponseMs: result.avgResponseMs,
@@ -198,10 +197,9 @@ export function useChaseTrainingSession({
         bestStreak: bestRunStreak,
         livesLost: settingsRef.current.chaseLives,
       });
-      setStatus('results');
       await saveSessionRef.current(result as SessionResultInput);
     },
-    [],
+    [completeRuntimeSession],
   );
 
   const stopTraining = useCallback((): void => {
@@ -209,11 +207,9 @@ export function useChaseTrainingSession({
     isTrainingRef.current = false;
     pendingResolverRef.current?.({ status: 'aborted', answeredAt: Date.now() });
     clearPendingTarget();
-    setStatus('idle');
-    setTarget(null);
-    releaseLock();
+    cancelRuntimeSession();
     audio.stopAudio();
-  }, [audio, clearPendingTarget, releaseLock]);
+  }, [audio, clearPendingTarget, cancelRuntimeSession]);
 
   useEffect(() => {
     return (): void => {
@@ -221,10 +217,11 @@ export function useChaseTrainingSession({
       isTrainingRef.current = false;
       pendingResolverRef.current?.({ status: 'aborted', answeredAt: Date.now() });
       clearPendingTarget();
-      releaseLock();
+      if (isTrainingRef.current) {
+        setRuntimeStatus('paused', { pauseReason: 'Chase training view was remounted.' });
+      }
       audio.stopAudio();
     };
-    // Match the training hooks: cleanup owns the active session lifetime, not every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -239,19 +236,25 @@ export function useChaseTrainingSession({
     audio.sessionIdRef.current = mySession;
     isTrainingRef.current = true;
     startedAtRef.current = Date.now();
-    takeLock();
-
-    setStatus('running');
-    setSessionIssueMessage(undefined);
-    setLastSessionResult(null);
-    setLastResolvedTarget(null);
-    setLives(settingsRef.current.chaseLives);
-    setLevel(1);
-    setScore(0);
-    setStreak(0);
-    setBestStreak(0);
-    setCorrectInLevel(0);
-    setGroupsCompleted(0);
+    cancelRuntimeSession();
+    beginRuntimeSession({
+      sessionId: mySession,
+      startedAt: startedAtRef.current,
+      lives: settingsRef.current.chaseLives,
+    });
+    setRuntimeStatus('running');
+    patchRuntime({
+      lastResolvedTarget: null,
+      userInput: '',
+      lives: settingsRef.current.chaseLives,
+      level: 1,
+      score: 0,
+      streak: 0,
+      bestStreak: 0,
+      correctInLevel: 0,
+      groupsCompleted: 0,
+      target: null,
+    });
 
     const sentGroups: string[] = [];
     const answers: string[] = [];
@@ -299,8 +302,7 @@ export function useChaseTrainingSession({
         };
 
         userInputRef.current = '';
-        setUserInput('');
-        setTarget(nextTarget);
+        patchRuntime({ userInput: '', target: nextTarget });
         targetRef.current = nextTarget;
 
         const playback = await audio.playMorse(group, mySession);
@@ -309,8 +311,7 @@ export function useChaseTrainingSession({
             playback.status === 'failed'
               ? playback.message
               : 'Audio was suspended by the browser. Start a new Chase run when ready.';
-          setSessionIssueMessage(message);
-          setStatus('failed');
+          setRuntimeStatus('failed', { errorMessage: message });
           showToastRef.current({ message, type: 'error' });
           audio.trainingAbortRef.current = true;
           sessionEndedDueToIssue = true;
@@ -362,20 +363,22 @@ export function useChaseTrainingSession({
           });
         }
 
-        setLives(nextLives);
-        setLevel(nextLevel);
-        setScore(nextScore);
-        setStreak(nextStreak);
-        setBestStreak(nextBestStreak);
-        setCorrectInLevel(nextCorrectInLevel);
-        setGroupsCompleted(sentGroups.length);
-        setLastResolvedTarget({
-          sent: group,
-          received,
-          outcome,
-          scoreDelta: resolved.scoreDelta,
+        patchRuntime({
+          lives: nextLives,
+          level: nextLevel,
+          score: nextScore,
+          streak: nextStreak,
+          bestStreak: nextBestStreak,
+          correctInLevel: nextCorrectInLevel,
+          groupsCompleted: sentGroups.length,
+          lastResolvedTarget: {
+            sent: group,
+            received,
+            outcome,
+            scoreDelta: resolved.scoreDelta,
+          },
+          target: null,
         });
-        setTarget(null);
         targetRef.current = null;
 
         targetIndex += 1;
@@ -387,38 +390,48 @@ export function useChaseTrainingSession({
       clearPendingTarget();
 
       if (nextLives <= 0 && sentGroups.length > 0) {
-        setStatus('completing');
+        setRuntimeStatus('completing');
         await processResults(sentGroups, answers, timings, nextLevel, nextBestStreak);
       } else if (!sessionEndedDueToIssue) {
-        setStatus('idle');
+        cancelRuntimeSession();
       }
     } catch (error) {
       const appError = ensureAppError(error);
-      setSessionIssueMessage(appError.message);
-      setStatus('failed');
+      setRuntimeStatus('failed', { errorMessage: appError.message });
       showToastRef.current({ message: `Chase error: ${appError.message}`, type: 'error' });
     } finally {
       isTrainingRef.current = false;
-      releaseLock();
       audio.stopAudio();
       clearPendingTarget();
     }
-  }, [audio, clearPendingTarget, processResults, releaseLock, takeLock, waitForTarget]);
+  }, [
+    audio,
+    clearPendingTarget,
+    processResults,
+    beginRuntimeSession,
+    cancelRuntimeSession,
+    patchRuntime,
+    setRuntimeStatus,
+    waitForTarget,
+  ]);
 
-  const handleInputChange = useCallback((value: string): void => {
-    const currentTarget = targetRef.current;
-    const maxLength = currentTarget?.group.length ?? Number.POSITIVE_INFINITY;
-    const normalized = value.toUpperCase().replace(ALLOWED_CHASE_INPUT, '').slice(0, maxLength);
-    userInputRef.current = normalized;
-    setUserInput(normalized);
-    if (currentTarget && normalized.length >= currentTarget.group.length) {
-      pendingResolverRef.current?.({
-        status: 'answered',
-        received: normalized,
-        answeredAt: Date.now(),
-      });
-    }
-  }, []);
+  const handleInputChange = useCallback(
+    (value: string): void => {
+      const currentTarget = targetRef.current;
+      const maxLength = currentTarget?.group.length ?? Number.POSITIVE_INFINITY;
+      const normalized = value.toUpperCase().replace(ALLOWED_CHASE_INPUT, '').slice(0, maxLength);
+      userInputRef.current = normalized;
+      patchRuntime({ userInput: normalized });
+      if (currentTarget && normalized.length >= currentTarget.group.length) {
+        pendingResolverRef.current?.({
+          status: 'answered',
+          received: normalized,
+          answeredAt: Date.now(),
+        });
+      }
+    },
+    [patchRuntime],
+  );
 
   const submitAnswer = useCallback((): void => {
     pendingResolverRef.current?.({
@@ -429,14 +442,12 @@ export function useChaseTrainingSession({
   }, []);
 
   const dismissResults = useCallback((): void => {
-    setStatus('idle');
-    setLastSessionResult(null);
-    setLastResolvedTarget(null);
-  }, []);
+    dismissRuntimeResults();
+  }, [dismissRuntimeResults]);
 
   return {
     status,
-    isTraining: status === 'running' || status === 'completing',
+    isTraining,
     target,
     lastResolvedTarget,
     userInput,
