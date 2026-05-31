@@ -272,7 +272,12 @@ export function AppStoreProvider({
           user: currentContext.user ? { id: currentContext.user.id, email: currentContext.user.email } : null,
           firebase: currentContext.firebase ? { hasDb: !!currentContext.firebase.db, hasAuth: !!currentContext.firebase.auth } : null,
         });
+        const wasSignedIn = previousContext.user != null;
+        const isSignedIn = currentContext.user != null;
         previousContext = currentContext;
+        if (wasSignedIn && !isSignedIn) {
+          store.getState().cancelAncillaryTrainingRuntimes();
+        }
         triggerLoads();
       }
 
@@ -295,6 +300,7 @@ export function AppStoreProvider({
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
       }
+      storeRef.current?.getState().cancelAncillaryTrainingRuntimes();
     };
   }, []);
 

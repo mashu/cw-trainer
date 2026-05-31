@@ -47,8 +47,7 @@ type NavigatorWithWakeLock = Navigator & {
 };
 
 export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Element {
-  const { takePlayback: takeTextPlayerLock, releasePlayback: releaseTextPlayerLock } =
-    usePreviewPlayback('text-player');
+  const { startPlayback, stopPlayback } = usePreviewPlayback('text-player');
 
   const [text, setText] = useState<string>(initialText || 'CQ CQ DE TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -316,7 +315,6 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
   useEffect(() => {
     return (): void => {
       abortRef.current = true;
-      releaseTextPlayerLock();
       try {
         stopRef.current?.();
       } catch {
@@ -348,7 +346,8 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       }
       audioContextRef.current = null;
     };
-  }, [releaseTextPlayerLock]);
+  // Preview blocking sync is released by usePreviewPlayback on unmount.
+  }, []);
 
   // Continuous mode: play letters one at a time for listen-only practice.
   const playContinuous = async (): Promise<void> => {
@@ -375,13 +374,13 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     }
     isPlayingRef.current = true;
     setIsPlaying(true);
-    takeTextPlayerLock();
+    startPlayback();
     continuousIndexRef.current = 0;
     setCurrentLetterIndex(0);
 
     const playNextLetter = async (): Promise<void> => {
       if (abortRef.current || !isPlayingRef.current) {
-        releaseTextPlayerLock();
+        stopPlayback();
         return;
       }
 
@@ -390,7 +389,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         isPlayingRef.current = false;
         setIsPlaying(false);
         await releaseWakeLock();
-        releaseTextPlayerLock();
+        stopPlayback();
         return;
       }
 
@@ -403,7 +402,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
           isPlayingRef.current = false;
           setIsPlaying(false);
           await releaseWakeLock();
-          releaseTextPlayerLock();
+          stopPlayback();
           return;
         }
       }
@@ -474,7 +473,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
         isPlayingRef.current = false;
         setIsPlaying(false);
         await releaseWakeLock();
-        releaseTextPlayerLock();
+        stopPlayback();
       }
     };
 
@@ -493,7 +492,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     }
     abortRef.current = false;
     setIsPlaying(true);
-    takeTextPlayerLock();
+    startPlayback();
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
@@ -526,7 +525,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       timerRef.current = window.setTimeout(
         () => {
           setIsPlaying(false);
-          releaseTextPlayerLock();
+          stopPlayback();
           stopRef.current = null;
           timerRef.current = null;
         },
@@ -534,7 +533,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
       ) as unknown as number;
     } catch {
       setIsPlaying(false);
-      releaseTextPlayerLock();
+      stopPlayback();
     }
   };
 
@@ -559,7 +558,7 @@ export function TextPlayer({ settings, initialText }: TextPlayerProps): JSX.Elem
     continuousIndexRef.current = 0;
     setCurrentLetterIndex(0);
     setIsPlaying(false);
-    releaseTextPlayerLock();
+    stopPlayback();
     await releaseWakeLock();
   };
 

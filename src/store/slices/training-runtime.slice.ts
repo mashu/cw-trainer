@@ -169,6 +169,8 @@ export interface TrainingRuntimeSlice {
   beginPreviewPlayback: (source: PreviewPlaybackSource) => void;
   endPreviewPlayback: (source: PreviewPlaybackSource) => void;
   cancelPreviewPlayback: () => void;
+  /** Clears preview playback and ICR blocking state (safety net on mode change / unmount). */
+  cancelAncillaryTrainingRuntimes: () => void;
 }
 
 interface CreateTrainingRuntimeSliceParams {
@@ -407,5 +409,12 @@ export const createTrainingRuntimeSlice = ({
 
   cancelPreviewPlayback: (): void => {
     set({ previewPlaybackRuntime: cancelPreviewPlayback() });
+  },
+
+  cancelAncillaryTrainingRuntimes: (): void => {
+    set({
+      previewPlaybackRuntime: cancelPreviewPlayback(),
+      icrTrainingRuntime: cancelIcrTrainingSession(),
+    });
   },
 });

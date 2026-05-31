@@ -22,8 +22,7 @@ export function TextPlayerModal({
   settings,
   initialText,
 }: TextPlayerModalProps): JSX.Element | null {
-  const { takePlayback: takeModalLock, releasePlayback: releaseModalLock } =
-    usePreviewPlayback('text-player-modal');
+  const { startPlayback, stopPlayback } = usePreviewPlayback('text-player-modal');
 
   const [text, setText] = useState<string>(initialText || 'CQ CQ TEST');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -144,14 +143,13 @@ export function TextPlayerModal({
       stopRef.current = null;
       setIsPlaying(false);
       setDurationSec(0);
-      releaseModalLock();
+      stopPlayback();
     }
-  }, [open, clearPlaybackTick, releaseModalLock]);
+  }, [open, clearPlaybackTick, stopPlayback]);
 
   useEffect(() => {
     return (): void => {
       abortRef.current = true;
-      releaseModalLock();
       clearPlaybackTick();
       try {
         stopRef.current?.();
@@ -166,7 +164,9 @@ export function TextPlayerModal({
       }
       audioContextRef.current = null;
     };
-  }, [clearPlaybackTick, releaseModalLock]);
+  // Preview blocking sync is released by usePreviewPlayback on unmount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePlay = async (): Promise<void> => {
     if (!open || !text.trim()) {
@@ -175,7 +175,7 @@ export function TextPlayerModal({
     abortRef.current = false;
     clearPlaybackTick();
     setIsPlaying(true);
-    takeModalLock();
+    startPlayback();
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
@@ -209,7 +209,7 @@ export function TextPlayerModal({
         if (remaining <= 0) {
           tickTimeoutRef.current = null;
           setIsPlaying(false);
-          releaseModalLock();
+          stopPlayback();
           stopRef.current = null;
           return;
         }
@@ -221,7 +221,7 @@ export function TextPlayerModal({
       tickTimeoutRef.current = window.setTimeout(tick, 50) as unknown as number;
     } catch {
       setIsPlaying(false);
-      releaseModalLock();
+      stopPlayback();
     }
   };
 
@@ -235,7 +235,7 @@ export function TextPlayerModal({
     }
     stopRef.current = null;
     setIsPlaying(false);
-    releaseModalLock();
+    stopPlayback();
   };
 
   if (!open) return null;

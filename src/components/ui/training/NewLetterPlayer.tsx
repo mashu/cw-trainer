@@ -74,8 +74,7 @@ function useSelectableIndex(defaultIndex: number): {
 }
 
 export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element | null {
-  const { takePlayback: takeLock, releasePlayback: releaseLock } =
-    usePreviewPlayback('letter-preview');
+  const { startPlayback, stopPlayback: releasePreviewSync } = usePreviewPlayback('letter-preview');
   const charSetMode = settings.charSetMode ?? 'koch';
   const isMixed = charSetMode === 'mixed';
   const isDigitsOnly = charSetMode === 'digits';
@@ -96,9 +95,10 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
   useEffect(() => {
     return (): void => {
       clearDurationDoneTimeout();
-      releaseLock();
     };
-  }, [clearDurationDoneTimeout, releaseLock]);
+  // Preview blocking sync is released by usePreviewPlayback on unmount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const charPool = useMemo(() => computeCharPool(poolSettingsFrom(settings)), [settings]);
 
@@ -163,8 +163,8 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
       stopRef.current = null;
     }
     setIsPlaying(false);
-    releaseLock();
-  }, [clearDurationDoneTimeout, releaseLock]);
+    releasePreviewSync();
+  }, [clearDurationDoneTimeout, releasePreviewSync]);
 
   const playCharacters = useCallback(
     async (chars: readonly string[]): Promise<void> => {
@@ -181,7 +181,7 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
 
       try {
         setIsPlaying(true);
-        takeLock();
+        startPlayback();
         const textToPlay = chars.join(' ');
         const { stop, durationSec } = await playMorseCodeControlled(
           ctx,
@@ -207,18 +207,18 @@ export function NewLetterPlayer({ settings }: NewLetterPlayerProps): JSX.Element
         durationDoneTimeoutRef.current = window.setTimeout(() => {
           durationDoneTimeoutRef.current = undefined;
           setIsPlaying(false);
-          releaseLock();
+          stopPlayback();
           stopRef.current = null;
         }, durationMs);
       } catch (error) {
         console.error('Error playing characters:', error);
         clearDurationDoneTimeout();
         setIsPlaying(false);
-        releaseLock();
+        stopPlayback();
         stopRef.current = null;
       }
     },
-    [isPlaying, settings, pickToneHz, clearDurationDoneTimeout, takeLock, releaseLock, stopPlayback],
+    [isPlaying, settings, pickToneHz, clearDurationDoneTimeout, startPlayback, stopPlayback],
   );
 
   const playAtSingleIndex = useCallback(

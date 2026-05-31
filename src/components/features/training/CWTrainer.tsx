@@ -88,6 +88,17 @@ export function CWTrainer(): JSX.Element {
   const [activeMode, setActiveMode] = useState<TrainingMode>('group');
   const [groupTab, setGroupTab] = useState<'train' | 'stats'>('train');
   const deferredToastShownRef = useRef(false);
+  const cancelAncillaryTrainingRuntimes = useAppStore((s) => s.cancelAncillaryTrainingRuntimes);
+  const previousModeRef = useRef<TrainingMode>(activeMode);
+
+  // Safety net: clear preview/ICR blocking sync when leaving player or ICR modes.
+  useEffect(() => {
+    if (previousModeRef.current === activeMode) {
+      return;
+    }
+    previousModeRef.current = activeMode;
+    cancelAncillaryTrainingRuntimes();
+  }, [activeMode, cancelAncillaryTrainingRuntimes]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
