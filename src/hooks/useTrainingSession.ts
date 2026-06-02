@@ -12,11 +12,13 @@ import { ensureAppError } from '@/lib/errors';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
 import type { AutoAdjustMode } from '@/lib/kochAutoAdjust';
 import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
+import { decideGroupLoopTeardown } from '@/lib/training/groupLoopTeardown';
 import { isGroupTrainingPlaybackFrozen, isGroupTrainingRuntimeActive } from '@/lib/training/groupSessionMachine';
 import type {
   GroupSessionResultSummary,
   GroupTrainingRuntimeState,
 } from '@/lib/training/groupSessionMachine';
+import { logTraining } from '@/lib/training/trainingLog';
 import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
 import { computeTrainingGroupGapMs } from '@/lib/trainingSessionPlayback';
 import type { SessionResultInput } from '@/lib/validators';
@@ -172,21 +174,33 @@ export function useTrainingSession({
   >({});
   const confirmTimeoutRef = useRef<Record<number, TimeoutId | undefined>>({});
 
-  // If the runtime was cleared while the async loop is still running, stop audio immediately.
+  // Authoritative invariant: training audio may only exist while the store runtime is in
+  // an active session. The store is the single source of truth — if it leaves the session
+  // for ANY reason (cancel, dismiss, reload restore, a stale loop's teardown, or any future
+  // external reset), abort the loop and tear down audio immediately. This is what guarantees
+  // the "returned to the home screen but Morse keeps playing" regression cannot happen,
+  // regardless of which code path reset the store.
   useEffect(() => {
-    if (hasActiveSession || !isTrainingRef.current) {
+    const inSession = runtime.status !== 'idle' && runtime.status !== 'results';
+    if (inSession) {
       return;
     }
-    audio.trainingAbortRef.current = true;
-    isTrainingRef.current = false;
-    setRuntimeAudioStatus('closed');
-    audio.stopAudio();
-  }, [audio, hasActiveSession, setRuntimeAudioStatus]);
+    if (audio.audioContextRef.current !== null || isTrainingRef.current) {
+      logTraining('audio-guard:store-left-session', {
+        status: runtime.status,
+        hadAudioContext: audio.audioContextRef.current !== null,
+      });
+      audio.trainingAbortRef.current = true;
+      isTrainingRef.current = false;
+      audio.stopAudio();
+    }
+  }, [runtime.status, audio]);
 
   // ── Unmount cleanup ──────────────────────────────────────────────────
   useEffect(() => {
     return (): void => {
       if (isTrainingRef.current) {
+        logTraining('unmount:pause-active-session');
         audio.trainingAbortRef.current = true;
         isTrainingRef.current = false;
         setRuntimeStatus('paused', { pauseReason: 'Training view was remounted.' });
@@ -211,6 +225,7 @@ export function useTrainingSession({
   useEffect(() => {
     const handleHidden = (): void => {
       if (!hasActiveSessionRef.current) return;
+      logTraining('visibility:hidden-pause');
       setRuntimeStatus('paused', { pauseReason: 'Training paused while the page was hidden.' });
       if (audio.audioContextRef.current?.state === 'suspended') {
         setRuntimeAudioStatus('suspended');
@@ -418,7 +433,10 @@ export function useTrainingSession({
   // ── Public actions ───────────────────────────────────────────────────
 
   const startTraining = async (): Promise<void> => {
-    if (isTrainingRef.current) return;
+    if (isTrainingRef.current) {
+      logTraining('start:ignored-already-running');
+      return;
+    }
 
     try {
       audio.stopAudio();
@@ -446,6 +464,7 @@ export function useTrainingSession({
       isTrainingRef.current = true;
       const startedAt = Date.now();
       startedAtRef.current = startedAt;
+      logTraining('start', { session: mySession, numGroups: settings.numGroups });
       beginRuntimeSession({ sessionId: mySession, startedAt });
       userInputRef.current = [];
       confirmedGroupsRef.current = {};
@@ -464,6 +483,7 @@ export function useTrainingSession({
 
       for (let i = 0; i < groups.length; i++) {
         if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
+        logTraining('group:play', { session: mySession, index: i });
         setRuntimeCurrentGroup(i);
         setRuntimeStatus('playingGroup');
         requestAnimationFrame(() => {
@@ -479,6 +499,9 @@ export function useTrainingSession({
         });
         const delayMs = Math.max(0, computeTrainingGroupGapMs(settings));
         if (delayMs > 0) await audio.sleepCancelable(delayMs, mySession);
+        // Re-check ownership after every await: a newer session may have taken over while
+        // we slept. A stale loop must never write to the live session's runtime.
+        if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
         const startTs = Date.now();
         groupStartAtRef.current[i] = startTs;
         recordRuntimeGroupStart(i, startTs);
@@ -492,6 +515,11 @@ export function useTrainingSession({
               ? playback.message
               : 'Audio was suspended by the browser. Tap Submit or Stop, or start a new run.';
           sessionEndedDueToPlaybackIssue = true;
+          logTraining('group:playback-issue', {
+            session: mySession,
+            index: i,
+            status: playback.status,
+          });
           setRuntimeStatus('failed', { errorMessage: message });
           audio.trainingAbortRef.current = true;
           showToast({ message, type: 'error' });
@@ -504,14 +532,20 @@ export function useTrainingSession({
             mySession,
           );
         }
+        // Ownership check BEFORE writing group-end to the runtime — otherwise a stale loop
+        // could clobber the live session's timings after a takeover.
+        if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
         const groupEndedAt = startTs + Math.max(0, Math.round(durationSec * 1000));
         groupEndAtRef.current[i] = groupEndedAt;
         recordRuntimeGroupEnd(i, groupEndedAt);
-        if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
 
         setRuntimeStatus('waitingForAnswer');
         focusInput(i);
         const { timedOut } = await waitForGroupCompletion(i);
+        // The answer wait can resolve long after a newer session took over (Submit then
+        // Train Again). Bail before auto-confirming or stopping playback so we never write
+        // into — or cut the audio of — the live session.
+        if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
         if (timedOut && !confirmedGroupsRef.current[i]) {
           autoConfirmOnTimeout(i, groups);
         }
@@ -521,16 +555,33 @@ export function useTrainingSession({
           /* no-op */
         }
       }
-      const shouldProcessResults =
-        !(audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) &&
-        !resultsProcessedRef.current;
-      if (shouldProcessResults) {
+      const decision = decideGroupLoopTeardown({
+        superseded: audio.sessionIdRef.current !== mySession,
+        aborted: audio.trainingAbortRef.current,
+        resultsProcessed: resultsProcessedRef.current,
+        endedDueToPlaybackIssue: sessionEndedDueToPlaybackIssue,
+      });
+      logTraining('loop-end', {
+        session: mySession,
+        ownerSession: audio.sessionIdRef.current,
+        decision,
+      });
+
+      // A newer session owns the shared audio + store. This stale loop must be completely
+      // inert: touching isTrainingRef, the audio engine, or the runtime here is exactly what
+      // used to bounce the live session back to the home screen while audio kept playing.
+      if (decision === 'inert') {
+        return;
+      }
+
+      if (decision === 'completing') {
         setRuntimeStatus('completing');
       }
       isTrainingRef.current = false;
       setRuntimeAudioStatus('closed');
       audio.stopAudio();
-      if (shouldProcessResults) {
+
+      if (decision === 'completing') {
         const answers = (userInputRef.current.length > 0 ? userInputRef.current : userInput).map(
           (a) => (a || '').trim().toUpperCase(),
         );
@@ -543,11 +594,12 @@ export function useTrainingSession({
             type: 'error',
           });
         }
-      } else if (!resultsProcessedRef.current && !sessionEndedDueToPlaybackIssue) {
-        // Keep failed runtime (with errorMessage) visible until the user stops the session.
+      } else if (decision === 'cancel') {
         cancelRuntimeSession();
       }
+      // 'preserve' -> leave the results/failed runtime visible until the user acts.
     } catch (error) {
+      logTraining('start:unexpected-error', { message: ensureAppError(error).message });
       console.error('[Training] Unexpected training error:', error);
       showToast({ message: `Training error: ${ensureAppError(error).message}`, type: 'error' });
       isTrainingRef.current = false;
@@ -560,6 +612,7 @@ export function useTrainingSession({
 
   const submitAnswer = (): void => {
     if (isPlaybackFrozen) return;
+    logTraining('submit', { ownerSession: audio.sessionIdRef.current });
     audio.trainingAbortRef.current = true;
     setRuntimeStatus('completing');
     isTrainingRef.current = false;
@@ -578,6 +631,7 @@ export function useTrainingSession({
   };
 
   const stopTraining = (): void => {
+    logTraining('stop', { ownerSession: audio.sessionIdRef.current });
     audio.trainingAbortRef.current = true;
     isTrainingRef.current = false;
     cancelRuntimeSession();
@@ -660,6 +714,7 @@ export function useTrainingSession({
   };
 
   const dismissResults = (): void => {
+    logTraining('dismiss-results');
     dismissRuntimeResults();
   };
 

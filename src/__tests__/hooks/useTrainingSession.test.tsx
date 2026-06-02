@@ -809,4 +809,68 @@ describe('useTrainingSession', () => {
       result.current.stopTraining();
     });
   });
+
+  // Regression: the single most common training bug. Ending a session (Submit) while its
+  // detached playback loop is still awaiting, then starting a new session before that loop
+  // unwinds, used to make the stale loop cancel the live session — bouncing the UI back to
+  // the home screen while the new session's audio kept playing.
+  it('does not bounce to home when a new session starts before a prior loop unwinds', async () => {
+    const audio = createMockAudio();
+    const playResolvers: Array<() => void> = [];
+    jest.mocked(audio.playMorse).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          playResolvers.push(() => resolve({ status: 'played', durationSec: 0 }));
+        }),
+    );
+    mockUseTrainingAudio.mockReturnValue(audio);
+
+    const { result } = renderSessionHook();
+    await waitForInitialLoads();
+
+    // Session A parks awaiting its (deferred) playback.
+    await act(async () => {
+      void result.current.startTraining();
+    });
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('playingGroup');
+    });
+    expect(playResolvers).toHaveLength(1);
+
+    // End session A via Submit while its loop is still awaiting playback.
+    await act(async () => {
+      result.current.submitAnswer();
+    });
+    await waitFor(() => {
+      expect(result.current.showResults).toBe(true);
+    });
+
+    // Session B starts before A's loop has unwound, and parks awaiting its own playback.
+    await act(async () => {
+      void result.current.startTraining();
+    });
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('playingGroup');
+    });
+    expect(playResolvers).toHaveLength(2);
+
+    const stopCallsBeforeStaleUnwind = jest.mocked(audio.stopAudio).mock.calls.length;
+
+    // Now A's stale playback resolves and its loop tail runs against shared state.
+    await act(async () => {
+      playResolvers[0]?.();
+      await Promise.resolve();
+    });
+
+    // The stale loop is inert: B's live session survives — no bounce to idle/home...
+    expect(result.current.runtimeStatus).toBe('playingGroup');
+    expect(result.current.hasActiveSession).toBe(true);
+    expect(result.current.showResults).toBe(false);
+    // ...and it never tore down the live session's audio.
+    expect(jest.mocked(audio.stopAudio).mock.calls.length).toBe(stopCallsBeforeStaleUnwind);
+
+    act(() => {
+      result.current.stopTraining();
+    });
+  });
 });
