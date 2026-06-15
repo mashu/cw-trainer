@@ -23,9 +23,9 @@ export interface AutoLevelAdjustConfig {
   readonly mode: AutoAdjustMode;
   /** Accuracy percentage threshold (0-100). */
   readonly threshold: number;
-  /** How many sessions above threshold needed to increase (0 = immediate). */
+  /** How many sessions above threshold needed to increase (0 = increase disabled). */
   readonly aboveThresholdCount: number;
-  /** How many sessions below threshold needed to decrease (0 = immediate). */
+  /** How many sessions below threshold needed to decrease (0 = decrease disabled). */
   readonly belowThresholdCount: number;
   /**
    * Active level for single-level modes (koch / digits).
@@ -72,12 +72,12 @@ export interface AutoLevelAdjustProgressView {
   readonly threshold: number;
   readonly aboveCount: number;
   readonly belowCount: number;
-  /** Sessions at/above threshold required to increase (1 when settings use 0 = immediate). */
+  /** Sessions at/above threshold required to increase (0 when increase is disabled). */
   readonly aboveTarget: number;
-  /** Sessions below threshold required to decrease (1 when settings use 0 = immediate). */
+  /** Sessions below threshold required to decrease (0 when decrease is disabled). */
   readonly belowTarget: number;
-  readonly aboveImmediate: boolean;
-  readonly belowImmediate: boolean;
+  readonly aboveDisabled: boolean;
+  readonly belowDisabled: boolean;
 }
 
 // ── Local-storage helpers ──────────────────────────────────────────────
@@ -164,7 +164,7 @@ const MODE_LABELS: Record<AutoAdjustMode, string> = {
 };
 
 function sessionTarget(countSetting: number): number {
-  return countSetting === 0 ? 1 : countSetting;
+  return countSetting > 0 ? countSetting : 0;
 }
 
 function mixedDigitsLevel(config: AutoLevelAdjustConfig): number {
@@ -230,8 +230,8 @@ export function buildAutoLevelAdjustProgressView(
     belowCount: counts.below,
     aboveTarget,
     belowTarget,
-    aboveImmediate: config.aboveThresholdCount === 0,
-    belowImmediate: config.belowThresholdCount === 0,
+    aboveDisabled: config.aboveThresholdCount === 0,
+    belowDisabled: config.belowThresholdCount === 0,
   };
 }
 
@@ -267,12 +267,13 @@ export function evaluateAutoLevelAdjust(
   }
   saveCounts(mode, currentLevel, counts, digitsLevel);
 
+  const increaseEnabled = aboveThresholdCount > 0;
+  const decreaseEnabled = belowThresholdCount > 0;
+
   const shouldIncrease =
-    (aboveThresholdCount === 0 && counts.above > 0) ||
-    (aboveThresholdCount > 0 && counts.above >= aboveThresholdCount);
+    increaseEnabled && counts.above >= aboveThresholdCount;
   const shouldDecrease =
-    (belowThresholdCount === 0 && counts.below > 0) ||
-    (belowThresholdCount > 0 && counts.below >= belowThresholdCount);
+    decreaseEnabled && counts.below >= belowThresholdCount;
 
   let delta = 0;
   if (shouldIncrease && shouldDecrease) {
@@ -299,18 +300,19 @@ export function evaluateAutoLevelAdjust(
     const countText =
       delta > 0
         ? aboveThresholdCount === 0
-          ? '1 session above'
+          ? ''
           : `${counts.above} sessions above`
         : belowThresholdCount === 0
-          ? '1 session below'
+          ? ''
           : `${counts.below} sessions below`;
 
     const label = MODE_LABELS[mode];
+    const countSuffix = countText ? `, ${countText}` : '';
 
     return {
       delta,
       nextLevel,
-      message: `${label} ${delta > 0 ? 'increased' : 'decreased'} to ${nextLevel} (accuracy ${Math.round(accuracyPct)}%, threshold ${threshold}%, ${countText})`,
+      message: `${label} ${delta > 0 ? 'increased' : 'decreased'} to ${nextLevel} (accuracy ${Math.round(accuracyPct)}%, threshold ${threshold}%${countSuffix})`,
       messageType: delta > 0 ? 'success' : 'info',
     };
   }
@@ -331,17 +333,18 @@ export function evaluateAutoLevelAdjust(
   const countText =
     delta > 0
       ? aboveThresholdCount === 0
-        ? '1 session above'
+        ? ''
         : `${counts.above} sessions above`
       : belowThresholdCount === 0
-        ? '1 session below'
+        ? ''
         : `${counts.below} sessions below`;
+  const countSuffix = countText ? `, ${countText}` : '';
 
   return {
     delta,
     nextLevel,
     nextDigitsLevel,
-    message: `Mixed levels ${delta > 0 ? 'increased' : 'decreased'} — alphabet ${nextLevel}, digits ${nextDigitsLevel} (accuracy ${Math.round(accuracyPct)}%, threshold ${threshold}%, ${countText})`,
+    message: `Mixed levels ${delta > 0 ? 'increased' : 'decreased'} — alphabet ${nextLevel}, digits ${nextDigitsLevel} (accuracy ${Math.round(accuracyPct)}%, threshold ${threshold}%${countSuffix})`,
     messageType: delta > 0 ? 'success' : 'info',
   };
 }

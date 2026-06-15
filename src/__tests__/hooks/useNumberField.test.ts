@@ -121,6 +121,33 @@ describe('useNumberField', () => {
     jest.useRealTimers();
   });
 
+  it('applies spinStep increments on spin-button clicks while allowing arbitrary typed values', () => {
+    const onChange = jest.fn();
+    const { result } = renderHook(() =>
+      useNumberField(85, {
+        min: 0,
+        max: 100,
+        spinStep: 10,
+        fieldName: 'autoAdjustThreshold',
+        onChange,
+      }),
+    );
+
+    act(() => {
+      result.current.inputProps.onMouseUp(mouseUpEvent(true));
+      result.current.inputProps.onChange(changeEvent('86'));
+    });
+
+    expect(onChange).toHaveBeenCalledWith(95);
+
+    act(() => {
+      result.current.inputProps.onChange(changeEvent('87'));
+      result.current.inputProps.onBlur(blurEvent('87'));
+    });
+
+    expect(onChange).toHaveBeenCalledWith(87);
+  });
+
   it('selects input text on focus', () => {
     const onChange = jest.fn();
     const select = jest.fn();

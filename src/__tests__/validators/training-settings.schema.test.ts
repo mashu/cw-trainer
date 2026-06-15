@@ -49,12 +49,12 @@ const buildValidSettings = (): TrainingSettingsInput => ({
   receiverBackgroundOffsetModRateHz: 0.32,
   autoAdjustKoch: true,
   autoAdjustThreshold: 90,
-  autoAdjustBelowThresholdCount: 0,
-  autoAdjustAboveThresholdCount: 0,
+  autoAdjustBelowThresholdCount: 1,
+  autoAdjustAboveThresholdCount: 1,
   echoAutoAdjustKoch: false,
   echoAutoAdjustThreshold: 90,
-  echoAutoAdjustBelowThresholdCount: 0,
-  echoAutoAdjustAboveThresholdCount: 0,
+  echoAutoAdjustBelowThresholdCount: 1,
+  echoAutoAdjustAboveThresholdCount: 1,
   errorWeightStrength: 0,
 });
 
@@ -179,6 +179,16 @@ describe('trainingSettingsSchema', () => {
       qsbDepth: 1.5,
       qrnLevel: -0.1,
       qsbRateHz: 2,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects auto-adjust settings when both directions are disabled', () => {
+    const result = trainingSettingsSchema.safeParse({
+      ...buildValidSettings(),
+      autoAdjustAboveThresholdCount: 0,
+      autoAdjustBelowThresholdCount: 0,
     });
 
     expect(result.success).toBe(false);

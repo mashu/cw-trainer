@@ -277,6 +277,28 @@ export const trainingSettingsSchema = z
         message: 'chaseStartFallMs must be greater than or equal to chaseMinFallMs',
       });
     }
+
+    if (
+      value.autoAdjustAboveThresholdCount === 0 &&
+      value.autoAdjustBelowThresholdCount === 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['autoAdjustAboveThresholdCount'],
+        message: 'At least one auto-adjust direction must be enabled',
+      });
+    }
+
+    if (
+      value.echoAutoAdjustAboveThresholdCount === 0 &&
+      value.echoAutoAdjustBelowThresholdCount === 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['echoAutoAdjustAboveThresholdCount'],
+        message: 'At least one echo auto-adjust direction must be enabled',
+      });
+    }
   });
 
 export type TrainingSettingsInput = z.input<typeof trainingSettingsSchema>;

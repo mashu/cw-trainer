@@ -12,12 +12,12 @@ describe('evaluateAutoLevelAdjust', () => {
     localStorage.clear();
   });
 
-  it('increases Koch level after one above-threshold session when aboveThresholdCount is 0', () => {
+  it('increases Koch level after one above-threshold session when aboveThresholdCount is 1', () => {
     const result = evaluateAutoLevelAdjust(0.95, {
       enabled: true,
       mode: 'koch',
       threshold: 90,
-      aboveThresholdCount: 0,
+      aboveThresholdCount: 1,
       belowThresholdCount: 0,
       currentLevel: 5,
       maxLevel: 40,
@@ -41,12 +41,38 @@ describe('evaluateAutoLevelAdjust', () => {
     ).toBeNull();
   });
 
+  it('does not increase when aboveThresholdCount is zero (increase disabled)', () => {
+    const result = evaluateAutoLevelAdjust(0.95, {
+      enabled: true,
+      mode: 'koch',
+      threshold: 90,
+      aboveThresholdCount: 0,
+      belowThresholdCount: 2,
+      currentLevel: 5,
+      maxLevel: 40,
+    });
+    expect(result).toBeNull();
+  });
+
+  it('does not decrease when belowThresholdCount is zero (decrease disabled)', () => {
+    const result = evaluateAutoLevelAdjust(0.5, {
+      enabled: true,
+      mode: 'koch',
+      threshold: 90,
+      aboveThresholdCount: 3,
+      belowThresholdCount: 0,
+      currentLevel: 5,
+      maxLevel: 40,
+    });
+    expect(result).toBeNull();
+  });
+
   it('does not increase past maxLevel', () => {
     const result = evaluateAutoLevelAdjust(1, {
       enabled: true,
       mode: 'koch',
       threshold: 90,
-      aboveThresholdCount: 0,
+      aboveThresholdCount: 1,
       belowThresholdCount: 0,
       currentLevel: 40,
       maxLevel: 40,
@@ -59,7 +85,7 @@ describe('evaluateAutoLevelAdjust', () => {
       enabled: true,
       mode: 'digits',
       threshold: 90,
-      aboveThresholdCount: 0,
+      aboveThresholdCount: 1,
       belowThresholdCount: 0,
       currentLevel: 4,
       maxLevel: 10,
@@ -73,7 +99,7 @@ describe('evaluateAutoLevelAdjust', () => {
       enabled: true,
       mode: 'mixed',
       threshold: 90,
-      aboveThresholdCount: 0,
+      aboveThresholdCount: 1,
       belowThresholdCount: 0,
       currentLevel: 3,
       pairedDigitsLevel: 6,
@@ -93,7 +119,7 @@ describe('evaluateAutoLevelAdjust', () => {
       enabled: true,
       mode: 'mixed',
       threshold: 90,
-      aboveThresholdCount: 0,
+      aboveThresholdCount: 1,
       belowThresholdCount: 0,
       currentLevel: 40,
       pairedDigitsLevel: 5,
@@ -168,26 +194,26 @@ describe('buildAutoLevelAdjustProgressView', () => {
       belowCount: 1,
       aboveTarget: 3,
       belowTarget: 2,
-      aboveImmediate: false,
-      belowImmediate: false,
+      aboveDisabled: false,
+      belowDisabled: false,
       currentLevel: 4,
       threshold: 90,
     });
   });
 
-  it('uses target 1 when increase/decrease counts are 0 (immediate)', () => {
+  it('marks direction disabled when increase/decrease counts are 0', () => {
     const view = buildAutoLevelAdjustProgressView({
       enabled: true,
       mode: 'koch',
       threshold: 85,
       aboveThresholdCount: 0,
-      belowThresholdCount: 0,
+      belowThresholdCount: 3,
       currentLevel: 2,
     });
-    expect(view?.aboveTarget).toBe(1);
-    expect(view?.belowTarget).toBe(1);
-    expect(view?.aboveImmediate).toBe(true);
-    expect(view?.belowImmediate).toBe(true);
+    expect(view?.aboveTarget).toBe(0);
+    expect(view?.belowTarget).toBe(3);
+    expect(view?.aboveDisabled).toBe(true);
+    expect(view?.belowDisabled).toBe(false);
   });
 
   it('uses composite storage for mixed mode progress', () => {

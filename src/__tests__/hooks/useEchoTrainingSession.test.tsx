@@ -379,7 +379,7 @@ describe('useEchoTrainingSession', () => {
       ...echoSettings,
       echoAutoAdjustKoch: true,
       echoAutoAdjustThreshold: 90,
-      echoAutoAdjustAboveThresholdCount: 0,
+      echoAutoAdjustAboveThresholdCount: 1,
       kochLevel: 5,
     };
     const { result } = renderHook(
@@ -508,7 +508,7 @@ describe('useEchoTrainingSession', () => {
       digitsLevel: 5,
       echoAutoAdjustKoch: true,
       echoAutoAdjustThreshold: 90,
-      echoAutoAdjustAboveThresholdCount: 0,
+      echoAutoAdjustAboveThresholdCount: 1,
     };
     const { result } = renderHook(
       () =>

@@ -10,38 +10,50 @@ function CompactBar({
   target,
   threshold,
   tone,
+  disabled = false,
 }: {
   readonly label: string;
   readonly count: number;
   readonly target: number;
   readonly threshold: number;
   readonly tone: 'up' | 'down';
+  readonly disabled?: boolean;
 }): JSX.Element {
-  const ratio = target > 0 ? Math.min(1, count / target) : 0;
+  const ratio = !disabled && target > 0 ? Math.min(1, count / target) : 0;
   const fill =
     tone === 'up'
-      ? 'bg-emerald-500'
-      : 'bg-rose-500';
-  const track = tone === 'up' ? 'bg-emerald-100' : 'bg-rose-100';
-  const hint =
-    tone === 'up'
+      ? disabled
+        ? 'bg-slate-300'
+        : 'bg-emerald-500'
+      : disabled
+        ? 'bg-slate-300'
+        : 'bg-rose-500';
+  const track = disabled ? 'bg-slate-100' : tone === 'up' ? 'bg-emerald-100' : 'bg-rose-100';
+  const hint = disabled
+    ? 'Disabled — level will not change in this direction'
+    : tone === 'up'
       ? `Sessions ≥ ${threshold}% toward level up`
       : `Sessions < ${threshold}% toward level down`;
 
   return (
-    <div className="min-w-0 flex-1" title={hint}>
+    <div
+      className={`min-w-0 flex-1 ${disabled ? 'opacity-50' : ''}`}
+      title={hint}
+    >
       <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="text-xs font-medium text-slate-600">{label}</span>
-        <span className="text-xs font-semibold tabular-nums text-slate-700">
-          {count}/{target}
+        <span className={`text-xs font-medium ${disabled ? 'text-slate-400' : 'text-slate-600'}`}>
+          {label}
+        </span>
+        <span className={`text-xs font-semibold tabular-nums ${disabled ? 'text-slate-400' : 'text-slate-700'}`}>
+          {disabled ? '—' : `${count}/${target}`}
         </span>
       </div>
       <div
         className={`h-1.5 w-full rounded-full overflow-hidden ${track}`}
         role="progressbar"
-        aria-valuenow={count}
+        aria-valuenow={disabled ? 0 : count}
         aria-valuemin={0}
-        aria-valuemax={target}
+        aria-valuemax={disabled ? 0 : target}
         aria-label={label}
       >
         <div
@@ -62,8 +74,16 @@ export function AutoLevelAdjustProgressCard({
   progress,
   profileLabel,
 }: AutoLevelAdjustProgressCardProps): JSX.Element {
-  const { threshold, aboveCount, belowCount, aboveTarget, belowTarget, adjustsBothLevels } =
-    progress;
+  const {
+    threshold,
+    aboveCount,
+    belowCount,
+    aboveTarget,
+    belowTarget,
+    aboveDisabled,
+    belowDisabled,
+    adjustsBothLevels,
+  } = progress;
 
   return (
     <section
@@ -85,6 +105,7 @@ export function AutoLevelAdjustProgressCard({
           target={aboveTarget}
           threshold={threshold}
           tone="up"
+          disabled={aboveDisabled}
         />
         <CompactBar
           label="Down"
@@ -92,6 +113,7 @@ export function AutoLevelAdjustProgressCard({
           target={belowTarget}
           threshold={threshold}
           tone="down"
+          disabled={belowDisabled}
         />
       </div>
       <p className="mt-1.5 text-[10px] text-slate-400 leading-snug">

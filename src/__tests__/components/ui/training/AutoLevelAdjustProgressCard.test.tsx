@@ -12,8 +12,8 @@ const baseProgress: AutoLevelAdjustProgressView = {
   belowCount: 1,
   aboveTarget: 3,
   belowTarget: 2,
-  aboveImmediate: false,
-  belowImmediate: false,
+  aboveDisabled: false,
+  belowDisabled: false,
 };
 
 describe('AutoLevelAdjustProgressCard', () => {

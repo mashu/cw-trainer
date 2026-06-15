@@ -11,6 +11,11 @@ export interface NumberFieldOptions {
   readonly max: number;
   /** Step for rounding. When >= 1 the value is floored to an integer. Use a fractional step for floats. Default 1. */
   readonly step?: number;
+  /**
+   * When set, native spin buttons step by this amount while typed values may be any valid number.
+   * Uses `step="any"` on the input so values like 85 are not marked invalid.
+   */
+  readonly spinStep?: number;
   /** Name used for spin-button click detection. */
   readonly fieldName: string;
   /** Called with the clamped numeric value whenever a valid change occurs. */
@@ -27,7 +32,7 @@ export interface NumberFieldResult {
     readonly type: 'number';
     readonly min: number;
     readonly max: number;
-    readonly step: number;
+    readonly step: number | 'any';
     readonly value: string;
     readonly onFocus: (e: FocusEvent<HTMLInputElement>) => void;
     readonly onMouseUp: (e: MouseEvent<HTMLInputElement>) => void;
@@ -41,7 +46,7 @@ export interface NumberFieldResult {
  * for a single `<input type="number">`. Used across training settings forms.
  */
 export function useNumberField(currentValue: number, options: NumberFieldOptions): NumberFieldResult {
-  const { min, max, step = 1, fieldName, onChange, onSave } = options;
+  const { min, max, step = 1, spinStep, fieldName, onChange, onSave } = options;
   const [localValue, setLocalValue] = useState<string>(String(currentValue));
   const { handleNumberInputChange, handleNumberInputBlur, handleSpinButtonClick } =
     useNumberInputHelpers(onSave);
@@ -63,7 +68,7 @@ export function useNumberField(currentValue: number, options: NumberFieldOptions
       type: 'number',
       min,
       max,
-      step: step || 1,
+      step: spinStep !== undefined ? 'any' : step || 1,
       value: localValue,
       onFocus: (e): void => {
         e.target.select();
@@ -83,6 +88,9 @@ export function useNumberField(currentValue: number, options: NumberFieldOptions
           (num) => {
             onChange(clamp(num));
           },
+          spinStep !== undefined
+            ? { currentValue, spinStep, clamp }
+            : undefined,
         );
       },
       onBlur: (e): void => {

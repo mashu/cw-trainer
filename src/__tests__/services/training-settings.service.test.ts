@@ -83,12 +83,12 @@ const buildValidSettingsInput = (): TrainingSettingsInput => ({
   receiverBackgroundOffsetModRateHz: 0.32,
   autoAdjustKoch: true,
   autoAdjustThreshold: 85,
-  autoAdjustBelowThresholdCount: 0,
-  autoAdjustAboveThresholdCount: 0,
+  autoAdjustBelowThresholdCount: 1,
+  autoAdjustAboveThresholdCount: 1,
   echoAutoAdjustKoch: false,
   echoAutoAdjustThreshold: 90,
-  echoAutoAdjustBelowThresholdCount: 0,
-  echoAutoAdjustAboveThresholdCount: 0,
+  echoAutoAdjustBelowThresholdCount: 1,
+  echoAutoAdjustAboveThresholdCount: 1,
   errorWeightStrength: 0,
 });
 

@@ -696,7 +696,7 @@ describe('useTrainingSession', () => {
       ...sessionSettings,
       autoAdjustKoch: true,
       autoAdjustThreshold: 90,
-      autoAdjustAboveThresholdCount: 0,
+      autoAdjustAboveThresholdCount: 1,
       kochLevel: 4,
     };
     const { result } = renderHook(

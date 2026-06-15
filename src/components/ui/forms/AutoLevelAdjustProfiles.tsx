@@ -3,6 +3,7 @@
 import React from 'react';
 
 import { useNumberField } from '@/hooks/useNumberField';
+import { applyAutoAdjustDirectionCountChange } from '@/lib/autoAdjustCountSettings';
 
 import type { FormTrainingSettings } from './TrainingSettingsForm';
 
@@ -65,7 +66,7 @@ function AutoAdjustProfileBlock({
   const thresholdInput = useNumberField(threshold, {
     min: 0,
     max: 100,
-    step: 1,
+    spinStep: 10,
     fieldName: thresholdField,
     onChange: (n) =>
       setSettings((prev) =>
@@ -80,11 +81,26 @@ function AutoAdjustProfileBlock({
     step: 1,
     fieldName: belowField,
     onChange: (n) =>
-      setSettings((prev) =>
-        isEcho
-          ? { ...prev, echoAutoAdjustBelowThresholdCount: n }
-          : { ...prev, autoAdjustBelowThresholdCount: n },
-      ),
+      setSettings((prev) => {
+        const currentAbove = isEcho
+          ? (prev.echoAutoAdjustAboveThresholdCount ?? 0)
+          : (prev.autoAdjustAboveThresholdCount ?? 0);
+        const currentBelow = isEcho
+          ? (prev.echoAutoAdjustBelowThresholdCount ?? 0)
+          : (prev.autoAdjustBelowThresholdCount ?? 0);
+        const next = applyAutoAdjustDirectionCountChange(currentAbove, currentBelow, 'below', n);
+        return isEcho
+          ? {
+              ...prev,
+              echoAutoAdjustBelowThresholdCount: next.below,
+              echoAutoAdjustAboveThresholdCount: next.above,
+            }
+          : {
+              ...prev,
+              autoAdjustBelowThresholdCount: next.below,
+              autoAdjustAboveThresholdCount: next.above,
+            };
+      }),
     ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
   });
 
@@ -94,13 +110,31 @@ function AutoAdjustProfileBlock({
     step: 1,
     fieldName: aboveField,
     onChange: (n) =>
-      setSettings((prev) =>
-        isEcho
-          ? { ...prev, echoAutoAdjustAboveThresholdCount: n }
-          : { ...prev, autoAdjustAboveThresholdCount: n },
-      ),
+      setSettings((prev) => {
+        const currentAbove = isEcho
+          ? (prev.echoAutoAdjustAboveThresholdCount ?? 0)
+          : (prev.autoAdjustAboveThresholdCount ?? 0);
+        const currentBelow = isEcho
+          ? (prev.echoAutoAdjustBelowThresholdCount ?? 0)
+          : (prev.autoAdjustBelowThresholdCount ?? 0);
+        const next = applyAutoAdjustDirectionCountChange(currentAbove, currentBelow, 'above', n);
+        return isEcho
+          ? {
+              ...prev,
+              echoAutoAdjustAboveThresholdCount: next.above,
+              echoAutoAdjustBelowThresholdCount: next.below,
+            }
+          : {
+              ...prev,
+              autoAdjustAboveThresholdCount: next.above,
+              autoAdjustBelowThresholdCount: next.below,
+            };
+      }),
     ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
   });
+
+  const decreaseDisabled = belowCount === 0;
+  const increaseDisabled = aboveCount === 0;
 
   return (
     <div
@@ -143,12 +177,42 @@ function AutoAdjustProfileBlock({
             <input {...thresholdInput.inputProps} className="w-full px-3 py-2 border border-gray-300 rounded" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">To decrease</label>
-            <input {...belowInput.inputProps} className="w-full px-3 py-2 border border-gray-300 rounded" />
+            <label
+              className={`block text-sm font-medium mb-1 ${
+                decreaseDisabled ? 'text-slate-400' : 'text-gray-700'
+              }`}
+              title={decreaseDisabled ? 'Disabled — level will not decrease' : undefined}
+            >
+              To decrease
+            </label>
+            <input
+              {...belowInput.inputProps}
+              className={`w-full px-3 py-2 border rounded ${
+                decreaseDisabled
+                  ? 'border-slate-200 bg-slate-100 text-slate-400'
+                  : 'border-gray-300'
+              }`}
+              aria-disabled={decreaseDisabled}
+            />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">To increase</label>
-            <input {...aboveInput.inputProps} className="w-full px-3 py-2 border border-gray-300 rounded" />
+            <label
+              className={`block text-sm font-medium mb-1 ${
+                increaseDisabled ? 'text-slate-400' : 'text-gray-700'
+              }`}
+              title={increaseDisabled ? 'Disabled — level will not increase' : undefined}
+            >
+              To increase
+            </label>
+            <input
+              {...aboveInput.inputProps}
+              className={`w-full px-3 py-2 border rounded ${
+                increaseDisabled
+                  ? 'border-slate-200 bg-slate-100 text-slate-400'
+                  : 'border-gray-300'
+              }`}
+              aria-disabled={increaseDisabled}
+            />
           </div>
         </div>
       )}
@@ -181,13 +245,16 @@ export function AutoLevelAdjustProfiles({
               count toward a level increase.
             </li>
             <li>
-              <span className="font-medium">To decrease</span>: Sessions below threshold before the
-              level drops (0 = first miss drops).
+              <span className="font-medium">To decrease</span>: How many sessions below threshold are
+              needed before the level drops by 1 (1 = after the first bad session). Set to 0 to
+              disable decreases.
             </li>
             <li>
-              <span className="font-medium">To increase</span>: Sessions at or above threshold before
-              the level rises (0 = first success rises).
+              <span className="font-medium">To increase</span>: How many sessions at or above
+              threshold are needed before the level rises by 1 (1 = after the first good session). Set
+              to 0 to disable increases.
             </li>
+            <li>At least one direction must stay enabled (0 cannot be set on both).</li>
             <li>
               <span className="font-medium">Error weight</span> (below): Shared — biases random
               practice toward letters you miss.

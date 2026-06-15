@@ -1,3 +1,8 @@
+import {
+  digitsUnlockedCount,
+  mixedModeUnlockCounts,
+  unlockedCharCountForLevel,
+} from './levelUnlock';
 import { LCWO_SEQUENCE } from './morseConstants';
 
 const DIGITS_SET = new Set<string>(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
@@ -34,24 +39,19 @@ const DIGITS_ASC: string[] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 export function computeCharPool(settings: CharPoolSettingsInput): string[] {
   const mode = settings.charSetMode || 'koch';
   if (mode === 'mixed') {
-    // Union of alphabet (Koch) pool and digits pool. In mixed we always use all unlocked letters (no Practice slice).
+    // Level L unlocks L+1 characters split between letters and digits (level 1 → 1 letter + 1 digit).
     const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
       ? settings.customSequence
       : LCWO_SEQUENCE;
-    const nUnlocked = Math.max(2, Math.min(settings.kochLevel + 1, sequence.length));
-    const kochPool = computeCharPool({
-      ...settings,
-      charSetMode: 'koch',
-      slidingWindowStart: 1,
-      slidingWindowEnd: nUnlocked,
-    });
-    const digitsCount = Math.max(1, Math.min(10, settings.digitsLevel ?? 10));
-    const digitsPool = DIGITS_ASC.slice(0, digitsCount);
+    const mixedLevel = settings.kochLevel || 1;
+    const { letters: letterCount, digits: digitCount } = mixedModeUnlockCounts(mixedLevel);
+    const kochPool = sequence.slice(0, Math.min(letterCount, sequence.length));
+    const digitsPool = DIGITS_ASC.slice(0, digitCount);
     const union = Array.from(new Set([...kochPool, ...digitsPool]));
     return union.length >= 2 ? union : (kochPool.length >= 2 ? kochPool : union);
   }
   if (mode === 'digits') {
-    const count = Math.max(1, Math.min(10, settings.digitsLevel || 10));
+    const count = digitsUnlockedCount(settings.digitsLevel || 1);
     const fullUnlocked = DIGITS_ASC.slice(0, count);
     const n = fullUnlocked.length;
     if (n === 0) return fullUnlocked;
@@ -76,7 +76,7 @@ export function computeCharPool(settings: CharPoolSettingsInput): string[] {
     : LCWO_SEQUENCE;
   // Level 1 = 2 characters, Level 2 = 3 characters, etc. (characters = level + 1)
   const level = settings.kochLevel || 1;
-  const charCount = Math.min(level + 1, sequence.length);
+  const charCount = Math.min(unlockedCharCountForLevel(level), sequence.length);
   const fullUnlocked = sequence.slice(0, Math.max(2, charCount));
   const n = fullUnlocked.length;
   if (n === 0) return fullUnlocked;
@@ -132,8 +132,10 @@ export function generateGroup(
   const fallbackSequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
     ? settings.customSequence
     : LCWO_SEQUENCE;
-  // Level 1 = 2 characters, Level 2 = 3 characters, etc. (characters = level + 1)
-  const charCount = Math.min((settings.kochLevel || 1) + 1, fallbackSequence.length);
+  const charCount = Math.min(
+    unlockedCharCountForLevel(settings.kochLevel || 1),
+    fallbackSequence.length,
+  );
   const safePool =
     Array.isArray(availableChars) && availableChars.length > 0
       ? availableChars

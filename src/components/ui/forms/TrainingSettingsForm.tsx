@@ -8,6 +8,11 @@ import {
   EXTRA_SPACING_MULTIPLIER_MIN,
   EXTRA_SPACING_SETTINGS_HELP,
 } from '@/lib/extraSpacing';
+import {
+  digitsUnlockedCount,
+  mixedModeUnlockCounts,
+  unlockedCharCountForLevel,
+} from '@/lib/levelUnlock';
 import { LCWO_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
 import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
 import { computeCharPool } from '@/lib/trainingUtils';
@@ -193,7 +198,14 @@ export function TrainingSettingsForm({
     max: kochLevelMax,
     step: 1,
     fieldName: 'kochLevel',
-    onChange: (n) => setSettings((prev) => ({ ...prev, kochLevel: n })),
+    onChange: (n) =>
+      setSettings((prev) => {
+        const charSetMode = prev.charSetMode ?? 'koch';
+        if (charSetMode === 'mixed') {
+          return { ...prev, kochLevel: n, digitsLevel: n };
+        }
+        return { ...prev, kochLevel: n };
+      }),
     ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
   });
 
@@ -202,7 +214,14 @@ export function TrainingSettingsForm({
     max: 10,
     step: 1,
     fieldName: 'digitsLevel',
-    onChange: (n) => setSettings((prev) => ({ ...prev, digitsLevel: n })),
+    onChange: (n) =>
+      setSettings((prev) => {
+        const charSetMode = prev.charSetMode ?? 'koch';
+        if (charSetMode === 'mixed') {
+          return { ...prev, digitsLevel: n, kochLevel: n };
+        }
+        return { ...prev, digitsLevel: n };
+      }),
     ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
   });
 
@@ -359,14 +378,13 @@ export function TrainingSettingsForm({
                   the range.
                 </li>
                 <li>
-                  <span className="font-medium">Digits</span>: Digits 0–9 by level. Level and
-                  Practice work like Alphabet.
+                  <span className="font-medium">Digits</span>: Digits 0–9 by level. Level 1 unlocks
+                  2 digits; each level adds one more (level + 1 characters).
                 </li>
                 <li>
-                  <span className="font-medium">Mixed</span>: Same alphabet preset and level as
-                  Alphabet (all unlocked letters; no Practice slice), plus a digits level. Pool is
-                  the union (each digit counted once). Letters % sets how often a drawn character is
-                  a letter vs a digit.
+                  <span className="font-medium">Mixed</span>: Level splits letters and digits from
+                  the same preset — level 1 is 1 letter + 1 digit, level 2 is 2 letters + 1 digit, and
+                  so on (level + 1 characters total). Letters % sets draw bias.
                 </li>
                 <li>
                   <span className="font-medium">Custom</span>: Pick your own set and order.
@@ -471,7 +489,7 @@ export function TrainingSettingsForm({
                   {((): JSX.Element => {
                     const nLetters = Math.max(
                       2,
-                      Math.min(settings.kochLevel + 1, currentSequence.length),
+                      Math.min(unlockedCharCountForLevel(settings.kochLevel), currentSequence.length),
                     );
                     const start = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, nLetters));
                     const end = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, nLetters));
@@ -567,8 +585,7 @@ export function TrainingSettingsForm({
               )}
               {charMode === 'digits' &&
                 ((): JSX.Element => {
-                  const maxDigits = 10;
-                  const nDigits = Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10));
+                  const nDigits = digitsUnlockedCount(settings.digitsLevel ?? 1);
                   const start = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, nDigits));
                   const end = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, nDigits));
                   const startIdx = Math.min(start, end);
@@ -604,10 +621,7 @@ export function TrainingSettingsForm({
                             value={practiceValue}
                             onChange={(e) => {
                               const v = e.target.value as 'all' | 'last3' | 'last5';
-                              const n = Math.max(
-                                1,
-                                Math.min(maxDigits, settings.digitsLevel ?? 10),
-                              );
+                              const n = digitsUnlockedCount(settings.digitsLevel ?? 1);
                               if (v === 'all')
                                 setSettings({
                                   ...settings,
@@ -643,11 +657,9 @@ export function TrainingSettingsForm({
                 })()}
               {charMode === 'mixed' &&
                 ((): JSX.Element => {
-                  const maxDigits = 10;
-                  const nLetters = Math.max(
-                    2,
-                    Math.min(settings.kochLevel + 1, currentSequence.length),
-                  );
+                  const mixedCounts = mixedModeUnlockCounts(settings.kochLevel);
+                  const nLetters = Math.min(mixedCounts.letters, currentSequence.length);
+                  const nDigits = mixedCounts.digits;
                   return (
                     <div className="space-y-3">
                       <div className="flex items-center gap-3">
@@ -719,27 +731,17 @@ export function TrainingSettingsForm({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Alphabet level
+                            Level
                           </label>
                           <input
                             {...kochLevelField.inputProps}
                             className="w-full px-3 py-2 border border-gray-300 rounded"
                           />
-                          <p className="text-xs text-gray-500 mt-1">{nLetters} letters in pool</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Digits level
-                          </label>
-                          <input
-                            {...digitsLevelField.inputProps}
-                            className="w-full px-3 py-2 border border-gray-300 rounded"
-                          />
                           <p className="text-xs text-gray-500 mt-1">
-                            {Math.max(1, Math.min(maxDigits, settings.digitsLevel ?? 10))} digits in
-                            pool (union with alphabet)
+                            {nLetters} letters + {nDigits} digits ({settings.kochLevel + 1} characters)
                           </p>
                         </div>
+                        <div className="hidden sm:block" aria-hidden="true" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">

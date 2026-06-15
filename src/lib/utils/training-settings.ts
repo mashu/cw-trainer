@@ -1,3 +1,4 @@
+import { normalizeAutoAdjustDirectionCounts } from '@/lib/autoAdjustCountSettings';
 import { trainingSettingsSchema } from '@/lib/validators';
 import type { TrainingSettings } from '@/types';
 
@@ -119,6 +120,30 @@ const repairTrainingSettingsCandidate = (value: unknown): Record<string, unknown
     if (repaired['chaseStartFallMs'] < repaired['chaseMinFallMs']) {
       repaired['chaseStartFallMs'] = repaired['chaseMinFallMs'];
     }
+  }
+
+  if (
+    isFiniteNumber(repaired['autoAdjustAboveThresholdCount']) &&
+    isFiniteNumber(repaired['autoAdjustBelowThresholdCount'])
+  ) {
+    const normalized = normalizeAutoAdjustDirectionCounts(
+      repaired['autoAdjustAboveThresholdCount'],
+      repaired['autoAdjustBelowThresholdCount'],
+    );
+    repaired['autoAdjustAboveThresholdCount'] = normalized.above;
+    repaired['autoAdjustBelowThresholdCount'] = normalized.below;
+  }
+
+  if (
+    isFiniteNumber(repaired['echoAutoAdjustAboveThresholdCount']) &&
+    isFiniteNumber(repaired['echoAutoAdjustBelowThresholdCount'])
+  ) {
+    const normalized = normalizeAutoAdjustDirectionCounts(
+      repaired['echoAutoAdjustAboveThresholdCount'],
+      repaired['echoAutoAdjustBelowThresholdCount'],
+    );
+    repaired['echoAutoAdjustAboveThresholdCount'] = normalized.above;
+    repaired['echoAutoAdjustBelowThresholdCount'] = normalized.below;
   }
 
   return repaired;
