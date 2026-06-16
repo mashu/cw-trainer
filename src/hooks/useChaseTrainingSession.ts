@@ -17,7 +17,8 @@ import {
   type ChaseSessionResultSummary,
   type ChaseTargetSnapshot,
 } from '@/lib/training/chaseSessionMachine';
-import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
+import { generateTrainingGroup, updateSamplingStateFromAnswer } from '@/lib/trainingSessionGroups';
+import type { CharSamplingState } from '@/lib/trainingSessionGroups';
 import type { SessionResultInput } from '@/lib/validators';
 import { useAppStore } from '@/store';
 import type { SessionResult, TrainingSettings } from '@/types';
@@ -266,6 +267,7 @@ export function useChaseTrainingSession({
     let nextBestStreak = 0;
     let nextCorrectInLevel = 0;
     let targetIndex = 0;
+    let samplingState: CharSamplingState | null = null;
 
     let sessionEndedDueToIssue = false;
 
@@ -277,7 +279,13 @@ export function useChaseTrainingSession({
         audio.sessionIdRef.current === mySession
       ) {
         const levelSettings = computeChaseLevelSettings(settingsRef.current, nextLevel);
-        const group = generateTrainingGroup(levelSettings, sessionsRef.current);
+        const generated = generateTrainingGroup(
+          levelSettings,
+          sessionsRef.current,
+          samplingState ?? undefined,
+        );
+        samplingState = generated.state;
+        const group = generated.group;
         const currentSettings = settingsRef.current;
         const groupsPerLevel = currentSettings.chaseGroupsPerLevel;
         const fallMs = computeChaseFallMs({
@@ -343,6 +351,9 @@ export function useChaseTrainingSession({
 
         sentGroups.push(group);
         answers.push(received);
+        if (samplingState) {
+          samplingState = updateSamplingStateFromAnswer(samplingState, group, received);
+        }
         timings.push({
           timeToCompleteMs: responseMs,
           ...(group.length > 0 ? { perCharMs: Math.round(responseMs / group.length) } : {}),

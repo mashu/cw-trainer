@@ -256,8 +256,8 @@ export function AutoLevelAdjustProfiles({
             </li>
             <li>At least one direction must stay enabled (0 cannot be set on both).</li>
             <li>
-              <span className="font-medium">Error weight</span> (below): Shared — biases random
-              practice toward letters you miss.
+              <span className="font-medium">Error weight</span> (below): Shared — Bayesian
+              sampling boosts characters with higher posterior P(error).
             </li>
           </ul>
         </div>

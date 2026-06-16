@@ -92,17 +92,23 @@ export function computeCharPool(settings: CharPoolSettingsInput): string[] {
  * Pick a random element from `pool` proportional to `weights`.
  * If weights is empty/missing or pool has one element, falls back to uniform.
  */
-export function weightedRandomPick(pool: readonly string[], weights: readonly number[]): string {
+export function weightedRandomPick(
+  pool: readonly string[],
+  weights: readonly number[],
+  random: () => number = Math.random,
+): string {
   if (pool.length === 0) return '';
-  if (pool.length === 1 || weights.length === 0) return pool[Math.floor(Math.random() * pool.length)] ?? '';
+  if (pool.length === 1 || weights.length === 0) {
+    return pool[Math.floor(random() * pool.length)] ?? '';
+  }
 
   let totalWeight = 0;
   for (let i = 0; i < pool.length; i++) {
     totalWeight += weights[i] ?? 1;
   }
-  if (totalWeight <= 0) return pool[Math.floor(Math.random() * pool.length)] ?? '';
+  if (totalWeight <= 0) return pool[Math.floor(random() * pool.length)] ?? '';
 
-  let r = Math.random() * totalWeight;
+  let r = random() * totalWeight;
   for (let i = 0; i < pool.length; i++) {
     r -= weights[i] ?? 1;
     if (r <= 0) return pool[i] ?? '';

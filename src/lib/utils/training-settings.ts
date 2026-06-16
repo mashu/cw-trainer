@@ -672,6 +672,13 @@ export const normalizeTrainingSettings = (
       : (fallback.lockInputDuringGroupPlayback ?? true);
   if (typeof candidate['errorWeightStrength'] === 'number')
     partialResult.errorWeightStrength = candidate['errorWeightStrength'];
+  if (typeof candidate['charSamplingCoverageStrength'] === 'number') {
+    partialResult.charSamplingCoverageStrength = candidate['charSamplingCoverageStrength'];
+  }
+  partialResult.charSamplingThompson =
+    typeof candidate['charSamplingThompson'] === 'boolean'
+      ? candidate['charSamplingThompson']
+      : (fallback.charSamplingThompson ?? false);
   partialResult.playerAnnounceLetters =
     typeof candidate['playerAnnounceLetters'] === 'boolean'
       ? candidate['playerAnnounceLetters']

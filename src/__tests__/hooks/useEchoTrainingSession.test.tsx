@@ -8,7 +8,11 @@ jest.mock('@/lib/morseAudio', () => ({
 }));
 
 jest.mock('@/lib/trainingSessionGroups', () => ({
-  generateTrainingGroup: jest.fn(() => 'A'),
+  generateTrainingGroup: jest.fn(() => ({
+    group: 'A',
+    state: { beliefs: {}, sessionSampleCounts: {} },
+  })),
+  updateSamplingStateFromAnswer: jest.fn((state) => state),
 }));
 
 import { renderHook, act, waitFor, type RenderHookResult } from '@testing-library/react';
@@ -27,6 +31,11 @@ import type { TrainingSettings } from '@/types';
 const mockGenerateTrainingGroup = generateTrainingGroup as jest.MockedFunction<
   typeof generateTrainingGroup
 >;
+
+const mockGeneratedGroup = (group: string): ReturnType<typeof generateTrainingGroup> => ({
+  group,
+  state: { beliefs: {}, sessionSampleCounts: {} },
+});
 
 const mockUseTrainingAudio = useTrainingAudio as jest.MockedFunction<typeof useTrainingAudio>;
 
@@ -136,7 +145,7 @@ describe('useEchoTrainingSession', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
-    mockGenerateTrainingGroup.mockReturnValue('A');
+    mockGenerateTrainingGroup.mockReturnValue(mockGeneratedGroup('A'));
     mockUseTrainingAudio.mockReturnValue(createMockAudio());
     (mockTrainingSettingsService.getSettings as jest.Mock).mockResolvedValue(echoSettings);
     (mockSessionService.listSessions as jest.Mock).mockResolvedValue([]);
@@ -459,7 +468,7 @@ describe('useEchoTrainingSession', () => {
   });
 
   it('completes two groups when numGroups is 2', async () => {
-    mockGenerateTrainingGroup.mockReturnValue('E');
+    mockGenerateTrainingGroup.mockReturnValue(mockGeneratedGroup('E'));
     const twoGroupSettings: TrainingSettings = { ...echoSettings, numGroups: 2 };
     const { result } = renderHook(
       () =>
@@ -501,7 +510,7 @@ describe('useEchoTrainingSession', () => {
 
   it('applies digits-mode echo auto-level adjust', async () => {
     localStorage.clear();
-    mockGenerateTrainingGroup.mockReturnValue('5');
+    mockGenerateTrainingGroup.mockReturnValue(mockGeneratedGroup('5'));
     const digitsSettings: TrainingSettings = {
       ...echoSettings,
       charSetMode: 'digits',

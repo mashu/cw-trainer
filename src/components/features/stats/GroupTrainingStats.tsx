@@ -36,6 +36,7 @@ import { formatSessionLevelLabel } from '@/lib/sessionLevelSnapshot';
 
 import { AchievementTrophyCase } from './AchievementTrophyCase';
 import { BigramHeatmapView } from './BigramHeatmap';
+import { CharSamplingPanel } from './CharSamplingPanel';
 import { Leaderboard } from './Leaderboard';
 
 type BrushRange = {
@@ -43,7 +44,15 @@ type BrushRange = {
   readonly endIndex?: number;
 };
 
-type StatsTab = 'overview' | 'progress' | 'letters' | 'mistakes' | 'sessions' | 'achievements' | 'leaderboard';
+type StatsTab =
+  | 'overview'
+  | 'progress'
+  | 'letters'
+  | 'sampling'
+  | 'mistakes'
+  | 'sessions'
+  | 'achievements'
+  | 'leaderboard';
 
 const STATS_TABS: ReadonlyArray<{
   readonly id: StatsTab;
@@ -72,6 +81,13 @@ const STATS_TABS: ReadonlyArray<{
     description: 'Character mastery',
     icon: '🔤',
     activeClass: 'from-violet-500 to-fuchsia-600',
+  },
+  {
+    id: 'sampling',
+    label: 'Sampling',
+    description: 'Bayesian draw weights',
+    icon: '🎲',
+    activeClass: 'from-indigo-500 to-sky-600',
   },
   {
     id: 'mistakes',
@@ -825,7 +841,11 @@ export function GroupTrainingStats({
               <div className="rounded-2xl border border-slate-200 bg-white p-3">
                 <div className="mb-3">
                   <h3 className="text-sm font-semibold text-slate-700">Letter Performance Dashboard</h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 mt-1">
+                    Accuracy % — frequentist performance across all saved sessions (group, echo,
+                    chase). Not the same as P(error) on the Sampling tab.
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>Mastered
                     <span className="inline-block w-2 h-2 rounded-full bg-amber-500 ml-3 mr-1"></span>Learning
                     <span className="inline-block w-2 h-2 rounded-full bg-rose-500 ml-3 mr-1"></span>Needs Work
@@ -930,6 +950,16 @@ export function GroupTrainingStats({
                 ) : <p className="text-sm text-slate-500">Select a session to view per-letter stats.</p>}
               </div>
             </div>
+          </div>
+        )}
+
+        {tab === 'sampling' && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              P(error) is Bayesian (sampling); Letters tab is frequentist accuracy (performance).
+              Reflects saved settings and all group sessions.
+            </p>
+            <CharSamplingPanel settings={trainingSettings} sessions={groupSessions} />
           </div>
         )}
 

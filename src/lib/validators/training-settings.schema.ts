@@ -204,6 +204,8 @@ export const trainingSettingsSchema = z
       .max(CHASE_SPEEDUP_MS_MAX)
       .default(28),
     errorWeightStrength: z.number().min(0).max(5).default(3),
+    charSamplingCoverageStrength: z.number().min(0).max(3).default(1),
+    charSamplingThompson: z.boolean().default(false),
     playerAnnounceLetters: z.boolean().default(false),
     playerLetterRepeatCount: z
       .number()

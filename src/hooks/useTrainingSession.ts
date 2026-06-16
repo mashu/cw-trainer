@@ -19,7 +19,8 @@ import type {
   GroupTrainingRuntimeState,
 } from '@/lib/training/groupSessionMachine';
 import { logTraining } from '@/lib/training/trainingLog';
-import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
+import { generateTrainingGroup, updateSamplingStateFromAnswer } from '@/lib/trainingSessionGroups';
+import type { CharSamplingState } from '@/lib/trainingSessionGroups';
 import { computeTrainingGroupGapMs } from '@/lib/trainingSessionPlayback';
 import type { SessionResultInput } from '@/lib/validators';
 import { useAppStore } from '@/store';
@@ -173,6 +174,7 @@ export function useTrainingSession({
     Record<number, ((result: { timedOut: boolean }) => void) | null>
   >({});
   const confirmTimeoutRef = useRef<Record<number, TimeoutId | undefined>>({});
+  const charSamplingStateRef = useRef<CharSamplingState | null>(null);
 
   // Authoritative invariant: training audio may only exist while the store runtime is in
   // an active session. The store is the single source of truth — if it leaves the session
@@ -321,21 +323,37 @@ export function useTrainingSession({
       return;
     }
 
-    const groupTimings = sentSource.map((_sent, idx) => {
+    const completed = sentSource
+      .map((sent, idx) => ({
+        sent,
+        answer: (answers[idx] || '').trim().toUpperCase(),
+        idx,
+      }))
+      .filter((entry) => entry.sent.length > 0);
+    if (completed.length === 0) {
+      resultsProcessedRef.current = false;
+      return;
+    }
+
+    const filteredSent = completed.map((entry) => entry.sent);
+    const filteredAnswers = completed.map((entry) => entry.answer);
+
+    const groupTimings = completed.map((entry) => {
+      const idx = entry.idx;
       const endAt = groupEndAtRef.current[idx] || 0;
       const rawAnsAt = groupAnswerAtRef.current[idx] || 0;
       const timeoutMs = Math.max(0, currentSettings.groupTimeout || 0) * 1000;
       const fallbackAnsAt = endAt > 0 && timeoutMs > 0 ? endAt + timeoutMs : 0;
       const ansAt = rawAnsAt > 0 ? rawAnsAt : fallbackAnsAt;
       const delta = Math.max(0, ansAt - endAt);
-      const sent = sentSource[idx] ?? '';
+      const sent = entry.sent;
       const perChar = sent.length > 0 ? Math.round(delta / sent.length) : 0;
       return { timeToCompleteMs: Number.isFinite(delta) ? delta : 0, perCharMs: perChar };
     });
 
     const result = buildSessionResult({
-      sentGroups: sentSource,
-      answers,
+      sentGroups: filteredSent,
+      answers: filteredAnswers,
       startedAt: startedAtRef.current || Date.now(),
       groupTimings,
       levelSnapshot: sessionLevelSnapshotFromSettings(currentSettings),
@@ -345,8 +363,8 @@ export function useTrainingSession({
       accuracy: result.accuracy,
       groups: result.groups.map((g, i) => ({
         sent: g.sent,
-        received: answers[i] || '',
-        correct: g.sent === answers[i],
+        received: filteredAnswers[i] || '',
+        correct: g.sent === filteredAnswers[i],
       })),
       avgResponseMs: result.avgResponseMs,
       score: result.score,
@@ -432,6 +450,44 @@ export function useTrainingSession({
 
   // ── Public actions ───────────────────────────────────────────────────
 
+  const syncRuntimeGroups = (groups: string[]): void => {
+    activeSentGroupsRef.current = groups;
+    setRuntimeGroups(groups);
+  };
+
+  const generateGroupAtIndex = (index: number, groups: string[]): string => {
+    const existing = groups[index];
+    if (existing) {
+      return existing;
+    }
+    const state = charSamplingStateRef.current;
+    if (!state) {
+      return '';
+    }
+    const generated = generateTrainingGroup(settingsRef.current, historicalSessionsRef.current, state);
+    charSamplingStateRef.current = generated.state;
+    const nextGroups = [...groups];
+    while (nextGroups.length <= index) {
+      nextGroups.push('');
+    }
+    nextGroups[index] = generated.group;
+    syncRuntimeGroups(nextGroups);
+    return generated.group;
+  };
+
+  const registerGroupAnswerForSampling = (index: number, received: string): void => {
+    const state = charSamplingStateRef.current;
+    const sent = activeSentGroupsRef.current[index];
+    if (!state || !sent) {
+      return;
+    }
+    charSamplingStateRef.current = updateSamplingStateFromAnswer(state, sent, received);
+    const nextIndex = index + 1;
+    if (nextIndex < settingsRef.current.numGroups) {
+      generateGroupAtIndex(nextIndex, activeSentGroupsRef.current);
+    }
+  };
+
   const startTraining = async (): Promise<void> => {
     if (isTrainingRef.current) {
       logTraining('start:ignored-already-running');
@@ -472,12 +528,13 @@ export function useTrainingSession({
       groupEndAtRef.current = [];
       groupAnswerAtRef.current = [];
 
-      const groups: string[] = [];
-      for (let i = 0; i < settings.numGroups; i++) {
-        groups.push(generateTrainingGroup(settings, historicalSessions));
-      }
-      setRuntimeGroups(groups);
-      activeSentGroupsRef.current = groups;
+      charSamplingStateRef.current = null;
+      const initialSampling = generateTrainingGroup(settings, historicalSessions);
+      charSamplingStateRef.current = initialSampling.state;
+      const groups = Array.from({ length: settings.numGroups }, (_, index) =>
+        index === 0 ? initialSampling.group : '',
+      );
+      syncRuntimeGroups(groups);
 
       let sessionEndedDueToPlaybackIssue = false;
 
@@ -505,7 +562,7 @@ export function useTrainingSession({
         const startTs = Date.now();
         groupStartAtRef.current[i] = startTs;
         recordRuntimeGroupStart(i, startTs);
-        const group = groups[i];
+        const group = generateGroupAtIndex(i, activeSentGroupsRef.current);
         if (!group) continue;
         setRuntimeAudioStatus('running');
         const playback = await audio.playMorse(group, mySession);
@@ -547,7 +604,7 @@ export function useTrainingSession({
         // into — or cut the audio of — the live session.
         if (audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession) break;
         if (timedOut && !confirmedGroupsRef.current[i]) {
-          autoConfirmOnTimeout(i, groups);
+          autoConfirmOnTimeout(i);
         }
         try {
           audio.stopCurrentPlayback();
@@ -656,6 +713,7 @@ export function useTrainingSession({
     const answeredAt = Date.now();
     if (!groupAnswerAtRef.current[index]) groupAnswerAtRef.current[index] = answeredAt;
     confirmRuntimeAnswer(index, normalized, answeredAt);
+    registerGroupAnswerForSampling(index, normalized);
 
     const resolver = groupCompletionResolversRef.current[index];
     if (resolver) {
@@ -758,7 +816,7 @@ export function useTrainingSession({
     });
   }
 
-  function autoConfirmOnTimeout(i: number, groups: string[]): void {
+  function autoConfirmOnTimeout(i: number): void {
     if (confirmTimeoutRef.current[i] !== undefined) {
       try {
         window.clearTimeout(confirmTimeoutRef.current[i]!);
@@ -774,8 +832,9 @@ export function useTrainingSession({
     const nextConfirmed = { ...confirmedGroupsRef.current, [i]: true };
     confirmedGroupsRef.current = nextConfirmed;
     confirmRuntimeAnswer(i, currentValue, groupAnswerAtRef.current[i] || Date.now());
+    registerGroupAnswerForSampling(i, currentValue);
     const nextIndex = i + 1;
-    if (nextIndex < groups.length) {
+    if (nextIndex < activeSentGroupsRef.current.length) {
       setRuntimeFocusedGroup(nextIndex);
       focusInput(nextIndex);
     }

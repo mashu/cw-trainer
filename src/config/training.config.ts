@@ -63,6 +63,8 @@ export const DEFAULT_TRAINING_SETTINGS: TrainingSettings = {
   chaseLevelSpeedupMs: 430,
   chaseGroupSpeedupMs: 28,
   errorWeightStrength: 3,
+  charSamplingCoverageStrength: 1,
+  charSamplingThompson: false,
   playerAnnounceLetters: false,
   playerLetterRepeatCount: 1,
   playerRandomizeLetters: false,

@@ -1,7 +1,11 @@
 jest.mock('@/hooks/useTrainingAudio');
 
 jest.mock('@/lib/trainingSessionGroups', () => ({
-  generateTrainingGroup: jest.fn(() => 'AB'),
+  generateTrainingGroup: jest.fn(() => ({
+    group: 'AB',
+    state: { beliefs: {}, sessionSampleCounts: {} },
+  })),
+  updateSamplingStateFromAnswer: jest.fn((state) => state),
 }));
 
 import { renderHook, act, waitFor, type RenderHookResult } from '@testing-library/react';

@@ -23,7 +23,8 @@ import {
   type EchoCharacterState,
   type EchoSessionResultSummary,
 } from '@/lib/training/echoSessionMachine';
-import { generateTrainingGroup } from '@/lib/trainingSessionGroups';
+import { generateTrainingGroup, updateSamplingStateFromAnswer } from '@/lib/trainingSessionGroups';
+import type { CharSamplingState } from '@/lib/trainingSessionGroups';
 import { computeTrainingGroupGapMs, pickTrainingToneHz } from '@/lib/trainingSessionPlayback';
 import type { SessionResultInput } from '@/lib/validators';
 import { useAppStore } from '@/store';
@@ -562,18 +563,19 @@ export function useEchoTrainingSession({
       beginRuntimeSession({ sessionId: mySession, startedAt: startedAtRef.current });
       setRuntimeStatus('running');
 
-      const groups = Array.from({ length: settings.numGroups }, () =>
-        generateTrainingGroup(settings, historicalSessions),
-      );
-      setRuntimeGroups(groups);
-
+      let samplingState: CharSamplingState | null = null;
+      const runtimeGroups = Array.from({ length: settings.numGroups }, () => '');
       const receivedGroups: string[] = [];
       const groupResponseTimes: number[] = [];
       let nextCorrect = 0;
       let nextIncorrect = 0;
 
-      for (let gi = 0; gi < groups.length; gi += 1) {
-        const group = groups[gi];
+      for (let gi = 0; gi < settings.numGroups; gi += 1) {
+        const generated = generateTrainingGroup(settings, historicalSessions, samplingState ?? undefined);
+        samplingState = generated.state;
+        const group = generated.group;
+        runtimeGroups[gi] = group;
+        setRuntimeGroups([...runtimeGroups]);
         if (!group || audio.trainingAbortRef.current || audio.sessionIdRef.current !== mySession)
           break;
         let groupProgress: EchoCharacterProgress[] = group.split('').map(() => ({
@@ -620,6 +622,13 @@ export function useEchoTrainingSession({
           nextCorrect += success ? 1 : 0;
           nextIncorrect += success ? 0 : 1;
           setRuntimeScores(nextCorrect, nextIncorrect);
+          if (samplingState) {
+            samplingState = updateSamplingStateFromAnswer(
+              samplingState,
+              target,
+              normalizedReceived,
+            );
+          }
           groupProgress = groupProgress.map((item, idx) =>
             idx === ci
               ? { revealedCharacter: target, status: success ? ('correct' as const) : ('error' as const) }
@@ -648,7 +657,7 @@ export function useEchoTrainingSession({
 
       if (willProcessResults) {
         await processResults(
-          groups,
+          runtimeGroups.filter((group) => group.length > 0),
           receivedGroups,
           groupResponseTimes,
           nextCorrect,

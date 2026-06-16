@@ -92,6 +92,8 @@ export interface FormTrainingSettings {
   chaseLevelSpeedupMs?: number;
   chaseGroupSpeedupMs?: number;
   errorWeightStrength?: number;
+  charSamplingCoverageStrength?: number;
+  charSamplingThompson?: boolean;
   playerAnnounceLetters?: boolean;
   playerLetterRepeatCount?: number;
   playerRandomizeLetters?: boolean;
@@ -1230,7 +1232,52 @@ export function TrainingSettingsForm({
                 }}
                 className="w-full accent-emerald-600"
               />
+              <p className="mt-1 text-xs text-slate-500">
+                Scales how much posterior P(error) boosts each character&apos;s sampling weight.
+              </p>
             </div>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Coverage balance ({settings.charSamplingCoverageStrength ?? 1})
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={3}
+                step={0.5}
+                value={settings.charSamplingCoverageStrength ?? 1}
+                onChange={(event) => {
+                  const numValue = parseFloat(event.target.value);
+                  if (!isNaN(numValue)) {
+                    setSettings({
+                      ...settings,
+                      charSamplingCoverageStrength: numValue,
+                    });
+                  }
+                }}
+                className="w-full accent-sky-600"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Gives under-sampled characters extra weight within a session (0 = off).
+              </p>
+            </div>
+            <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={settings.charSamplingThompson ?? false}
+                onChange={(event) => {
+                  setSettings({
+                    ...settings,
+                    charSamplingThompson: event.target.checked,
+                  });
+                }}
+                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Thompson sampling (draw P(error) from Beta before each group)
+            </label>
+            <p className="mt-2 text-xs text-slate-500">
+              Charts: Group Training → Stats → Sampling tab.
+            </p>
           </div>
         </div>
 

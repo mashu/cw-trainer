@@ -4,6 +4,7 @@ import React from 'react';
 
 import { TrainingSettingsForm, type FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 
+
 // Mock Recharts components
 jest.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }): JSX.Element => <div>{children}</div>,

@@ -126,11 +126,18 @@ export function setGroupTrainingGroups(
   groups: readonly string[],
 ): GroupTrainingRuntimeState {
   if (!isActiveSnapshot(state)) return state;
+  const nextInput = [...state.userInput];
+  while (nextInput.length < groups.length) {
+    nextInput.push('');
+  }
+  if (nextInput.length > groups.length) {
+    nextInput.length = groups.length;
+  }
   return {
     ...state,
     groups: [...groups],
-    userInput: Array.from({ length: groups.length }, () => ''),
-    confirmedGroups: {},
+    userInput: nextInput,
+    confirmedGroups: { ...state.confirmedGroups },
   };
 }
 

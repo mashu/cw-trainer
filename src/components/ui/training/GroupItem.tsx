@@ -50,7 +50,10 @@ export function GroupItem({
 }: GroupItemProps): JSX.Element {
   const normalizedValue = value.trim().toUpperCase();
   const groupCorrect =
-    confirmed && normalizedValue.length === groupText.length && normalizedValue === groupText;
+    confirmed &&
+    groupText.length > 0 &&
+    normalizedValue.length === groupText.length &&
+    normalizedValue === groupText;
   const inputDisabled = disabled;
   const placeholder = inputLocked
     ? 'Listening...'

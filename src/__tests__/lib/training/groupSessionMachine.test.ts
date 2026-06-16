@@ -25,6 +25,22 @@ describe('groupSessionMachine', () => {
     expect(confirmed.status).toBe('waitingForAnswer');
   });
 
+  it('preserves answers when groups are updated lazily', () => {
+    const started = beginGroupTrainingSession({ sessionId: 1, startedAt: 100 });
+    const firstGroup = setGroupTrainingGroups(started, ['KM', '']);
+    const waiting = transitionGroupTrainingStatus(firstGroup, 'waitingForAnswer');
+    const withInput = updateGroupTrainingInput(waiting, 0, 'KM');
+    const confirmed = confirmGroupTrainingAnswer(withInput, 0, 'KM', 150);
+    const withNextGroup = setGroupTrainingGroups(confirmed, ['KM', 'MK']);
+
+    expect(withNextGroup.status).not.toBe('idle');
+    expect(withNextGroup.status).not.toBe('results');
+    if (withNextGroup.status === 'idle' || withNextGroup.status === 'results') return;
+    expect(withNextGroup.userInput[0]).toBe('KM');
+    expect(withNextGroup.confirmedGroups[0]).toBe(true);
+    expect(withNextGroup.groups[1]).toBe('MK');
+  });
+
   it('only cancel or completion clears the active runtime invariant', () => {
     const started = beginGroupTrainingSession({ sessionId: 1, startedAt: 100 });
     const failed = transitionGroupTrainingStatus(started, 'failed', {

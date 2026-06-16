@@ -1,7 +1,49 @@
+import {
+  charSamplingConfigFromSettings,
+  createInitialSamplingState,
+  sampleTrainingGroup,
+  type CharSamplingState,
+} from '@/lib/training/charSampling';
+import { computeCharPool, type TrainingSettingsLite } from '@/lib/trainingUtils';
 import type { SessionResult, TrainingSettings } from '@/types';
 
-import { generateGroup as externalGenerateGroup } from './trainingUtils';
+export type GenerateTrainingGroupResult = {
+  readonly group: string;
+  readonly state: CharSamplingState;
+};
 
+function toPoolSettings(settings: TrainingSettings): TrainingSettingsLite {
+  const { customSet, customSequence, ...rest } = settings;
+  return {
+    kochLevel: rest.kochLevel,
+    minGroupSize: rest.minGroupSize,
+    maxGroupSize: rest.maxGroupSize,
+    charSetMode: rest.charSetMode ?? 'koch',
+    ...(rest.digitsLevel !== undefined ? { digitsLevel: rest.digitsLevel } : {}),
+    ...(rest.charSetMode === 'mixed'
+      ? { mixedLettersPercent: rest.mixedLettersPercent ?? 70 }
+      : {}),
+    ...(customSet.length > 0 ? { customSet: [...customSet] } : {}),
+    ...(customSequence && customSequence.length > 0
+      ? { customSequence: [...customSequence] }
+      : {}),
+    ...(rest.slidingWindowStart !== undefined
+      ? { slidingWindowStart: rest.slidingWindowStart }
+      : {}),
+    ...(rest.slidingWindowEnd !== undefined
+      ? { slidingWindowEnd: rest.slidingWindowEnd }
+      : {}),
+  };
+}
+
+function randomGroupSize(settings: Pick<TrainingSettings, 'minGroupSize' | 'maxGroupSize'>): number {
+  const span = settings.maxGroupSize - settings.minGroupSize + 1;
+  return Math.floor(Math.random() * span) + settings.minGroupSize;
+}
+
+/**
+ * @deprecated Use {@link buildCharSamplingSnapshot} weights instead. Kept for transitional tests.
+ */
 export function computeSessionCharWeights(
   settings: Pick<TrainingSettings, 'errorWeightStrength'>,
   historicalSessions: readonly SessionResult[],
@@ -39,31 +81,15 @@ export function computeSessionCharWeights(
 export function generateTrainingGroup(
   settings: TrainingSettings,
   historicalSessions: readonly SessionResult[],
-): string {
-  const { customSet, customSequence, ...rest } = settings;
-  const charWeights = computeSessionCharWeights(settings, historicalSessions);
+  samplingState?: CharSamplingState,
+): GenerateTrainingGroupResult {
+  const state = samplingState ?? createInitialSamplingState(historicalSessions);
+  const pool = computeCharPool(toPoolSettings(settings));
+  const groupSize = randomGroupSize(settings);
+  const config = charSamplingConfigFromSettings(settings);
 
-  return externalGenerateGroup(
-    {
-      kochLevel: rest.kochLevel,
-      minGroupSize: rest.minGroupSize,
-      maxGroupSize: rest.maxGroupSize,
-      charSetMode: rest.charSetMode ?? 'koch',
-      ...(rest.digitsLevel !== undefined ? { digitsLevel: rest.digitsLevel } : {}),
-      ...(rest.charSetMode === 'mixed'
-        ? { mixedLettersPercent: rest.mixedLettersPercent ?? 70 }
-        : {}),
-      ...(customSet && customSet.length > 0 ? { customSet: [...customSet] } : {}),
-      ...(customSequence && customSequence.length > 0
-        ? { customSequence: [...customSequence] }
-        : {}),
-      ...(rest.slidingWindowStart !== undefined
-        ? { slidingWindowStart: rest.slidingWindowStart }
-        : {}),
-      ...(rest.slidingWindowEnd !== undefined
-        ? { slidingWindowEnd: rest.slidingWindowEnd }
-        : {}),
-    },
-    charWeights,
-  );
+  return sampleTrainingGroup(pool, groupSize, state, config);
 }
+
+export { createInitialSamplingState, updateSamplingStateFromAnswer } from '@/lib/training/charSampling';
+export type { CharSamplingState } from '@/lib/training/charSampling';

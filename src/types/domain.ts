@@ -194,6 +194,10 @@ export interface TrainingSettings {
   /** Chase-only: milliseconds removed from fall time for each completed Chase target. */
   readonly chaseGroupSpeedupMs: number;
   readonly errorWeightStrength: number;
+  /** Biases sampling toward under-practiced characters within a session (0 = off). */
+  readonly charSamplingCoverageStrength?: number;
+  /** When true, draw per-character error rates from Beta posteriors before each group. */
+  readonly charSamplingThompson?: boolean;
   /** Player-only: speak each character after its Morse repeats. */
   readonly playerAnnounceLetters?: boolean;
   /** Player-only: Morse repeats for one character before speech. */
