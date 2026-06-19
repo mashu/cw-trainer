@@ -74,6 +74,7 @@ export const trainingSettingsSchema = z
       .max(MIXED_LETTERS_PERCENT_MAX)
       .optional()
       .default(70),
+    mixedAutoLevelNextAxis: z.enum(['letters', 'digits']).optional().default('letters'),
     customSet: z.array(z.string().min(1)).max(64).optional().default([]),
     customSequence: z.array(z.string().min(1)).optional(),
     slidingWindowStart: z

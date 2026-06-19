@@ -82,8 +82,16 @@ export function AutoLevelAdjustProgressCard({
     belowTarget,
     aboveDisabled,
     belowDisabled,
-    adjustsBothLevels,
+    alternatingMixedLevels,
+    nextMixedAxis,
   } = progress;
+
+  const mixedHint =
+    alternatingMixedLevels && nextMixedAxis !== undefined
+      ? `Alternates letter/digit — next: ${nextMixedAxis === 'letters' ? 'letter' : 'digit'}`
+      : alternatingMixedLevels
+        ? 'Alternates letter/digit level'
+        : 'Resets on level change';
 
   return (
     <section
@@ -117,7 +125,7 @@ export function AutoLevelAdjustProgressCard({
         />
       </div>
       <p className="mt-1.5 text-[10px] text-slate-400 leading-snug">
-        {adjustsBothLevels ? 'Letters & digits' : 'Resets on level change'}
+        {mixedHint}
       </p>
     </section>
   );

@@ -34,7 +34,8 @@ describe('chase progression', () => {
   it('unlocks more Koch characters as Chase levels increase', () => {
     const settings = computeChaseLevelSettings(DEFAULT_TRAINING_SETTINGS, 4);
 
-    expect(settings.kochLevel).toBe(DEFAULT_TRAINING_SETTINGS.kochLevel + 3);
+    expect(settings.kochLevel).toBe(DEFAULT_TRAINING_SETTINGS.kochLevel + 2);
+    expect(settings.digitsLevel).toBe(DEFAULT_TRAINING_SETTINGS.digitsLevel + 1);
   });
 
   it('keeps Chase character level fixed when Chase auto-level is disabled', () => {

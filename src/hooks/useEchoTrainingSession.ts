@@ -502,6 +502,7 @@ export function useEchoTrainingSession({
             ? {
                 pairedDigitsLevel: currentSettings.digitsLevel ?? 10,
                 maxDigitsLevel: MAX_DIGITS_LEVEL,
+                mixedAutoLevelNextAxis: currentSettings.mixedAutoLevelNextAxis ?? 'letters',
               }
             : {}),
         });
@@ -516,6 +517,9 @@ export function useEchoTrainingSession({
               ...prev,
               kochLevel: adjustment.nextLevel,
               digitsLevel: adjustment.nextDigitsLevel ?? prev.digitsLevel,
+              ...(adjustment.nextMixedAutoLevelAxis !== undefined
+                ? { mixedAutoLevelNextAxis: adjustment.nextMixedAutoLevelAxis }
+                : {}),
             }));
           } else {
             currentSetTrainingSettingsState((prev) => ({

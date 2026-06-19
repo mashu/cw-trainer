@@ -6,7 +6,7 @@ import type { AutoLevelAdjustProgressView } from '@/lib/kochAutoAdjust';
 const baseProgress: AutoLevelAdjustProgressView = {
   levelLabel: 'Koch level 4',
   currentLevel: 4,
-  adjustsBothLevels: false,
+  alternatingMixedLevels: false,
   threshold: 90,
   aboveCount: 2,
   belowCount: 1,
@@ -30,12 +30,13 @@ describe('AutoLevelAdjustProgressCard', () => {
   it('shows profile label and mixed-mode hint when provided', () => {
     const mixed: AutoLevelAdjustProgressView = {
       ...baseProgress,
-      adjustsBothLevels: true,
+      alternatingMixedLevels: true,
+      nextMixedAxis: 'digits',
     };
     render(<AutoLevelAdjustProgressCard progress={mixed} profileLabel="Echo" />);
 
     expect(screen.getByText('Echo')).toBeInTheDocument();
-    expect(screen.getByText(/letters & digits/i)).toBeInTheDocument();
+    expect(screen.getByText(/next: digit/i)).toBeInTheDocument();
   });
 
   it('shows reset hint for single-level profiles', () => {

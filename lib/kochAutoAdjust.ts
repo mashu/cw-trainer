@@ -4,6 +4,10 @@ import {
   MIN_DIGITS_LEVEL,
   MIN_KOCH_LEVEL,
 } from './constants';
+import {
+  flipMixedAutoLevelAxis,
+  type MixedAutoLevelAxis,
+} from './levelUnlock';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -34,10 +38,12 @@ export interface AutoLevelAdjustConfig {
   readonly currentLevel: number;
   /** Upper bound for alphabet level (defaults to MAX_KOCH_LEVEL_GUESS). */
   readonly maxLevel?: number;
-  /** Digits level when mode is mixed / echo-mixed (both levels move together). */
+  /** Digits level when mode is mixed / echo-mixed. */
   readonly pairedDigitsLevel?: number;
   /** Upper bound for digits level in mixed mode (defaults to MAX_DIGITS_LEVEL). */
   readonly maxDigitsLevel?: number;
+  /** Which mixed axis (letters or digits) adjusts on the next level change. */
+  readonly mixedAutoLevelNextAxis?: MixedAutoLevelAxis;
 }
 
 /** @deprecated Use AutoLevelAdjustConfig instead. */
@@ -50,6 +56,10 @@ export interface AutoLevelAdjustResult {
   readonly nextLevel: number;
   /** Next digits level when mixed / echo-mixed. */
   readonly nextDigitsLevel?: number;
+  /** Mixed mode: which axis changed (letters or digits). */
+  readonly adjustedMixedAxis?: MixedAutoLevelAxis;
+  /** Mixed mode: axis to adjust on the following level change. */
+  readonly nextMixedAutoLevelAxis?: MixedAutoLevelAxis;
   /** Human-readable notification message. */
   readonly message: string;
   /** Toast variant. */
@@ -68,7 +78,8 @@ export interface AutoLevelAdjustProgressView {
   readonly levelLabel: string;
   readonly currentLevel: number;
   readonly currentDigitsLevel?: number;
-  readonly adjustsBothLevels: boolean;
+  readonly alternatingMixedLevels: boolean;
+  readonly nextMixedAxis?: MixedAutoLevelAxis;
   readonly threshold: number;
   readonly aboveCount: number;
   readonly belowCount: number;
@@ -163,12 +174,65 @@ const MODE_LABELS: Record<AutoAdjustMode, string> = {
   'echo-mixed': 'Echo mixed mode',
 };
 
+const MIXED_AXIS_LABELS: Record<MixedAutoLevelAxis, string> = {
+  letters: 'letter',
+  digits: 'digit',
+};
+
 function sessionTarget(countSetting: number): number {
   return countSetting > 0 ? countSetting : 0;
 }
 
 function mixedDigitsLevel(config: AutoLevelAdjustConfig): number {
   return config.pairedDigitsLevel ?? MIN_DIGITS_LEVEL;
+}
+
+function mixedNextAxis(config: AutoLevelAdjustConfig): MixedAutoLevelAxis {
+  return config.mixedAutoLevelNextAxis ?? 'letters';
+}
+
+function applyMixedAxisDelta(
+  axis: MixedAutoLevelAxis,
+  delta: number,
+  currentLevel: number,
+  currentDigits: number,
+  maxKochLevel: number,
+  maxDigits: number,
+): {
+  readonly nextLevel: number;
+  readonly nextDigitsLevel: number;
+  readonly adjusted: boolean;
+  readonly adjustedAxis?: MixedAutoLevelAxis;
+} {
+  if (axis === 'letters') {
+    const candidate = Math.max(
+      MIN_KOCH_LEVEL,
+      Math.min(currentLevel + delta, maxKochLevel),
+    );
+    if (candidate !== currentLevel) {
+      return {
+        nextLevel: candidate,
+        nextDigitsLevel: currentDigits,
+        adjusted: true,
+        adjustedAxis: 'letters',
+      };
+    }
+    return { nextLevel: currentLevel, nextDigitsLevel: currentDigits, adjusted: false };
+  }
+
+  const candidate = Math.max(
+    MIN_DIGITS_LEVEL,
+    Math.min(currentDigits + delta, maxDigits),
+  );
+  if (candidate !== currentDigits) {
+    return {
+      nextLevel: currentLevel,
+      nextDigitsLevel: candidate,
+      adjusted: true,
+      adjustedAxis: 'digits',
+    };
+  }
+  return { nextLevel: currentLevel, nextDigitsLevel: currentDigits, adjusted: false };
 }
 
 /** Maps character-set + training profile to the auto-adjust storage namespace. */
@@ -207,6 +271,7 @@ export function buildAutoLevelAdjustProgressView(
     | 'belowThresholdCount'
     | 'currentLevel'
     | 'pairedDigitsLevel'
+    | 'mixedAutoLevelNextAxis'
   >,
 ): AutoLevelAdjustProgressView | null {
   if (!config.enabled) {
@@ -224,7 +289,8 @@ export function buildAutoLevelAdjustProgressView(
     levelLabel: MODE_LABELS[config.mode],
     currentLevel: config.currentLevel,
     ...(digitsLevel !== undefined ? { currentDigitsLevel: digitsLevel } : {}),
-    adjustsBothLevels: mixed,
+    alternatingMixedLevels: mixed,
+    ...(mixed ? { nextMixedAxis: mixedNextAxis(config) } : {}),
     threshold,
     aboveCount: counts.above,
     belowCount: counts.below,
@@ -243,7 +309,7 @@ export function buildAutoLevelAdjustProgressView(
  * Reads / writes mode-specific localStorage counters and returns the
  * adjustment decision (or `null` if no change is needed).
  *
- * Mixed mode adjusts alphabet and digits levels together by the same delta.
+ * Mixed mode alternates between alphabet and digits — only one level changes per adjustment.
  */
 export function evaluateAutoLevelAdjust(
   accuracyFraction: number,
@@ -286,12 +352,12 @@ export function evaluateAutoLevelAdjust(
 
   if (delta === 0) return null;
 
-  const nextLevel = Math.max(
-    MIN_KOCH_LEVEL,
-    Math.min((currentLevel || MIN_KOCH_LEVEL) + delta, maxKochLevel),
-  );
-
   if (!mixed) {
+    const nextLevel = Math.max(
+      MIN_KOCH_LEVEL,
+      Math.min((currentLevel || MIN_KOCH_LEVEL) + delta, maxKochLevel),
+    );
+
     if (nextLevel === currentLevel) return null;
 
     removeLevelCounts(mode, currentLevel);
@@ -318,14 +384,34 @@ export function evaluateAutoLevelAdjust(
   }
 
   const currentDigits = mixedDigitsLevel(config);
-  const nextDigitsLevel = Math.max(
-    MIN_DIGITS_LEVEL,
-    Math.min(currentDigits + delta, maxDigits),
-  );
+  const primaryAxis = mixedNextAxis(config);
+  const secondaryAxis = flipMixedAutoLevelAxis(primaryAxis);
 
-  if (nextLevel === currentLevel && nextDigitsLevel === currentDigits) {
+  let mixedResult = applyMixedAxisDelta(
+    primaryAxis,
+    delta,
+    currentLevel,
+    currentDigits,
+    maxKochLevel,
+    maxDigits,
+  );
+  if (!mixedResult.adjusted) {
+    mixedResult = applyMixedAxisDelta(
+      secondaryAxis,
+      delta,
+      currentLevel,
+      currentDigits,
+      maxKochLevel,
+      maxDigits,
+    );
+  }
+
+  if (!mixedResult.adjusted || mixedResult.adjustedAxis === undefined) {
     return null;
   }
+
+  const { nextLevel, nextDigitsLevel, adjustedAxis } = mixedResult;
+  const nextMixedAutoLevelAxis = flipMixedAutoLevelAxis(adjustedAxis);
 
   removeLevelCounts(mode, currentLevel, currentDigits);
   removeLevelCounts(mode, nextLevel, nextDigitsLevel);
@@ -339,12 +425,20 @@ export function evaluateAutoLevelAdjust(
         ? ''
         : `${counts.below} sessions below`;
   const countSuffix = countText ? `, ${countText}` : '';
+  const axisLabel = MIXED_AXIS_LABELS[adjustedAxis];
+  const levelPart =
+    adjustedAxis === 'letters'
+      ? `alphabet ${nextLevel}`
+      : `digits ${nextDigitsLevel}`;
+  const nextPart = `next: ${MIXED_AXIS_LABELS[nextMixedAutoLevelAxis]}`;
 
   return {
     delta,
     nextLevel,
     nextDigitsLevel,
-    message: `Mixed levels ${delta > 0 ? 'increased' : 'decreased'} — alphabet ${nextLevel}, digits ${nextDigitsLevel} (accuracy ${Math.round(accuracyPct)}%, threshold ${threshold}%${countSuffix})`,
+    adjustedMixedAxis: adjustedAxis,
+    nextMixedAutoLevelAxis,
+    message: `Mixed ${axisLabel} level ${delta > 0 ? 'increased' : 'decreased'} — ${levelPart} (${nextPart}, accuracy ${Math.round(accuracyPct)}%, threshold ${threshold}%${countSuffix})`,
     messageType: delta > 0 ? 'success' : 'info',
   };
 }

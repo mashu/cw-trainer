@@ -1,5 +1,24 @@
-import { calculateAchievementProgress, evaluateAchievements } from '@/lib/achievements';
+import {
+  ACHIEVEMENT_BADGE_BY_ID,
+  calculateAchievementProgress,
+  evaluateAchievements,
+} from '@/lib/achievements';
 import type { SessionResult } from '@/types';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const consecutiveDayDate = (dayOffset: number): string => {
+  const timestamp = Date.parse('2026-01-01T00:00:00.000Z') + dayOffset * DAY_MS;
+  return new Date(timestamp).toISOString().split('T')[0] ?? '2026-01-01';
+};
+
+const makeConsecutiveSessions = (dayCount: number): SessionResult[] =>
+  Array.from({ length: dayCount }, (_, index) =>
+    makeSession({
+      timestamp: index + 1,
+      date: consecutiveDayDate(index),
+    }),
+  );
 
 const makeLetterAccuracy = (
   mastered: readonly string[],
@@ -18,6 +37,7 @@ const makeSession = ({
   totalChars = 25,
   effectiveAlphabetSize = 2,
   mastered = ['K'],
+  kochLevel,
 }: {
   readonly timestamp: number;
   readonly date: string;
@@ -27,6 +47,7 @@ const makeSession = ({
   readonly totalChars?: number;
   readonly effectiveAlphabetSize?: number;
   readonly mastered?: readonly string[];
+  readonly kochLevel?: number;
 }): SessionResult => ({
   date,
   timestamp,
@@ -41,6 +62,7 @@ const makeSession = ({
   totalChars,
   effectiveAlphabetSize,
   score,
+  ...(kochLevel !== undefined ? { kochLevel } : {}),
 });
 
 describe('achievement evaluation', () => {
@@ -135,5 +157,54 @@ describe('achievement evaluation', () => {
     expect(progress.bestScore).toBe(500);
     expect(progress.masteredLetterCount).toBe(1);
     expect(progress.practiceDays).toBe(1);
+  });
+
+  it('unlocks volume, digit mastery, and performance trophies', () => {
+    const digits = '0123456789'.split('');
+    const sessions = Array.from({ length: 10 }, (_, index) =>
+      makeSession({
+        timestamp: index + 1,
+        date: `2026-05-${String(index + 1).padStart(2, '0')}`,
+        mastered: digits,
+        accuracy: 1,
+        totalChars: 50,
+        avgResponseMs: 900,
+        score: 8000,
+        kochLevel: 40,
+      }),
+    );
+
+    const result = evaluateAchievements(sessions, [], 10);
+
+    expect(result.unlocked.map((achievement) => achievement.id)).toEqual(
+      expect.arrayContaining([
+        'getting-warm',
+        'daily-operator',
+        'number-pad',
+        'full-keypad',
+        'flawless-run',
+        'lightning-copy',
+        'megawatt',
+        'koch-graduate',
+      ]),
+    );
+  });
+
+  it('unlocks a 14-day streak trophy', () => {
+    const result = evaluateAchievements(makeConsecutiveSessions(14), [], 10);
+
+    expect(result.unlocked.map((achievement) => achievement.id)).toContain('regular');
+  });
+
+  it('unlocks three-week streak without monthly operator', () => {
+    const result = evaluateAchievements(makeConsecutiveSessions(21), [], 10);
+    const unlockedIds = result.unlocked.map((achievement) => achievement.id);
+
+    expect(unlockedIds).toContain('three-week-streak');
+    expect(unlockedIds).not.toContain('monthly-operator');
+  });
+
+  it('uses the diamond tier for the full-year streak trophy', () => {
+    expect(ACHIEVEMENT_BADGE_BY_ID['full-year'].tier).toBe('diamond');
   });
 });

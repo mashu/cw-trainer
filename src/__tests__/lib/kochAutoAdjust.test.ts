@@ -94,7 +94,7 @@ describe('evaluateAutoLevelAdjust', () => {
     expect(result?.nextDigitsLevel).toBeUndefined();
   });
 
-  it('increases both alphabet and digits levels in mixed mode', () => {
+  it('increases only alphabet level on first mixed auto-level step', () => {
     const result = evaluateAutoLevelAdjust(0.95, {
       enabled: true,
       mode: 'mixed',
@@ -103,18 +103,56 @@ describe('evaluateAutoLevelAdjust', () => {
       belowThresholdCount: 0,
       currentLevel: 3,
       pairedDigitsLevel: 6,
+      mixedAutoLevelNextAxis: 'letters',
       maxLevel: 40,
       maxDigitsLevel: 10,
     });
     expect(result).toMatchObject({
       delta: 1,
       nextLevel: 4,
-      nextDigitsLevel: 7,
+      nextDigitsLevel: 6,
+      adjustedMixedAxis: 'letters',
+      nextMixedAutoLevelAxis: 'digits',
     });
-    expect(getAutoLevelAdjustCounts('mixed', 4, 7)).toEqual({ above: 0, below: 0 });
+    expect(getAutoLevelAdjustCounts('mixed', 4, 6)).toEqual({ above: 0, below: 0 });
   });
 
-  it('can raise digits in mixed mode when alphabet is already at max', () => {
+  it('alternates to digits on the next mixed auto-level step', () => {
+    const first = evaluateAutoLevelAdjust(0.95, {
+      enabled: true,
+      mode: 'mixed',
+      threshold: 90,
+      aboveThresholdCount: 1,
+      belowThresholdCount: 0,
+      currentLevel: 3,
+      pairedDigitsLevel: 6,
+      mixedAutoLevelNextAxis: 'letters',
+      maxLevel: 40,
+      maxDigitsLevel: 10,
+    });
+    expect(first?.nextMixedAutoLevelAxis).toBe('digits');
+
+    const second = evaluateAutoLevelAdjust(0.95, {
+      enabled: true,
+      mode: 'mixed',
+      threshold: 90,
+      aboveThresholdCount: 1,
+      belowThresholdCount: 0,
+      currentLevel: 4,
+      pairedDigitsLevel: 6,
+      mixedAutoLevelNextAxis: 'digits',
+      maxLevel: 40,
+      maxDigitsLevel: 10,
+    });
+    expect(second).toMatchObject({
+      nextLevel: 4,
+      nextDigitsLevel: 7,
+      adjustedMixedAxis: 'digits',
+      nextMixedAutoLevelAxis: 'letters',
+    });
+  });
+
+  it('raises digits in mixed mode when alphabet is already at max', () => {
     const result = evaluateAutoLevelAdjust(0.95, {
       enabled: true,
       mode: 'mixed',
@@ -123,12 +161,14 @@ describe('evaluateAutoLevelAdjust', () => {
       belowThresholdCount: 0,
       currentLevel: 40,
       pairedDigitsLevel: 5,
+      mixedAutoLevelNextAxis: 'letters',
       maxLevel: 40,
       maxDigitsLevel: 10,
     });
     expect(result).toMatchObject({
       nextLevel: 40,
       nextDigitsLevel: 6,
+      adjustedMixedAxis: 'digits',
     });
   });
 });
@@ -225,6 +265,7 @@ describe('buildAutoLevelAdjustProgressView', () => {
       belowThresholdCount: 2,
       currentLevel: 2,
       pairedDigitsLevel: 5,
+      mixedAutoLevelNextAxis: 'letters',
       maxLevel: 40,
       maxDigitsLevel: 10,
     });
@@ -237,10 +278,12 @@ describe('buildAutoLevelAdjustProgressView', () => {
       belowThresholdCount: 2,
       currentLevel: 2,
       pairedDigitsLevel: 5,
+      mixedAutoLevelNextAxis: 'letters',
     });
 
     expect(view).toMatchObject({
-      adjustsBothLevels: true,
+      alternatingMixedLevels: true,
+      nextMixedAxis: 'letters',
       currentLevel: 2,
       currentDigitsLevel: 5,
       aboveCount: 1,

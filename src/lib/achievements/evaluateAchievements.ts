@@ -1,6 +1,7 @@
 import type { SessionResult } from '@/types';
 
 import { ACHIEVEMENT_BADGES } from './badges';
+import { STREAK_MILESTONES } from './streakMilestones';
 import type {
   AchievementEvaluationResult,
   AchievementId,
@@ -14,6 +15,7 @@ const DIGITS = '0123456789'.split('');
 const MASTERED_MIN_ATTEMPTS = 5;
 const MASTERED_MIN_ACCURACY = 0.9;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const KOCH_GRADUATE_LEVEL = 40;
 
 type UnlockCandidate = {
   readonly id: AchievementId;
@@ -177,6 +179,26 @@ const findSessionForStreak = (
   return undefined;
 };
 
+const findSessionForPracticeDayCount = (
+  sessions: readonly SessionResult[],
+  targetDays: number,
+): SessionResult | undefined => {
+  const dateToSession = new Map<number, SessionResult>();
+  sessions.forEach((session) => {
+    const dateIndex = toDateIndex(session.date);
+    if (dateIndex !== null) {
+      dateToSession.set(dateIndex, session);
+    }
+  });
+
+  const dateIndexes = [...dateToSession.keys()].sort((a, b) => a - b);
+  const targetDateIndex = dateIndexes[targetDays - 1];
+  if (targetDateIndex === undefined) {
+    return undefined;
+  }
+  return dateToSession.get(targetDateIndex);
+};
+
 const buildUnlockCandidates = ({
   sessions,
   progress,
@@ -188,11 +210,23 @@ const buildUnlockCandidates = ({
   if (firstSession) {
     candidates.push({ id: 'first-session', session: firstSession });
   }
+
+  const tenthSession = groupSessions[9];
+  if (tenthSession) {
+    candidates.push({ id: 'getting-warm', session: tenthSession });
+  }
+
   if (progress.masteredLetterCount >= 1) {
     candidates.push({ id: 'first-letter', session: firstSession });
   }
   if (progress.masteredDigitCount >= 1) {
     candidates.push({ id: 'first-digit', session: firstSession });
+  }
+  if (progress.masteredDigitCount >= 5) {
+    candidates.push({ id: 'number-pad', session: firstSession });
+  }
+  if (progress.masteredDigitCount >= progress.totalDigitCount) {
+    candidates.push({ id: 'full-keypad', session: firstSession });
   }
   if (progress.masteredLetterCount >= Math.ceil(progress.totalLetterCount * 0.25)) {
     candidates.push({ id: 'quarter-alphabet', session: firstSession });
@@ -215,6 +249,14 @@ const buildUnlockCandidates = ({
     candidates.push({ id: 'clean-copy', session: cleanCopy });
   }
 
+  const flawlessRun = findFirst(
+    groupSessions,
+    (session) => session.accuracy >= 1 && session.totalChars >= 50,
+  );
+  if (flawlessRun) {
+    candidates.push({ id: 'flawless-run', session: flawlessRun });
+  }
+
   const ninetyClub = findFirst(
     groupSessions,
     (session) => session.accuracy >= 0.9 && session.effectiveAlphabetSize >= 10,
@@ -232,6 +274,15 @@ const buildUnlockCandidates = ({
     candidates.push({ id: 'pressure-copy', session: pressureCopy });
   }
 
+  const lightningCopy = findFirst(
+    groupSessions,
+    (session) =>
+      session.accuracy >= 0.9 && session.avgResponseMs > 0 && session.avgResponseMs <= 1000,
+  );
+  if (lightningCopy) {
+    candidates.push({ id: 'lightning-copy', session: lightningCopy });
+  }
+
   const longHaul = findFirst(
     groupSessions,
     (session) => session.accuracy >= 0.9 && session.totalChars >= 100,
@@ -240,14 +291,16 @@ const buildUnlockCandidates = ({
     candidates.push({ id: 'long-haul', session: longHaul });
   }
 
-  const threeDayStreak = findSessionForStreak(groupSessions, 3);
-  if (threeDayStreak) {
-    candidates.push({ id: 'three-day-streak', session: threeDayStreak });
-  }
+  STREAK_MILESTONES.forEach(({ id, days }) => {
+    const streakSession = findSessionForStreak(groupSessions, days);
+    if (streakSession) {
+      candidates.push({ id, session: streakSession });
+    }
+  });
 
-  const sevenDayStreak = findSessionForStreak(groupSessions, 7);
-  if (sevenDayStreak) {
-    candidates.push({ id: 'seven-day-streak', session: sevenDayStreak });
+  const dailyOperator = findSessionForPracticeDayCount(groupSessions, 10);
+  if (dailyOperator) {
+    candidates.push({ id: 'daily-operator', session: dailyOperator });
   }
 
   const comeback = findComebackSession(groupSessions);
@@ -268,6 +321,22 @@ const buildUnlockCandidates = ({
   const score5000 = findFirst(groupSessions, (session) => session.score >= 5000);
   if (score5000) {
     candidates.push({ id: 'score-5000', session: score5000 });
+  }
+
+  const megawatt = findFirst(groupSessions, (session) => session.score >= 7500);
+  if (megawatt) {
+    candidates.push({ id: 'megawatt', session: megawatt });
+  }
+
+  const kochGraduate = findFirst(
+    groupSessions,
+    (session) =>
+      session.kochLevel !== undefined &&
+      session.kochLevel >= KOCH_GRADUATE_LEVEL &&
+      session.accuracy >= 0.8,
+  );
+  if (kochGraduate) {
+    candidates.push({ id: 'koch-graduate', session: kochGraduate });
   }
 
   return candidates;

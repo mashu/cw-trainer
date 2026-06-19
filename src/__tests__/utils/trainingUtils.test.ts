@@ -92,29 +92,30 @@ describe('computeCharPool digits mode', () => {
 });
 
 describe('computeCharPool mixed mode', () => {
-  it('returns union of alphabet and digits without duplicating digits', () => {
-    // Mixed level 2 → 2 letters + 1 digit (K, M, 0).
+  it('returns union of independent alphabet and digits levels', () => {
     const pool = computeCharPool({
       kochLevel: 2,
       charSetMode: 'mixed',
-      digitsLevel: 2,
+      digitsLevel: 1,
       mixedLettersPercent: 70,
     });
     expect(pool).toContain('K');
     expect(pool).toContain('M');
+    expect(pool).toContain('U');
     expect(pool).toContain('0');
-    expect(pool).not.toContain('1');
+    expect(pool).toContain('1');
+    expect(pool).not.toContain('2');
     expect(pool.length).toBe(new Set(pool).size);
   });
 
-  it('starts mixed mode with one letter and one digit at level 1', () => {
+  it('starts mixed mode with two letters and two digits at level 1', () => {
     const pool = computeCharPool({
       kochLevel: 1,
       charSetMode: 'mixed',
       digitsLevel: 1,
       mixedLettersPercent: 70,
     });
-    expect(pool).toEqual(['K', '0']);
+    expect(pool).toEqual(['K', 'M', '0', '1']);
   });
 
   it('includes digits from sequence only once when they appear in both alphabet and digits level', () => {

@@ -1,6 +1,6 @@
 import type { SessionResult } from '@/types';
 
-export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum';
+export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
 
 export type AchievementRarity = 'common' | 'uncommon' | 'rare' | 'epic';
 
@@ -8,22 +8,38 @@ export type AchievementCategory = 'mastery' | 'performance' | 'consistency' | 's
 
 export type AchievementId =
   | 'first-session'
+  | 'getting-warm'
   | 'first-letter'
   | 'first-digit'
+  | 'number-pad'
+  | 'full-keypad'
   | 'quarter-alphabet'
   | 'half-alphabet'
   | 'three-quarter-alphabet'
   | 'full-alphabet'
   | 'clean-copy'
+  | 'flawless-run'
   | 'ninety-club'
   | 'pressure-copy'
+  | 'lightning-copy'
   | 'long-haul'
   | 'three-day-streak'
   | 'seven-day-streak'
+  | 'regular'
+  | 'three-week-streak'
+  | 'monthly-operator'
+  | 'steadfast'
+  | 'iron-routine'
+  | 'quarter-year'
+  | 'half-year'
+  | 'full-year'
+  | 'daily-operator'
   | 'comeback'
   | 'score-1000'
   | 'score-2500'
-  | 'score-5000';
+  | 'score-5000'
+  | 'megawatt'
+  | 'koch-graduate';
 
 export type AchievementBadgeDefinition = {
   readonly id: AchievementId;

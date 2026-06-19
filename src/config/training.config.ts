@@ -5,6 +5,7 @@ export const DEFAULT_TRAINING_SETTINGS: TrainingSettings = {
   charSetMode: 'mixed',
   digitsLevel: 1,
   mixedLettersPercent: 70,
+  mixedAutoLevelNextAxis: 'letters',
   customSet: [],
   slidingWindowStart: 1,
   slidingWindowEnd: 40,

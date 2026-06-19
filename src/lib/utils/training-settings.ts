@@ -160,6 +160,16 @@ const normalizeCharSetMode = (
   return fallback;
 };
 
+const normalizeMixedAutoLevelNextAxis = (
+  axis: unknown,
+  fallback: TrainingSettings['mixedAutoLevelNextAxis'],
+): TrainingSettings['mixedAutoLevelNextAxis'] => {
+  if (axis === 'letters' || axis === 'digits') {
+    return axis;
+  }
+  return fallback ?? 'letters';
+};
+
 const normalizeCustomSet = (customSet: unknown, fallback: readonly string[]): readonly string[] => {
   if (!Array.isArray(customSet)) {
     return fallback;
@@ -231,12 +241,18 @@ export const normalizeTrainingSettings = (
         )
       : ((fallback as { mixedLettersPercent?: number }).mixedLettersPercent ?? 70);
 
+  const normalizedMixedAutoLevelNextAxis = normalizeMixedAutoLevelNextAxis(
+    candidate['mixedAutoLevelNextAxis'],
+    fallback.mixedAutoLevelNextAxis,
+  );
+
   const merged = {
     ...fallback,
     ...candidate,
     charSetMode: normalizeCharSetMode(candidate['charSetMode'], fallback.charSetMode),
     digitsLevel: normalizedDigits,
     mixedLettersPercent: normalizedMixedLettersPercent,
+    mixedAutoLevelNextAxis: normalizedMixedAutoLevelNextAxis,
     customSet: normalizeCustomSet(candidate['customSet'], fallback.customSet),
     customSequence: normalizeCustomSequence(candidate['customSequence'], fallback.customSequence),
     echoKeyerMode: normalizeEchoKeyerMode(candidate['echoKeyerMode'], fallback.echoKeyerMode),
@@ -638,6 +654,10 @@ export const normalizeTrainingSettings = (
       fallback as { mixedLettersPercent?: number }
     ).mixedLettersPercent;
   }
+  partialResult.mixedAutoLevelNextAxis = normalizeMixedAutoLevelNextAxis(
+    candidate['mixedAutoLevelNextAxis'],
+    fallback.mixedAutoLevelNextAxis,
+  );
   partialResult.customSet = normalizeCustomSet(candidate['customSet'], fallback.customSet);
   const normalizedSeq = normalizeCustomSequence(
     candidate['customSequence'],

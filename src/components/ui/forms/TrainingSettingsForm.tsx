@@ -10,7 +10,7 @@ import {
 } from '@/lib/extraSpacing';
 import {
   digitsUnlockedCount,
-  mixedModeUnlockCounts,
+  nextMixedUnlockPreviewChar,
   unlockedCharCountForLevel,
 } from '@/lib/levelUnlock';
 import { LCWO_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
@@ -33,6 +33,8 @@ export interface FormTrainingSettings {
   digitsLevel?: number;
   /** When charSetMode is 'mixed': 0–100 = percent of characters that are letters. Default 70. */
   mixedLettersPercent?: number;
+  /** Mixed auto-level: which axis adjusts on the next qualifying session. */
+  mixedAutoLevelNextAxis?: 'letters' | 'digits';
   customSet?: string[];
   customSequence?: string[]; // Custom sequence order for Koch mode
   slidingWindowStart?: number; // 1-based start index in unlocked sequence (1 = first)
@@ -200,14 +202,7 @@ export function TrainingSettingsForm({
     max: kochLevelMax,
     step: 1,
     fieldName: 'kochLevel',
-    onChange: (n) =>
-      setSettings((prev) => {
-        const charSetMode = prev.charSetMode ?? 'koch';
-        if (charSetMode === 'mixed') {
-          return { ...prev, kochLevel: n, digitsLevel: n };
-        }
-        return { ...prev, kochLevel: n };
-      }),
+    onChange: (n) => setSettings((prev) => ({ ...prev, kochLevel: n })),
     ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
   });
 
@@ -216,14 +211,7 @@ export function TrainingSettingsForm({
     max: 10,
     step: 1,
     fieldName: 'digitsLevel',
-    onChange: (n) =>
-      setSettings((prev) => {
-        const charSetMode = prev.charSetMode ?? 'koch';
-        if (charSetMode === 'mixed') {
-          return { ...prev, digitsLevel: n, kochLevel: n };
-        }
-        return { ...prev, digitsLevel: n };
-      }),
+    onChange: (n) => setSettings((prev) => ({ ...prev, digitsLevel: n })),
     ...(onSaveSettings !== undefined ? { onSave: onSaveSettings } : {}),
   });
 
@@ -659,9 +647,22 @@ export function TrainingSettingsForm({
                 })()}
               {charMode === 'mixed' &&
                 ((): JSX.Element => {
-                  const mixedCounts = mixedModeUnlockCounts(settings.kochLevel);
-                  const nLetters = Math.min(mixedCounts.letters, currentSequence.length);
-                  const nDigits = mixedCounts.digits;
+                  const nLetters = Math.min(
+                    unlockedCharCountForLevel(settings.kochLevel),
+                    currentSequence.length,
+                  );
+                  const nDigits = digitsUnlockedCount(settings.digitsLevel ?? 1);
+                  const nextAxis = settings.mixedAutoLevelNextAxis ?? 'letters';
+                  const nextUnlockChar = nextMixedUnlockPreviewChar(
+                    nextAxis,
+                    settings.kochLevel,
+                    settings.digitsLevel ?? 1,
+                    currentSequence,
+                  );
+                  const autoAdjustEnabled =
+                    autoAdjustProfile === 'echo'
+                      ? Boolean(settings.echoAutoAdjustKoch)
+                      : Boolean(settings.autoAdjustKoch);
                   return (
                     <div className="space-y-3">
                       <div className="flex items-center gap-3">
@@ -733,18 +734,31 @@ export function TrainingSettingsForm({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Level
+                            Alphabet level
                           </label>
                           <input
                             {...kochLevelField.inputProps}
                             className="w-full px-3 py-2 border border-gray-300 rounded"
                           />
-                          <p className="text-xs text-gray-500 mt-1">
-                            {nLetters} letters + {nDigits} digits ({settings.kochLevel + 1} characters)
-                          </p>
+                          <p className="text-xs text-gray-500 mt-1">{nLetters} letters unlocked</p>
                         </div>
-                        <div className="hidden sm:block" aria-hidden="true" />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Digits level
+                          </label>
+                          <input
+                            {...digitsLevelField.inputProps}
+                            className="w-full px-3 py-2 border border-gray-300 rounded"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">{nDigits} digits unlocked</p>
+                        </div>
                       </div>
+                      {autoAdjustEnabled ? (
+                        <p className="text-xs text-indigo-600">
+                          Next auto-level: {nextAxis === 'letters' ? 'letter' : 'digit'}
+                          {nextUnlockChar ? ` (${nextUnlockChar})` : ''}
+                        </p>
+                      ) : null}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Letters % (draw bias)

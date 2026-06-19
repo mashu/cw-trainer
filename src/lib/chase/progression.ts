@@ -1,4 +1,5 @@
 import { MAX_DIGITS_LEVEL, MAX_KOCH_LEVEL_GUESS } from '@/lib/constants';
+import { mixedChaseLevelBoosts } from '@/lib/levelUnlock';
 import type { TrainingSettings } from '@/types';
 
 export const CHASE_STARTING_LIVES = 3;
@@ -77,10 +78,11 @@ export function computeChaseLevelSettings(
   }
 
   if (charSetMode === 'mixed') {
+    const boosts = mixedChaseLevelBoosts(levelOffset);
     return {
       ...settings,
-      kochLevel: Math.min(MAX_KOCH_LEVEL_GUESS, settings.kochLevel + levelOffset),
-      digitsLevel: Math.min(MAX_DIGITS_LEVEL, settings.digitsLevel + levelOffset),
+      kochLevel: Math.min(MAX_KOCH_LEVEL_GUESS, settings.kochLevel + boosts.letters),
+      digitsLevel: Math.min(MAX_DIGITS_LEVEL, settings.digitsLevel + boosts.digits),
     };
   }
 

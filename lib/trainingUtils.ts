@@ -1,8 +1,4 @@
-import {
-  digitsUnlockedCount,
-  mixedModeUnlockCounts,
-  unlockedCharCountForLevel,
-} from './levelUnlock';
+import { digitsUnlockedCount, unlockedCharCountForLevel } from './levelUnlock';
 import { LCWO_SEQUENCE } from './morseConstants';
 
 const DIGITS_SET = new Set<string>(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
@@ -39,12 +35,11 @@ const DIGITS_ASC: string[] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 export function computeCharPool(settings: CharPoolSettingsInput): string[] {
   const mode = settings.charSetMode || 'koch';
   if (mode === 'mixed') {
-    // Level L unlocks L+1 characters split between letters and digits (level 1 → 1 letter + 1 digit).
     const sequence = Array.isArray(settings.customSequence) && settings.customSequence.length > 0
       ? settings.customSequence
       : LCWO_SEQUENCE;
-    const mixedLevel = settings.kochLevel || 1;
-    const { letters: letterCount, digits: digitCount } = mixedModeUnlockCounts(mixedLevel);
+    const letterCount = unlockedCharCountForLevel(settings.kochLevel || 1);
+    const digitCount = digitsUnlockedCount(settings.digitsLevel || 1);
     const kochPool = sequence.slice(0, Math.min(letterCount, sequence.length));
     const digitsPool = DIGITS_ASC.slice(0, digitCount);
     const union = Array.from(new Set([...kochPool, ...digitsPool]));

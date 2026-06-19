@@ -122,6 +122,8 @@ export interface TrainingSettings {
   readonly digitsLevel: number;
   /** When charSetMode is 'mixed': 0–100 = percent of characters that are letters (rest digits). Default 70. */
   readonly mixedLettersPercent?: number;
+  /** Mixed auto-level: which axis (letters or digits) adjusts on the next qualifying session. */
+  readonly mixedAutoLevelNextAxis?: 'letters' | 'digits';
   readonly customSet: readonly string[];
   readonly customSequence?: readonly string[]; // Custom sequence order for Koch mode
   /** 1-based start index of character range within unlocked sequence (1 = first). Default 1. */

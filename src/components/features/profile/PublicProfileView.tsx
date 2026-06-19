@@ -138,7 +138,8 @@ function PublicProfileDetails({
                 (badge.tier === 'bronze' ||
                 badge.tier === 'silver' ||
                 badge.tier === 'gold' ||
-                badge.tier === 'platinum'
+                badge.tier === 'platinum' ||
+                badge.tier === 'diamond'
                   ? badge.tier
                   : 'bronze');
               return (

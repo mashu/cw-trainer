@@ -5,6 +5,7 @@ const tierIconClasses: Record<AchievementTier, string> = {
   silver: 'bg-slate-100 text-slate-700 ring-slate-200',
   gold: 'bg-yellow-100 text-yellow-700 ring-yellow-200',
   platinum: 'bg-indigo-100 text-indigo-700 ring-indigo-200',
+  diamond: 'bg-cyan-100 text-cyan-700 ring-cyan-300 shadow-sm shadow-cyan-200/60',
 };
 
 const categoryInitial: Record<AchievementCategory, string> = {
@@ -51,4 +52,6 @@ export const achievementTierCardClasses: Record<AchievementTier, string> = {
   silver: 'border-slate-200 bg-slate-50 text-slate-800',
   gold: 'border-yellow-200 bg-yellow-50 text-yellow-800',
   platinum: 'border-indigo-200 bg-indigo-50 text-indigo-800',
+  diamond:
+    'border-cyan-300 bg-gradient-to-br from-cyan-50 via-sky-50 to-blue-100 text-cyan-950 shadow-sm shadow-cyan-100',
 };

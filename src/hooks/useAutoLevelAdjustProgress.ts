@@ -55,7 +55,12 @@ export function useAutoLevelAdjustProgress(
       aboveThresholdCount,
       belowThresholdCount,
       currentLevel,
-      ...(isMixed ? { pairedDigitsLevel: settings.digitsLevel ?? 10 } : {}),
+      ...(isMixed
+        ? {
+            pairedDigitsLevel: settings.digitsLevel ?? 10,
+            mixedAutoLevelNextAxis: settings.mixedAutoLevelNextAxis ?? 'letters',
+          }
+        : {}),
     });
   }, [
     profile,
@@ -71,5 +76,6 @@ export function useAutoLevelAdjustProgress(
     settings.charSetMode,
     settings.kochLevel,
     settings.digitsLevel,
+    settings.mixedAutoLevelNextAxis,
   ]);
 }
