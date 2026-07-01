@@ -667,6 +667,70 @@ describe('useTrainingSession', () => {
     );
   });
 
+  it('records every group when the playback loop finishes without submitAnswer', async () => {
+    const multiGroupSettings: TrainingSettings = {
+      ...sessionSettings,
+      numGroups: 3,
+      groupTimeout: 1,
+    };
+    const { result } = renderHook(
+      () =>
+        useTrainingSession({
+          settings: multiGroupSettings,
+          sessions: [],
+          saveSession,
+          setTrainingSettingsState,
+          showToast,
+        }),
+      { wrapper: TestWrapper },
+    );
+    await waitForInitialLoads();
+
+    await act(async () => {
+      void result.current.startTraining();
+    });
+
+    await waitFor(() => {
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    act(() => {
+      result.current.confirmGroupAnswer(0, 'AB');
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentGroup).toBe(1);
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    act(() => {
+      result.current.confirmGroupAnswer(1, 'AB');
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentGroup).toBe(2);
+      expect(result.current.runtimeStatus).toBe('waitingForAnswer');
+    });
+
+    await waitFor(
+      () => {
+        expect(result.current.showResults).toBe(true);
+      },
+      { timeout: 4000 },
+    );
+
+    expect(result.current.lastSessionResult?.groups).toHaveLength(3);
+    expect(saveSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groups: expect.arrayContaining([
+          expect.objectContaining({ sent: 'AB' }),
+          expect.objectContaining({ sent: 'AB' }),
+          expect.objectContaining({ sent: 'AB' }),
+        ]),
+      }),
+    );
+  });
+
   it('shows toast when saveSession fails after results', async () => {
     saveSession.mockRejectedValueOnce(new Error('Persist failed'));
     const { result } = renderSessionHook();

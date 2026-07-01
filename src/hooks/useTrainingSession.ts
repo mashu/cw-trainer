@@ -312,12 +312,26 @@ export function useTrainingSession({
     const currentSetTrainingSettingsState = setTrainingSettingsStateRef.current;
     const currentEvaluateAchievementsForSessions = evaluateAchievementsForSessionsRef.current;
 
-    const sentSource =
-      Array.isArray(sentOverride) && sentOverride.length
-        ? sentOverride
-        : activeSentGroupsRef.current?.length
-          ? activeSentGroupsRef.current
-          : sentGroups;
+    // Groups are generated lazily into activeSentGroupsRef; the loop's local `groups`
+    // array is only seeded at index 0. Prefer whichever source has the most filled slots.
+    const sentSource = ((): readonly string[] => {
+      const candidates: readonly (readonly string[] | undefined)[] = [
+        activeSentGroupsRef.current,
+        sentOverride,
+        sentGroups,
+      ];
+      let best: readonly string[] = [];
+      let bestFilled = 0;
+      for (const candidate of candidates) {
+        if (!Array.isArray(candidate) || candidate.length === 0) continue;
+        const filled = candidate.filter((sent) => sent.length > 0).length;
+        if (filled > bestFilled) {
+          best = candidate;
+          bestFilled = filled;
+        }
+      }
+      return best;
+    })();
     if (!Array.isArray(sentSource) || sentSource.length === 0) {
       resultsProcessedRef.current = false;
       return;
@@ -647,7 +661,7 @@ export function useTrainingSession({
           (a) => (a || '').trim().toUpperCase(),
         );
         try {
-          await processResults(answers, groups);
+          await processResults(answers, activeSentGroupsRef.current);
         } catch (error) {
           console.error('[Training] Error processing results:', error);
           showToast({
