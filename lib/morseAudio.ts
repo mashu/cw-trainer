@@ -55,14 +55,18 @@ function resolveCharWpm(settings: AudioSettings): number {
 
 /**
  * Resolve the effective WPM from settings, supporting both fixed and range values.
+ * Farnsworth spacing stretches gaps between characters, so the effective speed can
+ * never exceed the character speed. Without this clamp, effective > 3× character WPM
+ * makes the inter-character gap (3 effective dits) shorter than the element gap
+ * (1 character dit), driving the scheduling cursor backwards and overlapping tones.
  */
 function resolveEffectiveWpm(settings: AudioSettings, charWpm: number): number {
   // If range is specified, use it
   if (settings.effectiveWpmMin !== undefined && settings.effectiveWpmMax !== undefined) {
-    return Math.max(1, pickRandomInRange(settings.effectiveWpmMin, settings.effectiveWpmMax));
+    return Math.min(charWpm, Math.max(1, pickRandomInRange(settings.effectiveWpmMin, settings.effectiveWpmMax)));
   }
   // Fall back to fixed effectiveWpm or charWpm
-  return Math.max(1, settings.effectiveWpm ?? charWpm);
+  return Math.min(charWpm, Math.max(1, settings.effectiveWpm ?? charWpm));
 }
 
 /**

@@ -5,18 +5,33 @@ export type SessionLevelSnapshot = {
   readonly kochLevel: number;
   readonly charSetMode: CharacterSetMode;
   readonly digitsLevel?: number;
+  /** Character speed (WPM) at session time; lower bound of the configured range. */
+  readonly charWpm?: number;
+  /** Effective (Farnsworth) speed (WPM) at session time; lower bound of the configured range. */
+  readonly effectiveWpm?: number;
 };
 
 export function sessionLevelSnapshotFromSettings(
-  settings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel'>,
+  settings: Pick<TrainingSettings, 'kochLevel' | 'charSetMode' | 'digitsLevel'> &
+    Partial<Pick<TrainingSettings, 'charWpmMin' | 'effectiveWpmMin'>>,
 ): SessionLevelSnapshot {
   const charSetMode = settings.charSetMode ?? 'koch';
+  const charWpm =
+    typeof settings.charWpmMin === 'number' && settings.charWpmMin >= 1
+      ? settings.charWpmMin
+      : undefined;
+  const effectiveWpm =
+    typeof settings.effectiveWpmMin === 'number' && settings.effectiveWpmMin >= 1
+      ? Math.min(settings.effectiveWpmMin, charWpm ?? settings.effectiveWpmMin)
+      : undefined;
   return {
     kochLevel: settings.kochLevel,
     charSetMode,
     ...(charSetMode === 'digits' || charSetMode === 'mixed'
       ? { digitsLevel: settings.digitsLevel ?? 10 }
       : {}),
+    ...(charWpm !== undefined ? { charWpm } : {}),
+    ...(effectiveWpm !== undefined ? { effectiveWpm } : {}),
   };
 }
 

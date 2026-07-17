@@ -7,6 +7,7 @@ import {
   AUTO_CONFIRM_DELAY_MS,
   MAX_DIGITS_LEVEL,
   MAX_KOCH_LEVEL_GUESS,
+  MIN_DIGITS_LEVEL,
 } from '@/lib/constants';
 import { ensureAppError } from '@/lib/errors';
 import { evaluateAutoLevelAdjust } from '@/lib/kochAutoAdjust';
@@ -427,12 +428,12 @@ export function useTrainingSession({
         aboveThresholdCount: Math.max(0, currentSettings.autoAdjustAboveThresholdCount ?? 0),
         belowThresholdCount: Math.max(0, currentSettings.autoAdjustBelowThresholdCount ?? 0),
         currentLevel: isDigits
-          ? (currentSettings.digitsLevel ?? 10)
+          ? (currentSettings.digitsLevel ?? MIN_DIGITS_LEVEL)
           : currentSettings.kochLevel,
         maxLevel: isDigits ? MAX_DIGITS_LEVEL : MAX_KOCH_LEVEL_GUESS,
         ...(isMixed
           ? {
-              pairedDigitsLevel: currentSettings.digitsLevel ?? 10,
+              pairedDigitsLevel: currentSettings.digitsLevel ?? MIN_DIGITS_LEVEL,
               maxDigitsLevel: MAX_DIGITS_LEVEL,
               mixedAutoLevelNextAxis: currentSettings.mixedAutoLevelNextAxis ?? 'letters',
             }

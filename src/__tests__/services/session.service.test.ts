@@ -19,6 +19,17 @@ class InMemorySessionRepository implements SessionRepository {
     this.sessions = [...sessions];
   }
 
+  async saveSubset(
+    _context: SessionRepositoryContext,
+    subset: readonly SessionResult[],
+    allSessions: readonly SessionResult[],
+  ): Promise<void> {
+    // The in-memory store keeps the full list; subset semantics only matter
+    // for how many backend writes the real repository performs.
+    void subset;
+    this.sessions = [...allSessions];
+  }
+
   async deleteByTimestamp(
     _context: SessionRepositoryContext,
     timestamp: number,

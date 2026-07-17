@@ -2,6 +2,7 @@ import {
   calculateGroupLetterAccuracy,
   calculateOverallCharacterAccuracy,
 } from '@/lib/groupAlignment';
+import { formatLocalDate } from '@/lib/localDate';
 import {
   calculateAlphabetSize,
   calculateEffectiveAlphabetSize,
@@ -54,7 +55,7 @@ export function buildSessionResult(input: BuildSessionResultInput): SessionResul
     totalChars,
   });
 
-  const dateStr = new Date().toISOString().split('T')[0] ?? '1970-01-01';
+  const dateStr = formatLocalDate();
 
   return {
     date: dateStr,
@@ -77,6 +78,10 @@ export function buildSessionResult(input: BuildSessionResultInput): SessionResul
           charSetMode: levelSnapshot.charSetMode,
           ...(levelSnapshot.digitsLevel !== undefined
             ? { digitsLevel: levelSnapshot.digitsLevel }
+            : {}),
+          ...(levelSnapshot.charWpm !== undefined ? { charWpm: levelSnapshot.charWpm } : {}),
+          ...(levelSnapshot.effectiveWpm !== undefined
+            ? { effectiveWpm: levelSnapshot.effectiveWpm }
             : {}),
         }
       : {}),

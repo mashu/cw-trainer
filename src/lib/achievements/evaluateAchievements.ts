@@ -1,3 +1,4 @@
+import { localDateForTimestamp } from '@/lib/localDate';
 import type { SessionResult } from '@/types';
 
 import { ACHIEVEMENT_BADGES } from './badges';
@@ -58,9 +59,14 @@ const countLongestStreak = (dateIndexes: readonly number[]): number => {
   return longest;
 };
 
-const countCurrentStreak = (dateIndexes: readonly number[]): number => {
+const countCurrentStreak = (dateIndexes: readonly number[], todayIndex: number | null): number => {
   const latest = dateIndexes[dateIndexes.length - 1];
   if (latest === undefined) {
+    return 0;
+  }
+  // A streak is only "current" if it reaches today or yesterday (still extendable
+  // today). A run that ended further in the past is history, not a current streak.
+  if (todayIndex !== null && latest < todayIndex - 1) {
     return 0;
   }
 
@@ -106,12 +112,14 @@ const getMasteredCharacters = (
 
 export const calculateAchievementProgress = (
   sessions: readonly SessionResult[],
+  now = Date.now(),
 ): AchievementProgress => {
   const groupSessions = sessions.filter(isGroupSession);
   const totals = buildCharacterTotals(groupSessions);
   const masteredLetters = getMasteredCharacters(LETTERS, totals);
   const masteredDigits = getMasteredCharacters(DIGITS, totals);
   const dateIndexes = getUniqueDateIndexes(groupSessions);
+  const todayIndex = toDateIndex(localDateForTimestamp(now));
 
   return {
     masteredLetters,
@@ -123,7 +131,7 @@ export const calculateAchievementProgress = (
     bestScore: groupSessions.reduce((best, session) => Math.max(best, session.score), 0),
     bestAccuracy: groupSessions.reduce((best, session) => Math.max(best, session.accuracy), 0),
     practiceDays: dateIndexes.length,
-    currentStreakDays: countCurrentStreak(dateIndexes),
+    currentStreakDays: countCurrentStreak(dateIndexes, todayIndex),
     longestStreakDays: countLongestStreak(dateIndexes),
   };
 };
@@ -347,7 +355,7 @@ export const evaluateAchievements = (
   existing: readonly UnlockedAchievement[],
   now = Date.now(),
 ): AchievementEvaluationResult => {
-  const progress = calculateAchievementProgress(sessions);
+  const progress = calculateAchievementProgress(sessions, now);
   const existingById = new Map(
     existing.map((achievement) => [achievement.id, achievement] as const),
   );

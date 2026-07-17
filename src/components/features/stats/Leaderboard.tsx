@@ -72,6 +72,10 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
       try {
         const rows: LeaderboardEntry[] = [];
         const limitN = Math.max(1, Math.min(100, limitCount));
+        // Entries are one-per-session, but the board shows one row per operator.
+        // Over-fetch so that after per-user dedupe we can still fill limitN rows
+        // even when one prolific user holds many of the top session scores.
+        const fetchLimit = Math.min(200, limitN * 5);
         let lastErrorCode: string | null = null;
 
         const attempt = async (makeQuery: () => ReturnType<typeof query>): Promise<boolean> => {
@@ -114,6 +118,29 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
                 ...(typeof data.totalChars === 'number' ? { totalChars: data.totalChars } : {}),
               };
               tempEntries.push({ data, entry });
+            });
+
+            // One row per operator: keep each user's best-scoring session so a
+            // single prolific user cannot fill the whole board.
+            const bestByUser = new Map<string, { data: LeaderboardDoc; entry: Partial<LeaderboardEntry> }>();
+            tempEntries.forEach((item) => {
+              const key =
+                typeof item.data.uid === 'string' && item.data.uid.length > 0
+                  ? item.data.uid
+                  : `pid:${item.data.publicId}`;
+              const current = bestByUser.get(key);
+              if (!current || (item.entry.score ?? 0) > (current.entry.score ?? 0)) {
+                bestByUser.set(key, item);
+              }
+            });
+            tempEntries.length = 0;
+            [...bestByUser.values()]
+              .sort((a, b) => (b.entry.score ?? 0) - (a.entry.score ?? 0))
+              .slice(0, limitN)
+              .forEach((item) => tempEntries.push(item));
+            uidSet.clear();
+            tempEntries.forEach(({ data }) => {
+              if (data.uid && typeof data.uid === 'string') uidSet.add(data.uid);
             });
 
             // Look up call-signs from user profiles (current/latest call-sign)
@@ -178,7 +205,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
             query(
               collectionGroup(services.db, 'leaderboard'),
               orderBy('score', 'desc'),
-              limit(limitN),
+              limit(fetchLimit),
             ),
           );
         } catch (_error) {
@@ -192,7 +219,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
               query(
                 collection(services.db, 'leaderboard'),
                 orderBy('score', 'desc'),
-                limit(limitN),
+                limit(fetchLimit),
               ),
             );
           } catch (_error) {
@@ -208,7 +235,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
               query(
                 collection(services.db, 'users', uid, 'leaderboard'),
                 orderBy('score', 'desc'),
-                limit(limitN),
+                limit(fetchLimit),
               ),
             );
           } catch (_error) {

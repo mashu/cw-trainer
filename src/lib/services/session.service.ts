@@ -56,6 +56,8 @@ export class SessionService {
       kochLevel,
       digitsLevel,
       charSetMode,
+      charWpm,
+      effectiveWpm,
       ...rest
     } = validated;
     const normalized: SessionResult = {
@@ -69,17 +71,23 @@ export class SessionService {
       ...(kochLevel !== undefined ? { kochLevel } : {}),
       ...(digitsLevel !== undefined ? { digitsLevel } : {}),
       ...(charSetMode !== undefined ? { charSetMode } : {}),
+      ...(charWpm !== undefined ? { charWpm } : {}),
+      ...(effectiveWpm !== undefined ? { effectiveWpm } : {}),
     };
 
-    // Try to get existing sessions, but don't fail if Firebase is down
+    // Merge into the warm cache when available — re-reading the whole session
+    // collection from Firestore on every save cost O(history) reads.
     let existing: SessionResult[] = [];
-    try {
-      existing = await this.repository.getAll(context);
-      this.cachedSessions = existing;
-    } catch (error) {
-      console.warn('[SessionService] Failed to fetch existing sessions, using cache:', error);
-      // Use cached sessions if available, otherwise just save the new session
-      existing = this.cachedSessions ?? [];
+    if (this.cachedSessions !== null) {
+      existing = this.cachedSessions;
+    } else {
+      try {
+        existing = await this.repository.getAll(context);
+        this.cachedSessions = existing;
+      } catch (error) {
+        console.warn('[SessionService] Failed to fetch existing sessions, using empty list:', error);
+        existing = [];
+      }
     }
 
     const byTimestamp = new Map(existing.map((session) => [session.timestamp, session] as const));
@@ -87,10 +95,11 @@ export class SessionService {
 
     const nextSessions = sortSessions(Array.from(byTimestamp.values()));
     
-    // Try to save to Firebase, but don't fail if it errors
-    // The sessionPersistence layer already handles local storage fallback
+    // Persist only the new/updated session to the backend (the full list is
+    // still written to local storage). Rewriting the whole history on every
+    // save cost O(history) Firestore operations per session and hit quota.
     try {
-      await this.repository.saveAll(context, nextSessions);
+      await this.repository.saveSubset(context, [normalized], nextSessions);
       // Successfully saved to Firebase, remove from retry queue if present
       dequeueSession(normalized.timestamp);
     } catch (error) {
@@ -128,7 +137,7 @@ export class SessionService {
     const allSessions = sortSessions(Array.from(byTimestamp.values()));
 
     try {
-      await this.repository.saveAll(context, allSessions);
+      await this.repository.saveSubset(context, readySessions, allSessions);
       this.cachedSessions = allSessions;
       for (const session of readySessions) {
         recordRetryAttempt(session.timestamp, true);
