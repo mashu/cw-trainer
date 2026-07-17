@@ -132,6 +132,10 @@ export function useTrainingSession({
   useEffect(() => {
     hasActiveSessionRef.current = hasActiveSession;
   }, [hasActiveSession]);
+  const runtimeStatusRef = useRef(runtime.status);
+  useEffect(() => {
+    runtimeStatusRef.current = runtime.status;
+  }, [runtime.status]);
 
   // ── Refs ─────────────────────────────────────────────────────────────
   const isTrainingRef = useRef(false);
@@ -225,10 +229,18 @@ export function useTrainingSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Runtime status captured before a visibility pause so it can be restored on
+  // return. Without it the UI reads "paused" until the loop reaches the next
+  // group boundary even though audio resumed.
+  const prePauseStatusRef = useRef<'playingGroup' | 'waitingForAnswer' | null>(null);
+
   useEffect(() => {
     const handleHidden = (): void => {
       if (!hasActiveSessionRef.current) return;
       logTraining('visibility:hidden-pause');
+      const status = runtimeStatusRef.current;
+      prePauseStatusRef.current =
+        status === 'playingGroup' || status === 'waitingForAnswer' ? status : null;
       setRuntimeStatus('paused', { pauseReason: 'Training paused while the page was hidden.' });
       if (audio.audioContextRef.current?.state === 'suspended') {
         setRuntimeAudioStatus('suspended');
@@ -239,13 +251,24 @@ export function useTrainingSession({
       if (!hasActiveSessionRef.current) return;
       const ctx = audio.audioContextRef.current;
       if (!ctx) return;
+      const restoreRuntimeStatus = (): void => {
+        const restored = prePauseStatusRef.current;
+        prePauseStatusRef.current = null;
+        if (restored && runtimeStatusRef.current === 'paused' && isTrainingRef.current) {
+          setRuntimeStatus(restored);
+        }
+      };
       if (ctx.state === 'suspended') {
         void ctx.resume().then(
-          () => setRuntimeAudioStatus(ctx.state === 'running' ? 'running' : 'suspended'),
+          () => {
+            setRuntimeAudioStatus(ctx.state === 'running' ? 'running' : 'suspended');
+            if (ctx.state === 'running') restoreRuntimeStatus();
+          },
           () => setRuntimeAudioStatus('suspended'),
         );
       } else {
         setRuntimeAudioStatus(ctx.state === 'closed' ? 'closed' : 'running');
+        if (ctx.state !== 'closed') restoreRuntimeStatus();
       }
     };
 

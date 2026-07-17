@@ -21,6 +21,8 @@ export interface SessionResultsViewProps {
   readonly onViewStats: () => void;
   readonly onBack: () => void;
   readonly unlockedAchievements?: readonly UnlockedAchievement[];
+  /** Optional "what's next" region (personal best delta, nearest plan goal). */
+  readonly nextUpSlot?: React.ReactNode;
 }
 
 export function SessionResultsView({
@@ -29,6 +31,7 @@ export function SessionResultsView({
   onViewStats,
   onBack,
   unlockedAchievements = [],
+  nextUpSlot,
 }: SessionResultsViewProps): JSX.Element {
   return (
     <div className="space-y-6">
@@ -97,6 +100,8 @@ export function SessionResultsView({
           </p>
         </div>
       </div>
+
+      {nextUpSlot != null ? nextUpSlot : null}
 
       {/* Group Results */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4">

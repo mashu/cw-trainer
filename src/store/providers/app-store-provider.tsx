@@ -1,5 +1,6 @@
 'use client';
 
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
@@ -12,6 +13,11 @@ import {
   FirebaseTrainingSettingsRepository,
 } from '@/lib/db/repositories';
 import { setRemoteErrorSink } from '@/lib/errors/reporter';
+import {
+  exportAutoAdjustCounters,
+  importAutoAdjustCounters,
+  registerAutoAdjustSyncListener,
+} from '@/lib/kochAutoAdjust';
 import {
   readGroupRuntime,
   writeGroupRuntime,
@@ -303,6 +309,61 @@ export function AppStoreProvider({
       storeRef.current?.getState().cancelAncillaryTrainingRuntimes();
     };
   }, []);
+
+  // Mirror auto-level-adjust counters to Firestore. They live in localStorage
+  // for synchronous access, but without a cloud copy the "N of M sessions"
+  // progress silently resets on every new device while sessions themselves sync.
+  useEffect(() => {
+    if (!firebase?.db || !user?.id) {
+      registerAutoAdjustSyncListener(null);
+      return;
+    }
+    const db = firebase.db;
+    const uid = user.id;
+    let disposed = false;
+    let writeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const docRef = (): unknown => doc(db, 'users', uid, 'meta', 'autoAdjust');
+
+    // Hydrate: cloud fills local gaps (local always wins).
+    void (async (): Promise<void> => {
+      try {
+        const snap = await getDoc(docRef() as never);
+        if (disposed || !snap.exists()) return;
+        const data = snap.data() as { counters?: Record<string, { above: number; below: number }> };
+        if (data?.counters && typeof data.counters === 'object') {
+          importAutoAdjustCounters(data.counters);
+        }
+      } catch (error) {
+        console.debug('[app-store-provider] Auto-adjust counter hydration failed', error);
+      }
+    })();
+
+    registerAutoAdjustSyncListener((counters) => {
+      if (writeTimer) clearTimeout(writeTimer);
+      writeTimer = setTimeout(() => {
+        setDoc(docRef() as never, { counters, updatedAt: Date.now() }).catch((error: unknown) => {
+          console.debug('[app-store-provider] Auto-adjust counter sync failed', error);
+        });
+      }, 2000);
+    });
+
+    // Push the current snapshot once so pre-existing local progress reaches the cloud.
+    const initial = exportAutoAdjustCounters();
+    if (Object.keys(initial).length > 0) {
+      setDoc(docRef() as never, { counters: initial, updatedAt: Date.now() }, { merge: true }).catch(
+        (error: unknown) => {
+          console.debug('[app-store-provider] Initial auto-adjust counter sync failed', error);
+        },
+      );
+    }
+
+    return (): void => {
+      disposed = true;
+      if (writeTimer) clearTimeout(writeTimer);
+      registerAutoAdjustSyncListener(null);
+    };
+  }, [firebase, user]);
 
   // Persist the group training runtime to sessionStorage so an in-progress session
   // survives a hard reload. On mount we restore any persisted snapshot (coerced to a

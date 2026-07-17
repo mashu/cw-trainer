@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityHeatmap } from '@/components/ui/charts/ActivityHeatmap';
 import { AutoLevelAdjustProgressCard } from '@/components/ui/training/AutoLevelAdjustProgressCard';
 import { NewLetterPlayer } from '@/components/ui/training/NewLetterPlayer';
+import { StreakCard } from '@/components/ui/training/StreakCard';
 import { useAutoLevelAdjustProgress } from '@/hooks/useAutoLevelAdjustProgress';
 import type { AutoAdjustProfileVariant } from '@/lib/kochAutoAdjust';
 import { settingsToSharedAudioProps } from '@/lib/settingsToSharedAudioProps';
@@ -127,6 +128,8 @@ export function TrainingHomeView({
         <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
         <p className="text-sm text-slate-600 mt-1">{description}</p>
       </header>
+
+      <StreakCard practiceDates={sessions.map((s) => s.date)} />
 
       <section aria-labelledby="practice-activity-heading">
         <h3

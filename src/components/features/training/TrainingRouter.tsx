@@ -8,6 +8,8 @@ import { ChaseTrainingView } from '@/components/features/chase/ChaseTrainingView
 import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSettingsForm';
 import { LazyBoundary } from '@/components/ui/layouts/LazyBoundary';
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
+import { NextGoalCard } from '@/components/ui/training/NextGoalCard';
+import { TodaysFocusCard } from '@/components/ui/training/TodaysFocusCard';
 import type { UseChaseTrainingSessionReturn } from '@/hooks/useChaseTrainingSession';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
 import type { UseTrainingSessionReturn } from '@/hooks/useTrainingSession';
@@ -45,6 +47,7 @@ function LazyFallback(): JSX.Element {
     </div>
   );
 }
+
 
 import { ActiveTrainingView } from './ActiveTrainingView';
 import { EchoDecoderPractice } from './EchoDecoderPractice';
@@ -117,6 +120,13 @@ export function TrainingRouter({
       <SessionResultsView
         result={training.lastSessionResult}
         unlockedAchievements={latestUnlockedAchievements}
+        nextUpSlot={
+          <NextGoalCard
+            sessions={groupSessions}
+            settings={settings}
+            lastScore={training.lastSessionResult.score}
+          />
+        }
         onTrainAgain={() => {
           clearLatestUnlockedAchievements();
           training.dismissResults();
@@ -190,7 +200,12 @@ export function TrainingRouter({
           stopTrainingIfActive();
           setGroupTab('stats');
         }}
-        beforeTipsSlot={<TeachingPlanPanel sessions={groupSessions} settings={settings} />}
+        beforeTipsSlot={
+          <div className="space-y-3">
+            <TodaysFocusCard sessions={groupSessions} settings={settings} />
+            <TeachingPlanPanel sessions={groupSessions} settings={settings} />
+          </div>
+        }
       />
     );
   }

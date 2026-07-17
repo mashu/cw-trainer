@@ -9,6 +9,7 @@ import {
   limit,
   orderBy,
   query,
+  where,
 } from 'firebase/firestore';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -47,6 +48,19 @@ type LeaderboardDoc = {
 
 const formatPublicId = (n: number): string => String(n).padStart(6, '0');
 
+export type LeaderboardPeriod = 'all' | 'week';
+
+/** Monday of the current week (local time) as YYYY-MM-DD, matching session date format. */
+function currentWeekStartDate(now = new Date()): string {
+  const day = now.getDay(); // 0 = Sunday
+  const daysSinceMonday = (day + 6) % 7;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, '0');
+  const d = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.Element {
   const [items, setItems] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,6 +68,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
   const [hint, setHint] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [period, setPeriod] = useState<LeaderboardPeriod>('all');
   const hasMounted = useHasMounted();
 
   useEffect(() => {
@@ -75,7 +90,8 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
         // Entries are one-per-session, but the board shows one row per operator.
         // Over-fetch so that after per-user dedupe we can still fill limitN rows
         // even when one prolific user holds many of the top session scores.
-        const fetchLimit = Math.min(200, limitN * 5);
+        // 3x balances board fill against per-view read cost.
+        const fetchLimit = Math.min(200, limitN * 3);
         let lastErrorCode: string | null = null;
 
         const attempt = async (makeQuery: () => ReturnType<typeof query>): Promise<boolean> => {
@@ -199,6 +215,46 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
         };
 
         let ok = false;
+        if (period === 'week') {
+          // Weekly board: filter by date, sort client-side (a range filter and a
+          // different orderBy field can't be combined without a composite
+          // collection-group index). Entries are pre-sorted and deduped in
+          // attempt(), so fetching by date is enough.
+          const weekStart = currentWeekStartDate();
+          try {
+            ok = await attempt(() =>
+              query(
+                collectionGroup(services.db, 'leaderboard'),
+                where('date', '>=', weekStart),
+                limit(Math.max(fetchLimit, 200)),
+              ),
+            );
+          } catch (_error) {
+            ok = false;
+          }
+          if (!ok && services.auth?.currentUser?.uid) {
+            const uid = services.auth.currentUser.uid;
+            try {
+              ok = await attempt(() =>
+                query(
+                  collection(services.db, 'users', uid, 'leaderboard'),
+                  where('date', '>=', weekStart),
+                  limit(Math.max(fetchLimit, 200)),
+                ),
+              );
+              if (ok) setHint('Weekly board is limited to your own sessions right now.');
+            } catch (_error) {
+              ok = false;
+            }
+          }
+          if (!ok) {
+            setHint('Weekly leaderboard unavailable (may need a Firestore index).');
+            setItems([]);
+            return;
+          }
+          setItems(rows.sort((a, b) => b.score - a.score));
+          return;
+        }
         // Try global leaderboard first (collectionGroup)
         try {
           ok = await attempt(() =>
@@ -278,7 +334,7 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
     return (): void => {
       cancelled = true;
     };
-  }, [limitCount, refreshKey]);
+  }, [limitCount, refreshKey, period]);
 
   // Auto-refresh every 30 seconds to pick up call-sign updates
   useEffect(() => {
@@ -345,6 +401,31 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
           >
             ↻
           </button>
+          <div className="ml-1 inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+            <button
+              type="button"
+              onClick={() => setPeriod('all')}
+              className={`px-2 py-1 font-semibold ${
+                period === 'all'
+                  ? 'bg-slate-700 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              All-time
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod('week')}
+              className={`px-2 py-1 font-semibold ${
+                period === 'week'
+                  ? 'bg-slate-700 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+              title="Best scores since Monday — resets every week"
+            >
+              This week
+            </button>
+          </div>
         </div>
         <div className="text-xs text-slate-500">Top {limitCount}</div>
       </div>
