@@ -262,6 +262,10 @@ export interface SessionResult {
   readonly digitsLevel?: number;
   /** Character-set mode at session time. */
   readonly charSetMode?: CharacterSetMode;
+  /** Character (element) speed in WPM at session time — lower bound of the configured range. */
+  readonly charWpm?: number;
+  /** Effective (Farnsworth) speed in WPM at session time — lower bound of the configured range. */
+  readonly effectiveWpm?: number;
 }
 
 /** Aggregate statistics for calendar heatmap visualisations. */

@@ -2,12 +2,32 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Leaderboard entries are globally readable, so writes must be validated:
+    // without field checks any signed-in user could publish arbitrary scores.
+    // This bounds the damage; true trust requires server-side scoring.
+    function isValidLeaderboardEntry() {
+      let d = request.resource.data;
+      return d.uid == request.auth.uid
+        && d.publicId is number
+        && d.timestamp is number && d.timestamp > 0
+        && d.score is number && d.score >= 0 && d.score <= 50000
+        && d.accuracy is number && d.accuracy >= 0 && d.accuracy <= 1
+        && d.totalChars is number && d.totalChars >= 1 && d.totalChars <= 20000
+        && d.avgResponseMs is number && d.avgResponseMs >= 0
+        && (!('callSign' in d) || d.callSign == null || (d.callSign is string && d.callSign.size() <= 20));
+    }
+
     // Allow reading leaderboard entries from any user for global leaderboard
     // This enables collectionGroup queries on 'leaderboard' subcollection
     match /users/{userId}/leaderboard/{document} {
       allow read: if request.auth != null;
-      // Only the owner can write their own leaderboard entries
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // Only the owner can create entries, and only well-formed ones
+      allow create: if request.auth != null && request.auth.uid == userId
+        && isValidLeaderboardEntry();
+      // Existing entries are immutable except for call-sign refresh
+      allow update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['callSign']);
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // Allow reading call-sign from any user's profile for leaderboard display

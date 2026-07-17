@@ -37,9 +37,13 @@ export const sessionResultSchema = z
     score: z.number().min(0),
     mode: z.enum(['group', 'echo', 'chase']).optional(),
     firestoreId: z.string().min(1).optional(),
-    kochLevel: z.number().int().min(1).max(40).optional(),
+    // Max matches MAX_KOCH_LEVEL_GUESS (custom sequences can exceed the 40-level
+    // LCWO sequence; a stricter cap made auto-levelled sessions fail validation).
+    kochLevel: z.number().int().min(1).max(60).optional(),
     digitsLevel: z.number().int().min(1).max(10).optional(),
     charSetMode: sessionCharSetModeSchema.optional(),
+    charWpm: z.number().min(1).max(100).optional(),
+    effectiveWpm: z.number().min(1).max(100).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.groupTimings.length !== value.groups.length) {

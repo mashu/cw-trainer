@@ -207,4 +207,22 @@ describe('achievement evaluation', () => {
   it('uses the diamond tier for the full-year streak trophy', () => {
     expect(ACHIEVEMENT_BADGE_BY_ID['full-year'].tier).toBe('diamond');
   });
+
+  it('reports the current streak while it is still alive (today or yesterday)', () => {
+    const sessions = makeConsecutiveSessions(3); // 2026-01-01..03
+    const nowOnLastDay = Date.parse('2026-01-03T12:00:00.000Z');
+    const progress = calculateAchievementProgress(sessions, nowOnLastDay);
+
+    expect(progress.currentStreakDays).toBe(3);
+  });
+
+  it('reports zero current streak once the run has lapsed', () => {
+    const sessions = makeConsecutiveSessions(5); // 2026-01-01..05
+    const nowMuchLater = Date.parse('2026-03-01T12:00:00.000Z');
+    const progress = calculateAchievementProgress(sessions, nowMuchLater);
+
+    expect(progress.currentStreakDays).toBe(0);
+    // Historical records are unaffected by the lapse
+    expect(progress.longestStreakDays).toBe(5);
+  });
 });

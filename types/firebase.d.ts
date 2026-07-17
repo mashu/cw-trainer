@@ -34,6 +34,7 @@ declare module 'firebase/firestore' {
   export const setDoc: any;
   export const deleteDoc: any;
   export const where: any;
+  export const arrayUnion: any;
 }
 
 

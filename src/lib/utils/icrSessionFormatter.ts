@@ -1,3 +1,4 @@
+import { localDateForTimestamp } from '@/lib/localDate';
 import type { IcrSettings, IcrSessionResult, IcrTrialResult, IcrAudioSnapshot, IcrLetterStats } from '@/types';
 
 export type RawIcrTrial = {
@@ -157,9 +158,7 @@ export const formatSession = ({
   const timestampValue = typeof timestamp === 'number' && Number.isFinite(timestamp)
     ? Math.round(timestamp)
     : Date.now();
-  const dateStr = new Date(timestampValue).toISOString().split('T')[0];
-  const date = dateStr || new Date().toISOString().split('T')[0] || '';
-  if (!date) throw new Error('Failed to generate date string');
+  const date = localDateForTimestamp(timestampValue);
 
   const reactionSamples = answeredTrials
     .map((trial) => trial.reactionMs)

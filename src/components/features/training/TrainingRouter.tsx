@@ -51,6 +51,7 @@ import { EchoDecoderPractice } from './EchoDecoderPractice';
 import { EchoSessionResultsView } from './EchoSessionResultsView';
 import { EchoTrainingView } from './EchoTrainingView';
 import { SessionResultsView } from './SessionResultsView';
+import { TeachingPlanPanel } from './TeachingPlanPanel';
 import { TrainingHomeView } from './TrainingHomeView';
 
 interface TrainingRouterProps {
@@ -189,6 +190,7 @@ export function TrainingRouter({
           stopTrainingIfActive();
           setGroupTab('stats');
         }}
+        beforeTipsSlot={<TeachingPlanPanel sessions={groupSessions} settings={settings} />}
       />
     );
   }

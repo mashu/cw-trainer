@@ -27,7 +27,7 @@ import type { IcrSessionService as IcrSessionServiceType } from '@/lib/services/
 import type { SessionService as SessionServiceType } from '@/lib/services/session.service';
 import type { TrainingSettingsService as TrainingSettingsServiceType } from '@/lib/services/training-settings.service';
 import type { FirebaseServicesLite } from '@/lib/sessionPersistence';
-import { getQueuedSessionCount } from '@/lib/sessionQueue';
+import { getQueuedSessionCount, resetFailedSessions } from '@/lib/sessionQueue';
 import type { AppUser } from '@/types';
 
 import { contextEquals } from '../context-utils';
@@ -388,6 +388,10 @@ export function AppStoreProvider({
   // Periodic retry of queued sessions
   useEffect(() => {
     const RETRY_INTERVAL_MS = 30000; // Check every 30 seconds
+
+    // Sessions that exhausted their retry budget stay parked until attempts are
+    // reset; a fresh app load is the promised retry point, so reset them here.
+    resetFailedSessions();
 
     // Initial retry attempt after a short delay
     const initialTimeout = setTimeout(() => {

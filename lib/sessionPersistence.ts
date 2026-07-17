@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { getAuth } from 'firebase/auth';
 import {
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -17,6 +18,7 @@ import {
   calculateGroupLetterAccuracy,
   calculateOverallCharacterAccuracy,
 } from '@/lib/groupAlignment';
+import { localDateForTimestamp } from '@/lib/localDate';
 import {
   calculateAlphabetSize,
   calculateEffectiveAlphabetSize,
@@ -109,7 +111,7 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
         : sent.length > 0 && sent === received;
     return { sent, received, correct };
   });
-  const groupTimings = (() => {
+  const groupTimings: Array<{ timeToCompleteMs: number; perCharMs?: number }> = (() => {
     if (Array.isArray(rawObj['groupTimings'])) {
       return (rawObj['groupTimings'] as unknown[]).map((t: any) => ({
         timeToCompleteMs: Math.max(0, Number(t?.timeToCompleteMs) || 0),
@@ -139,10 +141,7 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
         ? Number(opts.docId)
         : Date.now();
   const dateValue = rawObj['date'];
-  const date: string =
-    typeof dateValue === 'string'
-      ? dateValue
-      : (new Date(ts).toISOString().split('T')[0] ?? '1970-01-01');
+  const date: string = typeof dateValue === 'string' ? dateValue : localDateForTimestamp(ts);
   const startedAt = typeof rawObj['startedAt'] === 'number' ? (rawObj['startedAt'] as number) : ts;
   const finishedAt =
     typeof rawObj['finishedAt'] === 'number' ? (rawObj['finishedAt'] as number) : ts;
@@ -164,7 +163,12 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
     isFinite(rawObj['avgResponseMs'] as number) &&
     (rawObj['avgResponseMs'] as number) > 0
       ? Number(rawObj['avgResponseMs'])
-      : computeAverageResponseMs(groupTimings);
+      : // Prefer perCharMs like buildSessionResult so recomputed scores match originals
+        computeAverageResponseMs(
+          groupTimings.map((t) => ({
+            timeToCompleteMs: typeof t.perCharMs === 'number' ? t.perCharMs : t.timeToCompleteMs,
+          })),
+        );
   const score =
     typeof rawObj['score'] === 'number' &&
     isFinite(rawObj['score'] as number) &&
@@ -193,6 +197,18 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
     typeof rawObj['digitsLevel'] === 'number' && Number.isFinite(rawObj['digitsLevel'])
       ? Math.floor(rawObj['digitsLevel'] as number)
       : undefined;
+  const charWpm =
+    typeof rawObj['charWpm'] === 'number' &&
+    Number.isFinite(rawObj['charWpm']) &&
+    (rawObj['charWpm'] as number) >= 1
+      ? Number(rawObj['charWpm'])
+      : undefined;
+  const effectiveWpm =
+    typeof rawObj['effectiveWpm'] === 'number' &&
+    Number.isFinite(rawObj['effectiveWpm']) &&
+    (rawObj['effectiveWpm'] as number) >= 1
+      ? Number(rawObj['effectiveWpm'])
+      : undefined;
 
   const result: SessionResult = {
     date,
@@ -215,9 +231,57 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
     ...(charSetMode !== undefined ? { charSetMode } : {}),
     ...(kochLevel !== undefined ? { kochLevel } : {}),
     ...(digitsLevel !== undefined ? { digitsLevel } : {}),
+    ...(charWpm !== undefined ? { charWpm } : {}),
+    ...(effectiveWpm !== undefined ? { effectiveWpm } : {}),
   };
   return result;
 };
+
+/**
+ * Cloud tombstones for deleted sessions.
+ *
+ * Deletions must be visible to every device: without them, another device that
+ * still holds the deleted session in localStorage treats it as "local-only" on
+ * its next load and re-uploads it, resurrecting data the user deleted.
+ */
+async function recordDeletionTombstone(
+  services: FirebaseServicesLite,
+  user: { uid?: string } | null,
+  timestamp: number,
+): Promise<void> {
+  if (!(services && user && user.uid)) return;
+  try {
+    await setDoc(
+      doc(services.db, 'users', user.uid, 'meta', 'deletedSessions'),
+      { timestamps: arrayUnion(timestamp), updatedAt: Date.now() },
+      { merge: true },
+    );
+  } catch (e) {
+    console.warn('Failed to record deletion tombstone; deletion may resurrect on other devices.', e);
+  }
+}
+
+async function readDeletionTombstones(
+  services: FirebaseServicesLite,
+  user: { uid?: string } | null,
+): Promise<Set<number>> {
+  const tombstones = new Set<number>();
+  if (!(services && user && user.uid)) return tombstones;
+  try {
+    const snap = await getDoc(doc(services.db, 'users', user.uid, 'meta', 'deletedSessions'));
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      if (Array.isArray(data?.timestamps)) {
+        data.timestamps.forEach((t: unknown) => {
+          if (typeof t === 'number' && Number.isFinite(t)) tombstones.add(t);
+        });
+      }
+    }
+  } catch {
+    // Unavailable tombstones only mean a potential re-upload, never data loss.
+  }
+  return tombstones;
+}
 
 async function ensurePublicId(
   services: FirebaseServicesLite,
@@ -284,10 +348,61 @@ export async function setUserCallSign(
   }
 }
 
+function buildLeaderboardPayload(
+  uid: string,
+  publicId: number | null,
+  callSign: string | null,
+  r: SessionResult,
+  now: number,
+): Record<string, unknown> {
+  const alphabetSize =
+    typeof r.alphabetSize === 'number' && r.alphabetSize > 0
+      ? r.alphabetSize
+      : calculateAlphabetSize(r.groups || []);
+  const effectiveAlphabetSize =
+    typeof r.effectiveAlphabetSize === 'number' && r.effectiveAlphabetSize > 0
+      ? r.effectiveAlphabetSize
+      : calculateEffectiveAlphabetSize(r.groups || [], { applyMillerMadow: true });
+  const totalChars =
+    typeof r.totalChars === 'number' && r.totalChars > 0
+      ? r.totalChars
+      : calculateTotalChars(r.groups || []);
+  const avgResponseMs =
+    typeof r.avgResponseMs === 'number' && isFinite(r.avgResponseMs) && r.avgResponseMs > 0
+      ? r.avgResponseMs
+      : computeAverageResponseMs(r.groupTimings || []);
+  const score =
+    typeof r.score === 'number' && isFinite(r.score) && r.score > 0
+      ? r.score
+      : computeSessionScore({
+          effectiveAlphabetSize,
+          alphabetSize,
+          accuracy: r.accuracy || 0,
+          avgResponseMs,
+          totalChars,
+        });
+  return {
+    uid,
+    publicId: publicId,
+    ...(callSign ? { callSign } : {}),
+    timestamp: r.timestamp,
+    date: r.date,
+    score,
+    accuracy: r.accuracy,
+    alphabetSize,
+    effectiveAlphabetSize,
+    totalChars,
+    avgResponseMs,
+    createdAt: now,
+    version: 1,
+  };
+}
+
 async function writeLeaderboardForSessions(
   services: FirebaseServicesLite,
   user: { uid: string } | null,
   results: SessionResult[],
+  opts?: { skipExistenceCheck?: boolean },
 ): Promise<void> {
   if (!(services && user && user.uid)) return;
   const publicId = user?.uid ? await ensurePublicId(services, { uid: user.uid }) : null;
@@ -297,81 +412,28 @@ async function writeLeaderboardForSessions(
     results.map(async (r) => {
       // Nest under user scope for rules friendliness; one doc per session timestamp
       const ref = doc(services.db, 'users', user.uid, 'leaderboard', String(r.timestamp));
-      try {
-        const ex = await getDoc(ref as any);
-        if (ex.exists()) {
-          // Entry exists - only update callSign if it's missing or changed (keep rest immutable)
-          const existingData = ex.data() as any;
-          const existingCallSign =
-            typeof existingData?.callSign === 'string' && existingData.callSign.length > 0
-              ? existingData.callSign
-              : null;
-          const newCallSign = callSign && callSign.length > 0 ? callSign : null;
-          if (newCallSign !== existingCallSign) {
-            // Update only the callSign field using merge
-            const updatePayload: any = {};
-            if (newCallSign) {
-              updatePayload.callSign = newCallSign;
-            } else {
-              // Explicitly set to null to remove the field if call-sign was cleared
-              updatePayload.callSign = null;
+      // For freshly created sessions the doc cannot exist yet, so the existence
+      // read is skipped (it cost one read per historical session on every save).
+      if (!opts?.skipExistenceCheck) {
+        try {
+          const ex = await getDoc(ref as any);
+          if (ex.exists()) {
+            // Entry exists - only update callSign if it's missing or changed (keep rest immutable)
+            const existingData = ex.data() as any;
+            const existingCallSign =
+              typeof existingData?.callSign === 'string' && existingData.callSign.length > 0
+                ? existingData.callSign
+                : null;
+            const newCallSign = callSign && callSign.length > 0 ? callSign : null;
+            if (newCallSign !== existingCallSign) {
+              await setDoc(ref, { callSign: newCallSign }, { merge: true });
             }
-            await setDoc(ref, updatePayload, { merge: true });
-            console.log(
-              '[Leaderboard] Updated callSign for entry:',
-              r.timestamp,
-              'from',
-              existingCallSign,
-              'to',
-              newCallSign,
-            );
+            return; // Don't overwrite the rest of the entry
           }
-          return; // Don't overwrite the rest of the entry
-        }
-      } catch {}
-      // New entry - create it with all data
-      const alphabetSize =
-        typeof r.alphabetSize === 'number' && r.alphabetSize > 0
-          ? r.alphabetSize
-          : calculateAlphabetSize(r.groups || []);
-      const effectiveAlphabetSize =
-        typeof r.effectiveAlphabetSize === 'number' && r.effectiveAlphabetSize > 0
-          ? r.effectiveAlphabetSize
-          : calculateEffectiveAlphabetSize(r.groups || [], { applyMillerMadow: true });
-      const totalChars =
-        typeof r.totalChars === 'number' && r.totalChars > 0
-          ? r.totalChars
-          : calculateTotalChars(r.groups || []);
-      const avgResponseMs =
-        typeof r.avgResponseMs === 'number' && isFinite(r.avgResponseMs) && r.avgResponseMs > 0
-          ? r.avgResponseMs
-          : computeAverageResponseMs(r.groupTimings || []);
-      const score =
-        typeof r.score === 'number' && isFinite(r.score) && r.score > 0
-          ? r.score
-          : computeSessionScore({
-              effectiveAlphabetSize,
-              alphabetSize,
-              accuracy: r.accuracy || 0,
-              avgResponseMs,
-              totalChars,
-            });
-      const payload: any = {
-        uid: user.uid,
-        publicId: publicId,
-        ...(callSign ? { callSign } : {}),
-        timestamp: r.timestamp,
-        date: r.date,
-        score,
-        accuracy: r.accuracy,
-        alphabetSize,
-        effectiveAlphabetSize,
-        totalChars,
-        avgResponseMs,
-        createdAt: now,
-        version: 1,
-      };
-      await setDoc(ref, payload, { merge: false });
+        } catch {}
+      }
+      const payload = buildLeaderboardPayload(user.uid, publicId, callSign, r, now);
+      await setDoc(ref, payload as any, { merge: false });
     }),
   );
 }
@@ -396,7 +458,7 @@ export async function loadSessions(
   if (cloudLoaded) {
     // Merge with any local-only entries
     let merged: SessionResult[] = cloudLoaded;
-    let hasLocalOnlyEntries = false;
+    const localOnly: SessionResult[] = [];
     try {
       const savedLocal = localStorage.getItem(localKeyForResults(user));
       if (savedLocal) {
@@ -406,27 +468,29 @@ export async function loadSessions(
         merged.forEach((s) => {
           byTs[s.timestamp] = s;
         });
-        localNorm.forEach((s) => {
-          if (!byTs[s.timestamp]) {
+        const candidates = localNorm.filter((s) => !byTs[s.timestamp]);
+        // Local entries missing from the cloud are either unsynced new sessions
+        // or sessions deleted from another device — tombstones tell them apart.
+        const tombstones =
+          candidates.length > 0 ? await readDeletionTombstones(services, user) : new Set<number>();
+        candidates.forEach((s) => {
+          if (!tombstones.has(s.timestamp)) {
             byTs[s.timestamp] = s;
-            hasLocalOnlyEntries = true; // Found local-only entry that needs syncing
+            localOnly.push(s); // Found local-only entry that needs syncing
           }
         });
         merged = Object.values(byTs).sort((a, b) => a.timestamp - b.timestamp);
       }
     } catch {}
 
-    // Only save to Firestore if there are local-only entries to sync, or if we need to update localStorage
-    // This avoids unnecessary writes that can hit quota limits
-    if (hasLocalOnlyEntries) {
+    // Only push the local-only entries to Firestore (never rewrite the whole
+    // history here — that caused unnecessary writes that hit quota limits).
+    if (localOnly.length > 0) {
       try {
-        await saveSessions(services, user, merged); // sync local-only entries to cloud
+        await saveSessionsSubset(services, user, localOnly, merged);
       } catch (e) {
-        // If save fails (e.g., quota exceeded), still update localStorage and continue
+        // Local copy is already written by saveSessionsSubset; retry later.
         console.warn('Failed to sync local sessions to Firestore; will retry later.', e);
-        try {
-          localStorage.setItem(localKeyForResults(user), JSON.stringify(merged));
-        } catch {}
       }
     } else {
       // No local-only entries, just ensure localStorage is in sync
@@ -449,6 +513,76 @@ export async function loadSessions(
     }
   } catch {}
   return [];
+}
+
+async function writeStatsDocs(
+  services: NonNullable<FirebaseServicesLite>,
+  uid: string,
+  results: SessionResult[],
+): Promise<void> {
+  const daily = getDailyStats(results as any);
+  const letters = getLetterStats(results as any);
+  await Promise.all([
+    setDoc(doc(services.db, 'users', uid, 'stats', 'daily'), {
+      items: daily,
+      updatedAt: Date.now(),
+    }),
+    setDoc(doc(services.db, 'users', uid, 'stats', 'letters'), {
+      items: letters,
+      updatedAt: Date.now(),
+    }),
+  ]);
+}
+
+/**
+ * Persist only `subset` session docs to Firestore (plus aggregate stats computed
+ * from `allResults`). The full local copy is always written to localStorage.
+ *
+ * This is the hot path for finishing a session: it costs O(subset) Firestore
+ * operations instead of rewriting the entire history (which grew quadratically
+ * and exhausted free-tier quota for long-time users).
+ */
+export async function saveSessionsSubset(
+  services: FirebaseServicesLite,
+  user: { uid?: string; email?: string } | null,
+  subset: SessionResult[],
+  allResults: SessionResult[],
+): Promise<void> {
+  try {
+    localStorage.setItem(localKeyForResults(user), JSON.stringify(allResults));
+  } catch {}
+  if (!(services && user && user.uid)) return;
+  if (subset.length === 0) return;
+  try {
+    await Promise.all(
+      subset.map((r) => {
+        const payload = { ...r } as any;
+        try {
+          delete payload.firestoreId;
+        } catch {}
+        return setDoc(doc(services.db, 'users', user.uid, 'sessions', String(r.timestamp)), payload);
+      }),
+    );
+    await writeStatsDocs(services, user.uid, allResults);
+    // New sessions cannot have leaderboard entries yet — skip existence reads.
+    await writeLeaderboardForSessions(services, { uid: user.uid }, subset, {
+      skipExistenceCheck: true,
+    });
+  } catch (e: any) {
+    const isQuotaError =
+      e?.code === 'resource-exhausted' ||
+      e?.message?.includes('quota') ||
+      e?.message?.includes('Quota');
+    if (isQuotaError) {
+      console.warn('Firestore quota exceeded; local copy saved. Session queued for retry.', e);
+    } else {
+      console.warn('Failed to write to Firestore; local copy saved. Session queued for retry.', e);
+    }
+    // Rethrow so the caller queues the failed subset for retry. Stats docs are
+    // recomputed from the full list on the next successful save, so no
+    // full-sync escalation is needed here.
+    throw e;
+  }
 }
 
 export async function saveSessions(
@@ -542,6 +676,7 @@ export async function deleteSessionPersisted(
       }
 
       await deleteDoc(doc(services.db, 'users', user.uid, 'sessions', docId));
+      await recordDeletionTombstone(services, user, timestamp);
       // Delete matching leaderboard entry for consistency (per-session)
       try {
         await deleteDoc(doc(services.db, 'users', user.uid, 'leaderboard', String(timestamp)));
@@ -608,6 +743,7 @@ export async function flushPendingOps(
           try {
             const docId = (ops.deletionIds && ops.deletionIds[String(ts)]) || String(ts);
             await deleteDoc(doc(services.db, 'users', user.uid, 'sessions', docId));
+            await recordDeletionTombstone(services, user, ts);
             return { ts, ok: true };
           } catch {
             return { ts, ok: false };
