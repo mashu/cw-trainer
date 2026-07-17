@@ -93,6 +93,78 @@ export interface AutoLevelAdjustProgressView {
 
 // ── Local-storage helpers ──────────────────────────────────────────────
 
+const AUTO_ADJUST_KEY_PREFIX = 'cw_auto_adjust_';
+
+/**
+ * Cross-device sync hook. Counters live in localStorage for synchronous access
+ * during result processing, but localStorage is per-browser — without a mirror,
+ * progress toward the next level silently resets on every new device while
+ * sessions themselves sync. The app store registers a listener that persists
+ * the exported snapshot to the user's Firestore meta document.
+ */
+type AutoAdjustSyncListener = (counters: Record<string, { above: number; below: number }>) => void;
+let autoAdjustSyncListener: AutoAdjustSyncListener | null = null;
+
+export function registerAutoAdjustSyncListener(listener: AutoAdjustSyncListener | null): void {
+  autoAdjustSyncListener = listener;
+}
+
+function notifyAutoAdjustSync(): void {
+  if (!autoAdjustSyncListener) return;
+  try {
+    autoAdjustSyncListener(exportAutoAdjustCounters());
+  } catch {
+    /* sync is best-effort */
+  }
+}
+
+/** Snapshot every persisted counter, keyed by storage key suffix (mode_level[_digits]). */
+export function exportAutoAdjustCounters(): Record<string, { above: number; below: number }> {
+  const out: Record<string, { above: number; below: number }> = {};
+  try {
+    if (typeof window === 'undefined') return out;
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(AUTO_ADJUST_KEY_PREFIX)) continue;
+      try {
+        const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? '');
+        if (typeof parsed === 'object' && parsed !== null) {
+          const obj = parsed as Record<string, unknown>;
+          out[key.slice(AUTO_ADJUST_KEY_PREFIX.length)] = {
+            above: typeof obj['above'] === 'number' ? obj['above'] : 0,
+            below: typeof obj['below'] === 'number' ? obj['below'] : 0,
+          };
+        }
+      } catch {
+        /* skip corrupted entry */
+      }
+    }
+  } catch {
+    /* localStorage unavailable */
+  }
+  return out;
+}
+
+/** Hydrate counters from a cloud snapshot. Local values win — cloud only fills gaps. */
+export function importAutoAdjustCounters(
+  counters: Readonly<Record<string, { above: number; below: number }>>,
+): void {
+  try {
+    if (typeof window === 'undefined') return;
+    Object.entries(counters).forEach(([suffix, value]) => {
+      if (!suffix || typeof value !== 'object' || value === null) return;
+      const key = `${AUTO_ADJUST_KEY_PREFIX}${suffix}`;
+      if (window.localStorage.getItem(key) !== null) return; // local wins
+      const above = typeof value.above === 'number' && value.above >= 0 ? value.above : 0;
+      const below = typeof value.below === 'number' && value.below >= 0 ? value.below : 0;
+      if (above === 0 && below === 0) return;
+      window.localStorage.setItem(key, JSON.stringify({ above, below }));
+    });
+  } catch {
+    /* localStorage unavailable */
+  }
+}
+
 function isMixedAdjustMode(mode: AutoAdjustMode): boolean {
   return mode === 'mixed' || mode === 'echo-mixed';
 }
@@ -147,6 +219,7 @@ function saveCounts(
   } catch {
     /* localStorage quota or privacy error */
   }
+  notifyAutoAdjustSync();
 }
 
 function removeLevelCounts(
@@ -161,6 +234,7 @@ function removeLevelCounts(
   } catch {
     /* no-op */
   }
+  notifyAutoAdjustSync();
 }
 
 // ── Mode labels ─────────────────────────────────────────────────────────

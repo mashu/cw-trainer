@@ -154,15 +154,23 @@ export class FirebaseAchievementRepository implements AchievementRepository {
       return null;
     }
 
-    const publicId = derivePublicIdFromUid(uid);
     const ref = doc(db, 'users', uid, 'meta', 'profile');
     const snap = await getDoc(ref);
     const data = snap.exists() ? snap.data() : null;
+    // A stored publicId is permanent — share URLs depend on it. Only derive
+    // (and persist) one for users who don't have an ID yet.
+    const storedPublicId =
+      data && typeof data['publicId'] === 'number' && data['publicId'] > 0
+        ? (data['publicId'] as number)
+        : null;
+    const publicId = storedPublicId ?? derivePublicIdFromUid(uid);
     const callSign =
       data && typeof data['callSign'] === 'string' && data['callSign'].trim().length > 0
         ? data['callSign'].trim().toUpperCase()
         : undefined;
-    await setDoc(ref, { publicId, updatedAt: Date.now() }, { merge: true });
+    if (storedPublicId === null) {
+      await setDoc(ref, { publicId, updatedAt: Date.now() }, { merge: true });
+    }
 
     return {
       publicId,

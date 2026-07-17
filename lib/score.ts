@@ -14,6 +14,14 @@ export const DEFAULT_SCORE_CONSTANTS: ScoreConstants = {
   delta: 0.5,
 };
 
+/**
+ * Cap on the character-volume term. Without it the C^delta term is unbounded,
+ * so on a best-session leaderboard the longest good session always wins —
+ * rewarding stamina over skill. 200 characters (~2 sustained copy tests) is
+ * where extra volume stops proving anything new.
+ */
+export const MAX_SCORED_CHARS = 200;
+
 function clampNumber(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
@@ -112,7 +120,7 @@ export function computeSessionScore(params: {
   const N = Math.max(1, Number((params.effectiveAlphabetSize ?? params.alphabetSize) || 0));
   const A = clampNumber(params.accuracy || 0, 0, 1);
   const tAvg = Math.max(1, Math.round(params.avgResponseMs || 0));
-  const C = Math.max(1, Math.floor(params.totalChars || 0));
+  const C = Math.min(MAX_SCORED_CHARS, Math.max(1, Math.floor(params.totalChars || 0)));
 
   const termAlphabet = Math.pow(N, c.alpha);
   const termAccuracy = Math.pow(A, c.beta);
@@ -124,16 +132,33 @@ export function computeSessionScore(params: {
   return Math.round(score * 100) / 100;
 }
 
-// Deterministic public numeric ID from Firebase UID (djb2 variant), 6 digits minimum
+// Deterministic public numeric ID from a Firebase UID.
+//
+// New users get a 9-digit ID (FNV-1a over the UID): a 900M space keeps
+// birthday-collision odds negligible until ~35k users, versus ~1.1k users for
+// the legacy 6-digit space. Existing users keep their stored 6-digit IDs —
+// ensurePublicId never rewrites an ID that already exists, so share URLs
+// stay stable and the two ranges cannot collide with each other.
 export function derivePublicIdFromUid(uid: string): number {
+  let hash = 0x811c9dc5; // FNV-1a offset basis
+  for (let i = 0; i < uid.length; i++) {
+    hash ^= uid.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193); // FNV prime
+  }
+  const positive = hash >>> 0;
+  const id = (positive % 900000000) + 100000000; // 100000000..999999999
+  return id;
+}
+
+/** @deprecated Legacy 6-digit derivation — kept only to document the historical range. */
+export function deriveLegacyPublicIdFromUid(uid: string): number {
   let hash = 5381;
   for (let i = 0; i < uid.length; i++) {
     hash = ((hash << 5) + hash) + uid.charCodeAt(i); // hash * 33 + char
     hash |= 0; // 32-bit
   }
   const positive = Math.abs(hash);
-  const id = (positive % 900000) + 100000; // 100000..999999
-  return id;
+  return (positive % 900000) + 100000; // 100000..999999
 }
 
 

@@ -134,6 +134,8 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
     // Use group alignment for accurate letter-level accuracy calculation
     return calculateGroupLetterAccuracy(groups);
   })();
+  const hasRealTimestamp =
+    typeof rawObj['timestamp'] === 'number' || (opts?.docId !== undefined && /^\d+$/.test(opts.docId));
   const ts =
     typeof rawObj['timestamp'] === 'number'
       ? (rawObj['timestamp'] as number)
@@ -141,7 +143,15 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
         ? Number(opts.docId)
         : Date.now();
   const dateValue = rawObj['date'];
-  const date: string = typeof dateValue === 'string' ? dateValue : localDateForTimestamp(ts);
+  // Derive the calendar day from the timestamp in the viewer's timezone. This is
+  // the zero-write migration for legacy sessions whose stored date was the UTC
+  // day: streaks and the heatmap read consistent local days without rewriting
+  // any documents. The stored date only survives when there is no timestamp.
+  const date: string = hasRealTimestamp
+    ? localDateForTimestamp(ts)
+    : typeof dateValue === 'string'
+      ? dateValue
+      : localDateForTimestamp(ts);
   const startedAt = typeof rawObj['startedAt'] === 'number' ? (rawObj['startedAt'] as number) : ts;
   const finishedAt =
     typeof rawObj['finishedAt'] === 'number' ? (rawObj['finishedAt'] as number) : ts;
@@ -261,6 +271,9 @@ async function recordDeletionTombstone(
   }
 }
 
+/** Tombstones beyond this count are compacted away (oldest sessions first). */
+const MAX_DELETION_TOMBSTONES = 500;
+
 async function readDeletionTombstones(
   services: FirebaseServicesLite,
   user: { uid?: string } | null,
@@ -275,6 +288,16 @@ async function readDeletionTombstones(
         data.timestamps.forEach((t: unknown) => {
           if (typeof t === 'number' && Number.isFinite(t)) tombstones.add(t);
         });
+      }
+      // Compact unbounded growth: old tombstones only matter while some device
+      // still holds the deleted session locally, and devices holding sessions
+      // that old have long since synced. Keep the newest N (fire-and-forget).
+      if (tombstones.size > MAX_DELETION_TOMBSTONES) {
+        const kept = [...tombstones].sort((a, b) => b - a).slice(0, MAX_DELETION_TOMBSTONES);
+        void setDoc(doc(services.db, 'users', user.uid, 'meta', 'deletedSessions'), {
+          timestamps: kept,
+          updatedAt: Date.now(),
+        }).catch(() => {});
       }
     }
   } catch {
@@ -323,15 +346,28 @@ export async function getUserCallSign(
   }
 }
 
+/** Callsign-shaped: uppercase alphanumerics with optional portable suffix (matches firestore.rules). */
+export const CALL_SIGN_PATTERN = /^[A-Z0-9/]{3,12}$/;
+
+export function isValidCallSign(callSign: string): boolean {
+  return CALL_SIGN_PATTERN.test(callSign.trim().toUpperCase());
+}
+
 export async function setUserCallSign(
   services: FirebaseServicesLite,
   user: { uid: string } | null,
   callSign: string | null,
 ): Promise<void> {
   if (!(services && user && user.uid)) return;
+  const trimmed = callSign ? callSign.trim().toUpperCase() : null;
+  if (trimmed && trimmed.length > 0 && !CALL_SIGN_PATTERN.test(trimmed)) {
+    throw new Error(
+      'Call-sign must be 3-12 characters: letters, digits, and "/" only (e.g. SP9XYZ or K1ABC/P).',
+    );
+  }
   try {
     const profileDocRef = doc(services.db, 'users', user.uid, 'meta', 'profile');
-    const cleaned = callSign ? callSign.trim().toUpperCase() : null;
+    const cleaned = trimmed;
     const update: any = { updatedAt: Date.now() };
     if (cleaned && cleaned.length > 0) {
       update.callSign = cleaned;

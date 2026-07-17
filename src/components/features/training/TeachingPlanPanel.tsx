@@ -153,28 +153,63 @@ export function TeachingPlanPanel({ sessions, settings }: TeachingPlanPanelProps
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2 pt-1 flex-wrap">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Copy certificates
+      <div className="space-y-1 pt-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Copy certificates
+          </p>
+          {progress.certificates.map((cert) => (
+            <span
+              key={cert.wpm}
+              title={
+                cert.earned
+                  ? `Earned: solid copy at ${cert.wpm} WPM`
+                  : `Copy 125+ characters at ≥90% with character speed ≥${cert.wpm} WPM`
+              }
+              className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                cert.earned
+                  ? 'bg-amber-50 border-amber-300 text-amber-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-400'
+              }`}
+            >
+              {cert.earned ? '🏅' : '·'} {cert.wpm} WPM
+            </span>
+          ))}
+          {progress.certificates.some((cert) => cert.earned) ? (
+            <button
+              type="button"
+              onClick={() => void shareCertificates(progress.certificates)}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+              title="Share your earned copy certificates"
+            >
+              Share
+            </button>
+          ) : null}
+        </div>
+        <p className="text-[11px] text-slate-400">
+          Certificates count sessions recorded after speed tracking was added — history without a
+          recorded speed can&apos;t be verified.
         </p>
-        {progress.certificates.map((cert) => (
-          <span
-            key={cert.wpm}
-            title={
-              cert.earned
-                ? `Earned: solid copy at ${cert.wpm} WPM`
-                : `Copy 125+ characters at ≥90% with character speed ≥${cert.wpm} WPM`
-            }
-            className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${
-              cert.earned
-                ? 'bg-amber-50 border-amber-300 text-amber-700'
-                : 'bg-slate-50 border-slate-200 text-slate-400'
-            }`}
-          >
-            {cert.earned ? '🏅' : '·'} {cert.wpm} WPM
-          </span>
-        ))}
       </div>
     </section>
   );
+}
+
+async function shareCertificates(
+  certificates: readonly { readonly wpm: number; readonly earned: boolean }[],
+): Promise<void> {
+  const earned = certificates.filter((cert) => cert.earned).map((cert) => `${cert.wpm} WPM`);
+  if (earned.length === 0) return;
+  const text = `Solid-copy Morse certificate${earned.length > 1 ? 's' : ''} earned: ${earned.join(', ')} — trained with CW Trainer. 🎧🔑`;
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      await navigator.share({ text });
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+    }
+  } catch {
+    /* user cancelled or share unavailable */
+  }
 }
