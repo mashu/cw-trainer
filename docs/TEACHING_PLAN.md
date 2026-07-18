@@ -43,16 +43,31 @@ reading-by-rhythm skill shows.
 
 ### Speed certificates
 
-Independent of stage progress, three certificates mirror the historic FCC
-licence code tests — **5, 13 and 20 WPM** (Novice / General / Amateur Extra).
-A certificate is earned by one session of 125+ characters at ≥90% accuracy with
-a character speed at or above the certificate speed.
+Certificates form a **matrix of (stage × speed)** with the historic FCC exam
+speeds — **5, 13 and 20 WPM** (Novice / General / Amateur Extra). The historic
+tests presumed the complete alphabet, so the final row (full character set) is
+the true equivalent; it also unlocks trophy-case achievements
+(`solid-copy-5wpm` / `-13wpm` / `-20wpm`). Earlier rows give learners a
+certificate target at every stage of the ladder.
 
-Sessions now snapshot their character/effective WPM (`charWpm`,
-`effectiveWpm` on `SessionResult`, captured from the settings' lower range
-bound), so certificates are only awarded from sessions where the speed is
-actually known. Historical sessions without a speed snapshot never earn
-certificates — the plan does not guess.
+A cell is earned by a **single session** — one sustained run, like the real
+exam, never an accumulation across sessions:
+
+- 100+ characters copied **correctly** from groups that were actually *played*
+  at or above the certificate speed,
+- ≥90% accuracy among those at-speed characters,
+- in a session at or above the stage's exit level.
+
+Because speed settings can be ranges, each group records the speed it was
+actually played at (`groupTimings[].charWpm`) — with variable speed, only the
+groups that met the certificate speed count toward the run. Legacy sessions
+without per-group speeds fall back to the session-level snapshot (the range
+minimum, conservative); history with no speed data never earns certificates —
+the plan does not guess.
+
+The panel shows best-attempt progress per cell (e.g. `87/100`), and the
+results screen calls out near-misses ("13 short — one more run?") so a failed
+attempt turns into the next session's goal.
 
 ## UI
 

@@ -35,8 +35,6 @@ export const QUALITY_ACCURACY = 0.9;
 export const QUALITY_SESSIONS_TARGET = 2;
 /** Minimum characters copied in one session for it to count as a copy test. */
 export const COPY_TEST_MIN_CHARS = 100;
-/** Minimum characters for a speed-certificate session (≈5 minutes of 5-char words at 5 WPM). */
-export const CERTIFICATE_MIN_CHARS = 125;
 /** Historic FCC code-test speeds (Novice / General / Extra), in WPM. */
 export const CERTIFICATE_SPEEDS_WPM: readonly number[] = [5, 13, 20];
 

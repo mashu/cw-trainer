@@ -1,8 +1,10 @@
 import type { SessionResult } from '@/types';
 
 import {
-  CERTIFICATE_MIN_CHARS,
-  CERTIFICATE_SPEEDS_WPM,
+  evaluateSpeedCertificateMatrix,
+  type SpeedCertificateMatrix,
+} from './speedCertificates';
+import {
   COPY_TEST_MIN_CHARS,
   QUALITY_ACCURACY,
   QUALITY_SESSIONS_TARGET,
@@ -31,18 +33,12 @@ export interface StageProgress {
   readonly bestCopyTestAccuracy?: number;
 }
 
-export interface SpeedCertificateProgress {
-  readonly wpm: number;
-  readonly earned: boolean;
-  /** Timestamp of the earning session, when earned. */
-  readonly sessionTimestamp?: number;
-}
-
 export interface TeachingPlanProgress {
   readonly stages: readonly StageProgress[];
   /** Index of the first incomplete stage; equals stages.length when the plan is finished. */
   readonly activeStageIndex: number;
-  readonly certificates: readonly SpeedCertificateProgress[];
+  /** Per-(stage × speed) certificate matrix; earned by single-session at-speed runs. */
+  readonly certificates: SpeedCertificateMatrix;
   /** Total stages completed. */
   readonly completedStageCount: number;
 }
@@ -142,21 +138,7 @@ export function evaluateTeachingPlan(
     }
   }
 
-  const certificates: SpeedCertificateProgress[] = CERTIFICATE_SPEEDS_WPM.map((wpm) => {
-    const earningSession = sessions.find(
-      (session) =>
-        isGroupSession(session) &&
-        typeof session.charWpm === 'number' &&
-        session.charWpm >= wpm &&
-        session.totalChars >= CERTIFICATE_MIN_CHARS &&
-        session.accuracy >= QUALITY_ACCURACY,
-    );
-    return {
-      wpm,
-      earned: earningSession !== undefined,
-      ...(earningSession !== undefined ? { sessionTimestamp: earningSession.timestamp } : {}),
-    };
-  });
+  const certificates = evaluateSpeedCertificateMatrix(sessions, stages);
 
   return {
     stages: stageProgress,

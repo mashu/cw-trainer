@@ -1,6 +1,5 @@
 export {
   buildTeachingPlan,
-  CERTIFICATE_MIN_CHARS,
   CERTIFICATE_SPEEDS_WPM,
   COPY_TEST_MIN_CHARS,
   QUALITY_ACCURACY,
@@ -9,10 +8,22 @@ export {
 export type { CurriculumStage } from './teachingPlan';
 export { evaluateTeachingPlan } from './progress';
 export type {
-  SpeedCertificateProgress,
   StageGoalId,
   StageGoalProgress,
   StageProgress,
   StageStatus,
   TeachingPlanProgress,
 } from './progress';
+export {
+  attemptedStageForLevel,
+  CERT_MIN_ACCURACY,
+  CERT_MIN_CORRECT_CHARS,
+  evaluateSessionSpeedRun,
+  evaluateSpeedCertificateMatrix,
+} from './speedCertificates';
+export type {
+  CertificateCell,
+  CertificateStageRow,
+  SessionSpeedRun,
+  SpeedCertificateMatrix,
+} from './speedCertificates';

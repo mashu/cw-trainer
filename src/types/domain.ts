@@ -227,6 +227,8 @@ export interface SessionGroup {
 export interface SessionTiming {
   readonly timeToCompleteMs: number;
   readonly perCharMs?: number;
+  /** Character speed (WPM) this group was actually played at — ranges sample per group. */
+  readonly charWpm?: number;
 }
 
 /**

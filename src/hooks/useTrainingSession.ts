@@ -175,6 +175,7 @@ export function useTrainingSession({
   const groupStartAtRef = useRef<number[]>([]);
   const groupEndAtRef = useRef<number[]>([]);
   const groupAnswerAtRef = useRef<number[]>([]);
+  const groupCharWpmRef = useRef<number[]>([]);
   const groupCompletionResolversRef = useRef<
     Record<number, ((result: { timedOut: boolean }) => void) | null>
   >({});
@@ -386,7 +387,14 @@ export function useTrainingSession({
       const delta = Math.max(0, ansAt - endAt);
       const sent = entry.sent;
       const perChar = sent.length > 0 ? Math.round(delta / sent.length) : 0;
-      return { timeToCompleteMs: Number.isFinite(delta) ? delta : 0, perCharMs: perChar };
+      const playedCharWpm = groupCharWpmRef.current[idx];
+      return {
+        timeToCompleteMs: Number.isFinite(delta) ? delta : 0,
+        perCharMs: perChar,
+        ...(typeof playedCharWpm === 'number' && playedCharWpm >= 1
+          ? { charWpm: Math.round(playedCharWpm * 10) / 10 }
+          : {}),
+      };
     });
 
     const result = buildSessionResult({
@@ -569,6 +577,7 @@ export function useTrainingSession({
       groupStartAtRef.current = [];
       groupEndAtRef.current = [];
       groupAnswerAtRef.current = [];
+      groupCharWpmRef.current = [];
 
       charSamplingStateRef.current = null;
       const initialSampling = generateTrainingGroup(settings, historicalSessions);
@@ -623,6 +632,9 @@ export function useTrainingSession({
           audio.trainingAbortRef.current = true;
           showToast({ message, type: 'error' });
           break;
+        }
+        if (playback.status === 'played') {
+          groupCharWpmRef.current[i] = playback.charWpm;
         }
         const durationSec = playback.status === 'played' ? playback.durationSec : 0;
         if (playback.status === 'played' && durationSec > 0) {

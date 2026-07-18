@@ -1,3 +1,4 @@
+import { evaluateSessionSpeedRun } from '@/lib/curriculum';
 import { localDateForTimestamp } from '@/lib/localDate';
 import type { SessionResult } from '@/types';
 
@@ -346,6 +347,26 @@ const buildUnlockCandidates = ({
   if (kochGraduate) {
     candidates.push({ id: 'koch-graduate', session: kochGraduate });
   }
+
+  // Historic code-test trophies: solid copy over the FULL alphabet at exam
+  // speed, earned within a single session (see curriculum/speedCertificates).
+  const SOLID_COPY_TROPHIES: ReadonlyArray<{ id: AchievementId; wpm: number }> = [
+    { id: 'solid-copy-5wpm', wpm: 5 },
+    { id: 'solid-copy-13wpm', wpm: 13 },
+    { id: 'solid-copy-20wpm', wpm: 20 },
+  ];
+  SOLID_COPY_TROPHIES.forEach(({ id, wpm }) => {
+    const earningSession = findFirst(
+      groupSessions,
+      (session) =>
+        session.kochLevel !== undefined &&
+        session.kochLevel >= KOCH_GRADUATE_LEVEL &&
+        evaluateSessionSpeedRun(session, wpm).achieved,
+    );
+    if (earningSession) {
+      candidates.push({ id, session: earningSession });
+    }
+  });
 
   return candidates;
 };

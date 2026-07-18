@@ -111,17 +111,21 @@ export const normalizeSession = (raw: unknown, opts?: { docId?: string }): Sessi
         : sent.length > 0 && sent === received;
     return { sent, received, correct };
   });
-  const groupTimings: Array<{ timeToCompleteMs: number; perCharMs?: number }> = (() => {
-    if (Array.isArray(rawObj['groupTimings'])) {
-      return (rawObj['groupTimings'] as unknown[]).map((t: any) => ({
-        timeToCompleteMs: Math.max(0, Number(t?.timeToCompleteMs) || 0),
-        ...(typeof t?.perCharMs === 'number' && isFinite(t.perCharMs) && t.perCharMs >= 0
-          ? { perCharMs: Number(t.perCharMs) }
-          : {}),
-      }));
-    }
-    return groups.map(() => ({ timeToCompleteMs: 0 }));
-  })();
+  const groupTimings: Array<{ timeToCompleteMs: number; perCharMs?: number; charWpm?: number }> =
+    (() => {
+      if (Array.isArray(rawObj['groupTimings'])) {
+        return (rawObj['groupTimings'] as unknown[]).map((t: any) => ({
+          timeToCompleteMs: Math.max(0, Number(t?.timeToCompleteMs) || 0),
+          ...(typeof t?.perCharMs === 'number' && isFinite(t.perCharMs) && t.perCharMs >= 0
+            ? { perCharMs: Number(t.perCharMs) }
+            : {}),
+          ...(typeof t?.charWpm === 'number' && isFinite(t.charWpm) && t.charWpm >= 1
+            ? { charWpm: Number(t.charWpm) }
+            : {}),
+        }));
+      }
+      return groups.map(() => ({ timeToCompleteMs: 0 }));
+    })();
   const safeAccuracy = (() => {
     if (typeof rawObj['accuracy'] === 'number' && isFinite(rawObj['accuracy'] as number))
       return rawObj['accuracy'] as number;
