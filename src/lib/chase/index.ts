@@ -1,16 +1,31 @@
 export {
-  CHASE_BASE_FALL_MS,
-  CHASE_GROUPS_PER_LEVEL,
-  CHASE_MIN_FALL_MS,
-  CHASE_STARTING_LIVES,
-  computeChaseFallMs,
+  CHASE_LETTERS_PER_LEVEL,
   computeChaseLevelProgress,
   computeChaseLevelSettings,
-  resolveChaseTarget,
 } from './progression';
+export {
+  advanceKaraokePace,
+  applyKaraokeOutcomeToPace,
+  computeKaraokeAccuracy,
+  createKaraokePace,
+  KARAOKE_LANE_COUNT,
+  KARAOKE_TONE_MAX_HZ,
+  KARAOKE_TONE_MIN_HZ,
+  KARAOKE_TONE_STEP_HZ,
+  karaokeCharAudioMs,
+  karaokeGapMs,
+  karaokeLeadMs,
+  karaokeScoreDelta,
+  karaokeSlotMs,
+  karaokeWindowMs,
+  laneToneHz,
+  pickNextLane,
+  resolveKaraokeKeystroke,
+} from './karaoke';
 export type {
-  ChaseResolveInput,
-  ChaseResolveOutcome,
-  ChaseResolveResult,
-  ChaseTargetTimingInput,
-} from './progression';
+  KaraokeKeystrokeResolution,
+  KaraokeOutcome,
+  KaraokePace,
+  KaraokePendingNote,
+  KaraokeRng,
+} from './karaoke';

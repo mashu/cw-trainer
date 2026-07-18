@@ -90,7 +90,7 @@ describe('selectTrainingSessionActive', () => {
     const running = beginChaseTrainingSession({
       sessionId: 1,
       startedAt: Date.now(),
-      lives: 3,
+      startWpm: 15,
     });
     expect(
       selectTrainingSessionActive(

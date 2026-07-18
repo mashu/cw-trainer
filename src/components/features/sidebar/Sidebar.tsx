@@ -297,8 +297,9 @@ export function Sidebar({
                       with <code>[</code> for dot and <code>]</code> for dash.
                     </li>
                     <li>
-                      <span className="font-medium">Chase</span>: Copy falling Morse groups before
-                      they hit the danger zone. Speed rises and lives are limited.
+                      <span className="font-medium">Chase</span>: Karaoke-style letter stream —
+                      notes fly by at different tones; type what you hear before each one drifts
+                      away. The pace adapts to how well you copy.
                     </li>
                     <li>
                       <span className="font-medium">Player</span>: Type any text and play it as
