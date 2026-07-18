@@ -12,15 +12,19 @@ import { CERTIFICATE_SPEEDS_WPM, buildTeachingPlan, type CurriculumStage } from 
  * {@link CERT_MIN_CORRECT_CHARS} correctly copied characters from groups that
  * were actually PLAYED at or above the certificate speed, with at-speed
  * accuracy of at least {@link CERT_MIN_ACCURACY}, in a session at or above the
- * stage's exit level. With variable-speed settings only the groups that met
- * the speed count — per-group speeds are recorded in `groupTimings[].charWpm`.
+ * stage's exit level. Fifty characters is roughly a default 20-group session
+ * at 3-char groups (or ~10 five-char groups) — long enough to prove solid
+ * copy without demanding a 100-group slog. With variable-speed settings only
+ * the groups that met the speed count — per-group speeds are in
+ * `groupTimings[].charWpm`.
  *
  * The final stage covers the complete character sequence, so its cells are the
  * true historic equivalents (5/13/20 WPM over the full alphabet); those also
  * unlock trophy-case achievements.
  */
 
-export const CERT_MIN_CORRECT_CHARS = 100;
+/** Correct at-speed characters required in one session (~10×5-char or ~17×3-char groups). */
+export const CERT_MIN_CORRECT_CHARS = 50;
 export const CERT_MIN_ACCURACY = 0.9;
 
 export interface SessionSpeedRun {

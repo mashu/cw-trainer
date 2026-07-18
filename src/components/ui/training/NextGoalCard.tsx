@@ -6,6 +6,7 @@ import {
   attemptedStageForLevel,
   buildTeachingPlan,
   CERT_MIN_ACCURACY,
+  CERT_MIN_CORRECT_CHARS,
   evaluateSessionSpeedRun,
   evaluateSpeedCertificateMatrix,
   evaluateTeachingPlan,
@@ -103,12 +104,12 @@ export function NextGoalCard({ sessions, settings, lastScore }: NextGoalCardProp
     }
     if (!best || best.run.correctChars === 0) return null;
     const { run, speed } = best;
-    if (run.correctChars < run.totalChars || run.correctChars < 100) {
-      const short = Math.max(0, 100 - run.correctChars);
+    if (run.correctChars < run.totalChars || run.correctChars < CERT_MIN_CORRECT_CHARS) {
+      const short = Math.max(0, CERT_MIN_CORRECT_CHARS - run.correctChars);
       if (short > 0) {
         return {
           emoji: '📜',
-          text: `${stageLabel} certificate at ${speed} WPM: ${run.correctChars}/100 correct at speed — ${short} short. One more run?`,
+          text: `${stageLabel} certificate at ${speed} WPM: ${run.correctChars}/${CERT_MIN_CORRECT_CHARS} correct at speed — ${short} short. One more run?`,
         };
       }
     }

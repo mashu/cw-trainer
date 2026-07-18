@@ -66,30 +66,30 @@ describe('evaluateSessionSpeedRun', () => {
     expect(at10.totalChars).toBe(100);
   });
 
-  it('requires 100 correct at-speed characters within the single session', () => {
-    const nineteen = groupsAtSpeed(19, 20); // 95 chars — just short
-    const short = makeSession({ timestamp: 1, groups: nineteen.groups, timings: nineteen.timings });
+  it('requires 50 correct at-speed characters within the single session', () => {
+    const nine = groupsAtSpeed(9, 20); // 45 chars — just short
+    const short = makeSession({ timestamp: 1, groups: nine.groups, timings: nine.timings });
     expect(evaluateSessionSpeedRun(short, 20).achieved).toBe(false);
 
-    const twenty = groupsAtSpeed(20, 20); // 100 chars
-    const enough = makeSession({ timestamp: 2, groups: twenty.groups, timings: twenty.timings });
+    const ten = groupsAtSpeed(10, 20); // 50 chars
+    const enough = makeSession({ timestamp: 2, groups: ten.groups, timings: ten.timings });
     expect(evaluateSessionSpeedRun(enough, 20).achieved).toBe(true);
   });
 
   it('requires at-speed accuracy, not just volume', () => {
-    const { groups, timings } = groupsAtSpeed(30, 20); // 150 chars
+    const { groups, timings } = groupsAtSpeed(16, 20); // 80 chars
     const flawed = groups.map((g, i) =>
-      i < 10 ? { sent: g.sent, received: 'XXXXX', correct: false } : g,
+      i < 6 ? { sent: g.sent, received: 'XXXXX', correct: false } : g,
     );
     const session = makeSession({ timestamp: 1, groups: flawed, timings });
     const run = evaluateSessionSpeedRun(session, 20);
-    expect(run.correctChars).toBe(100);
-    expect(run.accuracy).toBeCloseTo(100 / 150);
-    expect(run.achieved).toBe(false); // 67% at-speed accuracy < 90%
+    expect(run.correctChars).toBe(50);
+    expect(run.accuracy).toBeCloseTo(50 / 80);
+    expect(run.achieved).toBe(false); // 62.5% at-speed accuracy < 90%
   });
 
   it('falls back to the session-level speed snapshot for legacy sessions', () => {
-    const groups = Array.from({ length: 25 }, () => correctGroup('KMURE'));
+    const groups = Array.from({ length: 12 }, () => correctGroup('KMURE'));
     const timings = groups.map(() => ({ timeToCompleteMs: 1000 })); // no per-group speed
     const legacy = makeSession({ timestamp: 1, groups, timings, sessionCharWpm: 15 });
     expect(evaluateSessionSpeedRun(legacy, 13).achieved).toBe(true);
@@ -101,7 +101,7 @@ describe('evaluateSpeedCertificateMatrix', () => {
   const plan = buildTeachingPlan();
 
   it('credits the stage bracket the session level reaches, and all below it', () => {
-    const { groups, timings } = groupsAtSpeed(25, 13);
+    const { groups, timings } = groupsAtSpeed(12, 13);
     const sessions = [makeSession({ timestamp: 1, groups, timings, kochLevel: 12 })];
     const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
     // Level 12 covers stages with exit level <= 12 (stages 1 and 2)
@@ -113,24 +113,24 @@ describe('evaluateSpeedCertificateMatrix', () => {
   });
 
   it('tracks the best near-miss attempt for progress display', () => {
-    const { groups, timings } = groupsAtSpeed(15, 20); // 75 correct chars — short of 100
+    const { groups, timings } = groupsAtSpeed(7, 20); // 35 correct chars — short of 50
     const sessions = [makeSession({ timestamp: 1, groups, timings, kochLevel: 40 })];
     const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
     const lastRow = matrix.rows[matrix.rows.length - 1]!;
     const cell = lastRow.cells.find((c) => c.speed === 20)!;
     expect(cell.earned).toBe(false);
-    expect(cell.bestCorrectChars).toBe(75);
+    expect(cell.bestCorrectChars).toBe(35);
   });
 
   it('marks full-alphabet certificates from the final stage row', () => {
-    const { groups, timings } = groupsAtSpeed(20, 20);
+    const { groups, timings } = groupsAtSpeed(10, 20);
     const sessions = [makeSession({ timestamp: 1, groups, timings, kochLevel: 40 })];
     const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
     expect(matrix.fullAlphabetEarnedSpeeds).toEqual([5, 13, 20]);
   });
 
   it('ignores echo/chase sessions', () => {
-    const { groups, timings } = groupsAtSpeed(20, 20);
+    const { groups, timings } = groupsAtSpeed(10, 20);
     const sessions = [makeSession({ timestamp: 1, groups, timings, mode: 'echo' })];
     const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
     expect(matrix.earnedCount).toBe(0);

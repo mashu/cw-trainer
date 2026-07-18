@@ -53,8 +53,9 @@ certificate target at every stage of the ladder.
 A cell is earned by a **single session** — one sustained run, like the real
 exam, never an accumulation across sessions:
 
-- 100+ characters copied **correctly** from groups that were actually *played*
-  at or above the certificate speed,
+- 50+ characters copied **correctly** from groups that were actually *played*
+  at or above the certificate speed (~10 five-char groups, or a default
+  20-group session at 3-char groups),
 - ≥90% accuracy among those at-speed characters,
 - in a session at or above the stage's exit level.
 
@@ -65,9 +66,11 @@ without per-group speeds fall back to the session-level snapshot (the range
 minimum, conservative); history with no speed data never earns certificates —
 the plan does not guess.
 
-The panel shows best-attempt progress per cell (e.g. `87/100`), and the
-results screen calls out near-misses ("13 short — one more run?") so a failed
-attempt turns into the next session's goal.
+The home panel shows a compact view: progress for the **current stage** plus
+the full-alphabet row (trophy unlocks). The full stage×speed grid appears when
+"Show all stages" is toggled. Best-attempt progress (e.g. `32/50`) and
+results-screen near-misses ("13 short — one more run?") turn a failed attempt
+into the next session's goal.
 
 ## UI
 
@@ -75,7 +78,8 @@ attempt turns into the next session's goal.
 
 - overall plan progress (stages completed, progress bar),
 - the active stage with its goal checklist and best copy-test accuracy,
-- the certificate row with earned/unearned state.
+- compact speed-certificate progress (current stage + full alphabet; full
+  matrix when showing all stages).
 
 ## Future extensions
 
