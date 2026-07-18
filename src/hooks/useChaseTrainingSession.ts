@@ -4,18 +4,28 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { buildSessionResult } from '@/lib/buildSessionResult';
 import {
-  computeChaseFallMs,
+  advanceKaraokePace,
+  applyKaraokeOutcomeToPace,
   computeChaseLevelProgress,
   computeChaseLevelSettings,
-  resolveChaseTarget,
-  type ChaseResolveOutcome,
+  createKaraokePace,
+  karaokeCharAudioMs,
+  karaokeGapMs,
+  karaokeLeadMs,
+  karaokeScoreDelta,
+  karaokeWindowMs,
+  laneToneHz,
+  pickNextLane,
+  resolveKaraokeKeystroke,
+  type KaraokeOutcome,
+  type KaraokePace,
 } from '@/lib/chase';
 import { ensureAppError } from '@/lib/errors';
 import { sessionLevelSnapshotFromSettings } from '@/lib/sessionLevelSnapshot';
 import {
-  type ChaseResolvedTargetSnapshot,
+  type ChaseNoteSnapshot,
+  type ChaseRecentLetterSnapshot,
   type ChaseSessionResultSummary,
-  type ChaseTargetSnapshot,
 } from '@/lib/training/chaseSessionMachine';
 import { generateTrainingGroup, updateSamplingStateFromAnswer } from '@/lib/trainingSessionGroups';
 import type { CharSamplingState } from '@/lib/trainingSessionGroups';
@@ -26,12 +36,16 @@ import type { SessionResult, TrainingSettings } from '@/types';
 import type { Toast } from './useToast';
 import { useTrainingAudio } from './useTrainingAudio';
 
-export type ChaseTarget = ChaseTargetSnapshot;
-export type ChaseResolvedTarget = ChaseResolvedTargetSnapshot;
+export type ChaseNote = ChaseNoteSnapshot;
+export type ChaseRecentLetter = ChaseRecentLetterSnapshot;
 export type { ChaseSessionResultSummary };
 
-const FEEDBACK_PAUSE_MS = 420;
-const ALLOWED_CHASE_INPUT = /[^A-Z0-9/=?.,+]/g;
+const TICK_MS = 60;
+const NOTE_FADE_MS = 1400;
+const RECENT_LETTER_CAP = 24;
+const MAX_SESSION_LETTERS = 400;
+const AUDIO_GAP_PADDING_MS = 160;
+const ALLOWED_CHASE_CHAR = /^[A-Z0-9/=?.,+]$/;
 
 export interface UseChaseTrainingSessionOptions {
   readonly settings: TrainingSettings;
@@ -45,32 +59,74 @@ export type ChaseHookStatus = 'idle' | 'running' | 'completing' | 'results' | 'f
 export interface UseChaseTrainingSessionReturn {
   readonly status: ChaseHookStatus;
   readonly isTraining: boolean;
-  readonly target: ChaseTarget | null;
-  readonly lastResolvedTarget: ChaseResolvedTarget | null;
-  readonly userInput: string;
-  readonly lives: number;
+  readonly notes: readonly ChaseNote[];
+  readonly recentLetters: readonly ChaseRecentLetter[];
+  readonly wpm: number;
+  readonly calm: boolean;
   readonly level: number;
   readonly score: number;
-  readonly streak: number;
-  readonly bestStreak: number;
+  readonly combo: number;
+  readonly bestCombo: number;
   readonly correctInLevel: number;
   readonly levelProgress: number;
-  readonly groupsCompleted: number;
+  readonly lettersHeard: number;
+  readonly correctCount: number;
+  readonly wrongCount: number;
+  readonly missedCount: number;
   readonly sessionIssueMessage?: string;
   readonly lastSessionResult: ChaseSessionResultSummary | null;
   readonly startTraining: () => Promise<void>;
   readonly stopTraining: () => void;
   readonly dismissResults: () => void;
-  readonly handleInputChange: (value: string) => void;
-  readonly submitAnswer: () => void;
+  readonly handleKeystroke: (char: string) => void;
 }
 
-type PendingTargetResult =
-  | { readonly status: 'answered'; readonly received: string; readonly answeredAt: number }
-  | { readonly status: 'timeout'; readonly answeredAt: number }
-  | { readonly status: 'aborted'; readonly answeredAt: number };
+interface MutableNote {
+  id: number;
+  char: string;
+  laneIndex: number;
+  toneHz: number;
+  spawnedAt: number;
+  hitAt: number;
+  windowEndAt: number;
+  status: ChaseNoteSnapshot['status'];
+  typedChar?: string;
+  resolvedAt?: number;
+}
 
-type PendingTargetResolver = (result: PendingTargetResult) => void;
+interface ResolvedLetterRecord {
+  readonly id: number;
+  readonly char: string;
+  readonly typed: string;
+  readonly outcome: KaraokeOutcome;
+  readonly responseMs: number;
+}
+
+interface RunStats {
+  score: number;
+  combo: number;
+  bestCombo: number;
+  level: number;
+  correctInLevel: number;
+  lettersHeard: number;
+  correctCount: number;
+  wrongCount: number;
+  missedCount: number;
+  peakWpm: number;
+}
+
+const toNoteSnapshot = (note: MutableNote): ChaseNoteSnapshot => ({
+  id: note.id,
+  char: note.char,
+  laneIndex: note.laneIndex,
+  toneHz: note.toneHz,
+  spawnedAt: note.spawnedAt,
+  hitAt: note.hitAt,
+  windowEndAt: note.windowEndAt,
+  status: note.status,
+  ...(note.typedChar !== undefined ? { typedChar: note.typedChar } : {}),
+  ...(note.resolvedAt !== undefined ? { resolvedAt: note.resolvedAt } : {}),
+});
 
 export function useChaseTrainingSession({
   settings,
@@ -99,16 +155,6 @@ export function useChaseTrainingSession({
           ? 'running'
           : runtime.status;
   const isTraining = status === 'running' || status === 'completing';
-  const target = activeRuntime ? activeRuntime.target : null;
-  const lastResolvedTarget = activeRuntime ? activeRuntime.lastResolvedTarget : null;
-  const userInput = activeRuntime ? activeRuntime.userInput : '';
-  const lives = activeRuntime ? activeRuntime.lives : settings.chaseLives;
-  const level = activeRuntime ? activeRuntime.level : 1;
-  const score = activeRuntime ? activeRuntime.score : 0;
-  const streak = activeRuntime ? activeRuntime.streak : 0;
-  const bestStreak = activeRuntime ? activeRuntime.bestStreak : 0;
-  const correctInLevel = activeRuntime ? activeRuntime.correctInLevel : 0;
-  const groupsCompleted = activeRuntime ? activeRuntime.groupsCompleted : 0;
   const sessionIssueMessage =
     runtime.status === 'failed'
       ? runtime.errorMessage
@@ -122,11 +168,15 @@ export function useChaseTrainingSession({
   const saveSessionRef = useRef(saveSession);
   const showToastRef = useRef(showToast);
   const isTrainingRef = useRef(false);
+  const stopRequestedRef = useRef(false);
   const startedAtRef = useRef<number | null>(null);
-  const userInputRef = useRef('');
-  const targetRef = useRef<ChaseTarget | null>(null);
-  const pendingResolverRef = useRef<PendingTargetResolver | null>(null);
-  const pendingTimeoutRef = useRef<number | undefined>(undefined);
+  const notesRef = useRef<MutableNote[]>([]);
+  const paceRef = useRef<KaraokePace | null>(null);
+  const statsRef = useRef<RunStats | null>(null);
+  const recentRef = useRef<ChaseRecentLetterSnapshot[]>([]);
+  const resolvedRef = useRef<ResolvedLetterRecord[]>([]);
+  const samplingStateRef = useRef<CharSamplingState | null>(null);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -140,87 +190,152 @@ export function useChaseTrainingSession({
   useEffect(() => {
     showToastRef.current = showToast;
   }, [showToast]);
-  useEffect(() => {
-    targetRef.current = target;
-  }, [target]);
 
-  const clearPendingTarget = useCallback((): void => {
-    if (pendingTimeoutRef.current !== undefined) {
-      window.clearTimeout(pendingTimeoutRef.current);
-      pendingTimeoutRef.current = undefined;
-    }
-    pendingResolverRef.current = null;
+  const pushSnapshot = useCallback((): void => {
+    const stats = statsRef.current;
+    const pace = paceRef.current;
+    if (!stats || !pace) return;
+    patchRuntime({
+      notes: notesRef.current.map(toNoteSnapshot),
+      recentLetters: [...recentRef.current],
+      wpm: Math.round(pace.wpm * 10) / 10,
+      calm: pace.calmRemaining > 0,
+      level: stats.level,
+      score: stats.score,
+      combo: stats.combo,
+      bestCombo: stats.bestCombo,
+      correctInLevel: stats.correctInLevel,
+      lettersHeard: stats.lettersHeard,
+      correctCount: stats.correctCount,
+      wrongCount: stats.wrongCount,
+      missedCount: stats.missedCount,
+    });
+    dirtyRef.current = false;
+  }, [patchRuntime]);
+
+  const applyNoteOutcome = useCallback(
+    (note: MutableNote, outcome: KaraokeOutcome, typedChar: string | undefined, at: number): void => {
+      const stats = statsRef.current;
+      const pace = paceRef.current;
+      if (!stats || !pace || note.status === 'correct' || note.status === 'wrong' || note.status === 'missed') {
+        return;
+      }
+      note.status = outcome;
+      note.resolvedAt = at;
+      if (typedChar !== undefined) note.typedChar = typedChar;
+
+      if (outcome === 'correct') {
+        stats.combo += 1;
+        stats.bestCombo = Math.max(stats.bestCombo, stats.combo);
+        stats.correctCount += 1;
+        stats.score += karaokeScoreDelta(stats.combo, pace.wpm, stats.level);
+        stats.correctInLevel += 1;
+        const lettersPerLevel = Math.max(1, settingsRef.current.chaseGroupsPerLevel);
+        if (stats.correctInLevel >= lettersPerLevel) {
+          stats.level += 1;
+          stats.correctInLevel = 0;
+          if (settingsRef.current.chaseAutoLevelEnabled) {
+            showToastRef.current({
+              message: `Level ${stats.level} — a new character joins the stream`,
+              type: 'success',
+            });
+          }
+        }
+      } else {
+        stats.combo = 0;
+        if (outcome === 'wrong') stats.wrongCount += 1;
+        else stats.missedCount += 1;
+      }
+
+      paceRef.current = applyKaraokeOutcomeToPace(pace, outcome);
+
+      recentRef.current = [
+        ...recentRef.current.slice(-(RECENT_LETTER_CAP - 1)),
+        { id: note.id, char: note.char, outcome },
+      ];
+
+      if (samplingStateRef.current) {
+        samplingStateRef.current = updateSamplingStateFromAnswer(
+          samplingStateRef.current,
+          note.char,
+          typedChar ?? '',
+        );
+      }
+
+      resolvedRef.current.push({
+        id: note.id,
+        char: note.char,
+        typed: outcome === 'correct' ? note.char : (typedChar ?? ''),
+        outcome,
+        responseMs: Math.max(0, at - note.hitAt),
+      });
+      dirtyRef.current = true;
+    },
+    [],
+  );
+
+  const sweepExpiredNotes = useCallback(
+    (now: number): void => {
+      for (const note of notesRef.current) {
+        if (note.status === 'heard' && note.windowEndAt <= now) {
+          applyNoteOutcome(note, 'missed', undefined, note.windowEndAt);
+        }
+      }
+    },
+    [applyNoteOutcome],
+  );
+
+  const pruneNotes = useCallback((now: number): void => {
+    const before = notesRef.current.length;
+    notesRef.current = notesRef.current.filter((note) => {
+      if (note.status === 'incoming' || note.status === 'heard') return true;
+      const resolvedAt = note.resolvedAt ?? note.windowEndAt;
+      return now - resolvedAt < NOTE_FADE_MS;
+    });
+    if (notesRef.current.length !== before) dirtyRef.current = true;
   }, []);
 
-  const waitForTarget = useCallback(
-    (fallMs: number): Promise<PendingTargetResult> =>
-      new Promise((resolve) => {
-        let settled = false;
-        const settle = (result: PendingTargetResult): void => {
-          if (settled) return;
-          settled = true;
-          clearPendingTarget();
-          resolve(result);
-        };
-        pendingResolverRef.current = settle;
-        pendingTimeoutRef.current = window.setTimeout(() => {
-          settle({ status: 'timeout', answeredAt: Date.now() });
-        }, fallMs);
-      }),
-    [clearPendingTarget],
-  );
-
-  const processResults = useCallback(
-    async (
-      sentGroups: readonly string[],
-      answers: readonly string[],
-      timings: readonly { readonly timeToCompleteMs: number; readonly perCharMs?: number }[],
-      maxLevel: number,
-      bestRunStreak: number,
-    ): Promise<void> => {
-      if (sentGroups.length === 0) return;
-      const result = buildSessionResult({
-        sentGroups,
-        answers,
-        startedAt: startedAtRef.current ?? Date.now(),
-        groupTimings: timings,
-        mode: 'chase',
-        levelSnapshot: sessionLevelSnapshotFromSettings(settingsRef.current),
-      });
-      const survivedMs = Math.max(0, result.finishedAt - result.startedAt);
-      completeRuntimeSession({
-        accuracy: result.accuracy,
-        groups: result.groups,
-        avgResponseMs: result.avgResponseMs,
-        score: result.score,
-        maxLevel,
-        survivedMs,
-        bestStreak: bestRunStreak,
-        livesLost: settingsRef.current.chaseLives,
-      });
-      await saveSessionRef.current(result as SessionResultInput);
-    },
-    [completeRuntimeSession],
-  );
+  const processResults = useCallback(async (): Promise<void> => {
+    const stats = statsRef.current;
+    const resolved = [...resolvedRef.current].sort((a, b) => a.id - b.id);
+    if (!stats || resolved.length === 0) return;
+    const result = buildSessionResult({
+      sentGroups: resolved.map((r) => r.char),
+      answers: resolved.map((r) => r.typed),
+      startedAt: startedAtRef.current ?? Date.now(),
+      groupTimings: resolved.map((r) => ({
+        timeToCompleteMs: r.responseMs,
+        perCharMs: r.responseMs,
+      })),
+      mode: 'chase',
+      levelSnapshot: sessionLevelSnapshotFromSettings(settingsRef.current),
+    });
+    completeRuntimeSession({
+      accuracy: result.accuracy,
+      score: stats.score,
+      maxLevel: stats.level,
+      durationMs: Math.max(0, result.finishedAt - result.startedAt),
+      bestCombo: stats.bestCombo,
+      lettersTotal: resolved.length,
+      correctCount: stats.correctCount,
+      wrongCount: stats.wrongCount,
+      missedCount: stats.missedCount,
+      peakWpm: Math.round(stats.peakWpm * 10) / 10,
+      avgResponseMs: result.avgResponseMs,
+      letters: resolved.map((r) => ({ char: r.char, typed: r.typed, outcome: r.outcome })),
+    });
+    await saveSessionRef.current(result as SessionResultInput);
+  }, [completeRuntimeSession]);
 
   const stopTraining = useCallback((): void => {
+    stopRequestedRef.current = true;
     audio.trainingAbortRef.current = true;
-    isTrainingRef.current = false;
-    pendingResolverRef.current?.({ status: 'aborted', answeredAt: Date.now() });
-    clearPendingTarget();
-    cancelRuntimeSession();
-    audio.stopAudio();
-  }, [audio, clearPendingTarget, cancelRuntimeSession]);
+  }, [audio]);
 
   useEffect(() => {
     return (): void => {
       audio.trainingAbortRef.current = true;
       isTrainingRef.current = false;
-      pendingResolverRef.current?.({ status: 'aborted', answeredAt: Date.now() });
-      clearPendingTarget();
-      if (isTrainingRef.current) {
-        setRuntimeStatus('paused', { pauseReason: 'Chase training view was remounted.' });
-      }
       audio.stopAudio();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -236,174 +351,155 @@ export function useChaseTrainingSession({
     const mySession = audio.sessionIdRef.current + 1;
     audio.sessionIdRef.current = mySession;
     isTrainingRef.current = true;
+    stopRequestedRef.current = false;
     startedAtRef.current = Date.now();
+
+    const initialSettings = settingsRef.current;
+    const pace = createKaraokePace(
+      initialSettings.effectiveWpmMin,
+      initialSettings.effectiveWpmMax,
+    );
+    paceRef.current = pace;
+    statsRef.current = {
+      score: 0,
+      combo: 0,
+      bestCombo: 0,
+      level: 1,
+      correctInLevel: 0,
+      lettersHeard: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      missedCount: 0,
+      peakWpm: pace.wpm,
+    };
+    notesRef.current = [];
+    recentRef.current = [];
+    resolvedRef.current = [];
+    samplingStateRef.current = null;
+    dirtyRef.current = false;
+
     cancelRuntimeSession();
     beginRuntimeSession({
       sessionId: mySession,
       startedAt: startedAtRef.current,
-      lives: settingsRef.current.chaseLives,
+      startWpm: Math.round(pace.wpm * 10) / 10,
     });
     setRuntimeStatus('running');
-    patchRuntime({
-      lastResolvedTarget: null,
-      userInput: '',
-      lives: settingsRef.current.chaseLives,
-      level: 1,
-      score: 0,
-      streak: 0,
-      bestStreak: 0,
-      correctInLevel: 0,
-      groupsCompleted: 0,
-      target: null,
-    });
 
-    const sentGroups: string[] = [];
-    const answers: string[] = [];
-    const timings: Array<{ timeToCompleteMs: number; perCharMs?: number }> = [];
-    let nextLives = settingsRef.current.chaseLives;
-    let nextLevel = 1;
-    let nextScore = 0;
-    let nextStreak = 0;
-    let nextBestStreak = 0;
-    let nextCorrectInLevel = 0;
-    let targetIndex = 0;
-    let samplingState: CharSamplingState | null = null;
-
+    let nextNoteId = 0;
+    let previousLane: number | null = null;
+    // Seed so the first note takes a full travel across the timeline.
+    let lastPlannedHitAt = Date.now() + karaokeLeadMs(pace.wpm) - karaokeGapMs(pace);
+    let lastPlannedChar = '';
+    let audioCursor = 0;
     let sessionEndedDueToIssue = false;
+
+    const planAhead = (now: number): void => {
+      const currentPace = paceRef.current;
+      if (!currentPace) return;
+      while (lastPlannedHitAt < now + karaokeLeadMs((paceRef.current ?? currentPace).wpm)) {
+        const advanced = advanceKaraokePace(paceRef.current ?? currentPace);
+        paceRef.current = advanced;
+        const stats = statsRef.current;
+        if (stats) stats.peakWpm = Math.max(stats.peakWpm, advanced.wpm);
+
+        const levelSettings = computeChaseLevelSettings(
+          settingsRef.current,
+          stats?.level ?? 1,
+        );
+        const generated = generateTrainingGroup(
+          { ...levelSettings, minGroupSize: 1, maxGroupSize: 1 },
+          sessionsRef.current,
+          samplingStateRef.current ?? undefined,
+        );
+        samplingStateRef.current = generated.state;
+        const char = generated.group.slice(0, 1) || 'E';
+
+        // The next letter never starts before the previous one's audio can end.
+        const audioFloorMs =
+          lastPlannedChar.length > 0
+            ? karaokeCharAudioMs(lastPlannedChar, Math.max(1, settingsRef.current.charWpmMin)) +
+              AUDIO_GAP_PADDING_MS
+            : 0;
+        const gapMs = Math.max(karaokeGapMs(advanced), audioFloorMs);
+        const hitAt = Math.max(lastPlannedHitAt + gapMs, now + 300);
+        const lane = pickNextLane(previousLane);
+        previousLane = lane;
+        const windowMs = karaokeWindowMs(advanced.wpm);
+
+        notesRef.current.push({
+          id: nextNoteId,
+          char,
+          laneIndex: lane,
+          toneHz: laneToneHz(lane),
+          spawnedAt: now,
+          hitAt,
+          windowEndAt: hitAt + windowMs,
+          status: 'incoming',
+        });
+        nextNoteId += 1;
+        lastPlannedHitAt = hitAt;
+        lastPlannedChar = char;
+        dirtyRef.current = true;
+      }
+    };
 
     try {
       while (
-        nextLives > 0 &&
         isTrainingRef.current &&
         !audio.trainingAbortRef.current &&
         audio.sessionIdRef.current === mySession
       ) {
-        const levelSettings = computeChaseLevelSettings(settingsRef.current, nextLevel);
-        const generated = generateTrainingGroup(
-          levelSettings,
-          sessionsRef.current,
-          samplingState ?? undefined,
+        const now = Date.now();
+        sweepExpiredNotes(now);
+        pruneNotes(now);
+        planAhead(now);
+
+        const dueNote = notesRef.current.find(
+          (note) => note.id >= audioCursor && note.status === 'incoming',
         );
-        samplingState = generated.state;
-        const group = generated.group;
-        const currentSettings = settingsRef.current;
-        const groupsPerLevel = currentSettings.chaseGroupsPerLevel;
-        const fallMs = computeChaseFallMs({
-          level: nextLevel,
-          targetIndex,
-          groupsPerLevel,
-          startFallMs: currentSettings.chaseStartFallMs,
-          minFallMs: currentSettings.chaseMinFallMs,
-          levelSpeedupMs: currentSettings.chaseLevelSpeedupMs,
-          groupSpeedupMs: currentSettings.chaseGroupSpeedupMs,
-        });
-        const spawnedAt = Date.now();
-        const deadlineAt = spawnedAt + fallMs;
-        const nextTarget: ChaseTarget = {
-          id: targetIndex,
-          group,
-          lanePercent: 8 + ((targetIndex * 23) % 78),
-          level: nextLevel,
-          spawnedAt,
-          deadlineAt,
-          fallMs,
-        };
+        if (dueNote && dueNote.hitAt <= now + TICK_MS / 2) {
+          audioCursor = dueNote.id + 1;
+          dueNote.status = 'heard';
+          const stats = statsRef.current;
+          if (stats) stats.lettersHeard += 1;
+          dirtyRef.current = true;
+          const playback = await audio.playMorse(dueNote.char, mySession, {
+            toneHz: dueNote.toneHz,
+          });
+          if (playback.status === 'failed' || playback.status === 'suspended') {
+            const message =
+              playback.status === 'failed'
+                ? playback.message
+                : 'Audio was suspended by the browser. Start a new run when ready.';
+            setRuntimeStatus('failed', { errorMessage: message });
+            showToastRef.current({ message, type: 'error' });
+            audio.trainingAbortRef.current = true;
+            sessionEndedDueToIssue = true;
+            break;
+          }
+        }
 
-        userInputRef.current = '';
-        patchRuntime({ userInput: '', target: nextTarget });
-        targetRef.current = nextTarget;
+        if (dirtyRef.current) pushSnapshot();
 
-        const playback = await audio.playMorse(group, mySession);
-        if (playback.status === 'failed' || playback.status === 'suspended') {
-          const message =
-            playback.status === 'failed'
-              ? playback.message
-              : 'Audio was suspended by the browser. Start a new Chase run when ready.';
-          setRuntimeStatus('failed', { errorMessage: message });
-          showToastRef.current({ message, type: 'error' });
-          audio.trainingAbortRef.current = true;
-          sessionEndedDueToIssue = true;
+        if (resolvedRef.current.length >= MAX_SESSION_LETTERS) {
+          stopRequestedRef.current = true;
           break;
         }
 
-        const completion = await waitForTarget(fallMs);
-        if (completion.status === 'aborted') break;
-
-        const received = completion.status === 'answered' ? completion.received : '';
-        const outcome: ChaseResolveOutcome =
-          completion.status === 'timeout'
-            ? 'missed'
-            : received.trim().toUpperCase() === group
-              ? 'correct'
-              : 'wrong';
-        const remainingMs = Math.max(0, deadlineAt - completion.answeredAt);
-        const responseMs = Math.max(0, fallMs - remainingMs);
-        const resolved = resolveChaseTarget({
-          expected: group,
-          received,
-          outcome,
-          level: nextLevel,
-          lives: nextLives,
-          score: nextScore,
-          streak: nextStreak,
-          remainingMs,
-        });
-
-        sentGroups.push(group);
-        answers.push(received);
-        if (samplingState) {
-          samplingState = updateSamplingStateFromAnswer(samplingState, group, received);
-        }
-        timings.push({
-          timeToCompleteMs: responseMs,
-          ...(group.length > 0 ? { perCharMs: Math.round(responseMs / group.length) } : {}),
-        });
-
-        nextLives = resolved.lives;
-        nextScore = resolved.score;
-        nextStreak = resolved.streak;
-        nextBestStreak = Math.max(nextBestStreak, nextStreak);
-        nextCorrectInLevel = resolved.correct ? nextCorrectInLevel + 1 : nextCorrectInLevel;
-
-        if (nextCorrectInLevel >= groupsPerLevel) {
-          nextLevel += 1;
-          nextCorrectInLevel = 0;
-          showToastRef.current({
-            message: `Chase level ${nextLevel}: new group pressure`,
-            type: 'success',
-          });
-        }
-
-        patchRuntime({
-          lives: nextLives,
-          level: nextLevel,
-          score: nextScore,
-          streak: nextStreak,
-          bestStreak: nextBestStreak,
-          correctInLevel: nextCorrectInLevel,
-          groupsCompleted: sentGroups.length,
-          lastResolvedTarget: {
-            sent: group,
-            received,
-            outcome,
-            scoreDelta: resolved.scoreDelta,
-          },
-          target: null,
-        });
-        targetRef.current = null;
-
-        targetIndex += 1;
-        await audio.sleepCancelable(FEEDBACK_PAUSE_MS, mySession);
+        await audio.sleepCancelable(TICK_MS, mySession);
       }
 
       isTrainingRef.current = false;
       audio.stopAudio();
-      clearPendingTarget();
 
-      if (nextLives <= 0 && sentGroups.length > 0) {
+      if (sessionEndedDueToIssue) {
+        return;
+      }
+      if (stopRequestedRef.current && resolvedRef.current.length > 0) {
         setRuntimeStatus('completing');
-        await processResults(sentGroups, answers, timings, nextLevel, nextBestStreak);
-      } else if (!sessionEndedDueToIssue) {
+        await processResults();
+      } else {
         cancelRuntimeSession();
       }
     } catch (error) {
@@ -413,69 +509,87 @@ export function useChaseTrainingSession({
     } finally {
       isTrainingRef.current = false;
       audio.stopAudio();
-      clearPendingTarget();
     }
   }, [
     audio,
-    clearPendingTarget,
-    processResults,
     beginRuntimeSession,
     cancelRuntimeSession,
-    patchRuntime,
+    processResults,
+    pruneNotes,
+    pushSnapshot,
     setRuntimeStatus,
-    waitForTarget,
+    sweepExpiredNotes,
   ]);
 
-  const handleInputChange = useCallback(
-    (value: string): void => {
-      const currentTarget = targetRef.current;
-      const maxLength = currentTarget?.group.length ?? Number.POSITIVE_INFINITY;
-      const normalized = value.toUpperCase().replace(ALLOWED_CHASE_INPUT, '').slice(0, maxLength);
-      userInputRef.current = normalized;
-      patchRuntime({ userInput: normalized });
-      if (currentTarget && normalized.length >= currentTarget.group.length) {
-        pendingResolverRef.current?.({
-          status: 'answered',
-          received: normalized,
-          answeredAt: Date.now(),
-        });
+  const handleKeystroke = useCallback(
+    (char: string): void => {
+      if (!isTrainingRef.current) return;
+      const typed = char.toUpperCase();
+      if (!ALLOWED_CHASE_CHAR.test(typed)) return;
+      const now = Date.now();
+      sweepExpiredNotes(now);
+      const pending = notesRef.current.filter(
+        (note) => note.status === 'heard' && note.windowEndAt > now,
+      );
+      const resolutions = resolveKaraokeKeystroke(
+        pending.map((note) => ({ id: note.id, char: note.char })),
+        typed,
+      );
+      for (const resolution of resolutions) {
+        const note = notesRef.current.find((n) => n.id === resolution.id);
+        if (!note) continue;
+        const typedForNote =
+          resolution.outcome === 'correct' || resolution.outcome === 'wrong' ? typed : undefined;
+        applyNoteOutcome(note, resolution.outcome, typedForNote, now);
       }
+      if (dirtyRef.current) pushSnapshot();
     },
-    [patchRuntime],
+    [applyNoteOutcome, pushSnapshot, sweepExpiredNotes],
   );
-
-  const submitAnswer = useCallback((): void => {
-    pendingResolverRef.current?.({
-      status: 'answered',
-      received: userInputRef.current,
-      answeredAt: Date.now(),
-    });
-  }, []);
 
   const dismissResults = useCallback((): void => {
     dismissRuntimeResults();
   }, [dismissRuntimeResults]);
 
+  const notes = activeRuntime ? activeRuntime.notes : [];
+  const recentLetters = activeRuntime ? activeRuntime.recentLetters : [];
+  const wpm = activeRuntime ? activeRuntime.wpm : settings.effectiveWpmMin;
+  const calm = activeRuntime ? activeRuntime.calm : false;
+  const level = activeRuntime ? activeRuntime.level : 1;
+  const score = activeRuntime ? activeRuntime.score : 0;
+  const combo = activeRuntime ? activeRuntime.combo : 0;
+  const bestCombo = activeRuntime ? activeRuntime.bestCombo : 0;
+  const correctInLevel = activeRuntime ? activeRuntime.correctInLevel : 0;
+  const lettersHeard = activeRuntime ? activeRuntime.lettersHeard : 0;
+  const correctCount = activeRuntime ? activeRuntime.correctCount : 0;
+  const wrongCount = activeRuntime ? activeRuntime.wrongCount : 0;
+  const missedCount = activeRuntime ? activeRuntime.missedCount : 0;
+
   return {
     status,
     isTraining,
-    target,
-    lastResolvedTarget,
-    userInput,
-    lives,
+    notes,
+    recentLetters,
+    wpm,
+    calm,
     level,
     score,
-    streak,
-    bestStreak,
+    combo,
+    bestCombo,
     correctInLevel,
-    levelProgress: computeChaseLevelProgress(correctInLevel, settings.chaseGroupsPerLevel),
-    groupsCompleted,
+    levelProgress: computeChaseLevelProgress(
+      correctInLevel,
+      Math.max(1, settings.chaseGroupsPerLevel),
+    ),
+    lettersHeard,
+    correctCount,
+    wrongCount,
+    missedCount,
     ...(sessionIssueMessage !== undefined ? { sessionIssueMessage } : {}),
     lastSessionResult,
     startTraining,
     stopTraining,
     dismissResults,
-    handleInputChange,
-    submitAnswer,
+    handleKeystroke,
   };
 }

@@ -1,51 +1,69 @@
-import type { ChaseResolveOutcome } from '@/lib/chase';
+import type { KaraokeOutcome } from '@/lib/chase';
 
-export interface ChaseTargetSnapshot {
+/** Lifecycle of one karaoke note flying across the timeline. */
+export type ChaseNoteStatus = 'incoming' | 'heard' | KaraokeOutcome;
+
+export interface ChaseNoteSnapshot {
   readonly id: number;
-  readonly group: string;
-  readonly lanePercent: number;
-  readonly level: number;
+  /** The letter this note carries (revealed in the UI only after resolution). */
+  readonly char: string;
+  /** Tone lane index, 0 = lowest (300 Hz). */
+  readonly laneIndex: number;
+  readonly toneHz: number;
+  /** When the note appeared at the right edge of the timeline. */
   readonly spawnedAt: number;
-  readonly deadlineAt: number;
-  readonly fallMs: number;
+  /** When the note crosses the hit line and its audio plays. */
+  readonly hitAt: number;
+  /** End of the answer window; unanswered notes are missed after this. */
+  readonly windowEndAt: number;
+  readonly status: ChaseNoteStatus;
+  /** What the user typed when this note was resolved by a keystroke. */
+  readonly typedChar?: string;
+  readonly resolvedAt?: number;
 }
 
-export interface ChaseResolvedTargetSnapshot {
-  readonly sent: string;
-  readonly received: string;
-  readonly outcome: ChaseResolveOutcome;
-  readonly scoreDelta: number;
+export interface ChaseRecentLetterSnapshot {
+  readonly id: number;
+  readonly char: string;
+  readonly outcome: KaraokeOutcome;
 }
 
 export interface ChaseSessionResultSummary {
   readonly accuracy: number;
-  readonly groups: ReadonlyArray<{
-    readonly sent: string;
-    readonly received: string;
-    readonly correct: boolean;
-  }>;
-  readonly avgResponseMs: number;
   readonly score: number;
   readonly maxLevel: number;
-  readonly survivedMs: number;
-  readonly bestStreak: number;
-  readonly livesLost: number;
+  readonly durationMs: number;
+  readonly bestCombo: number;
+  readonly lettersTotal: number;
+  readonly correctCount: number;
+  readonly wrongCount: number;
+  readonly missedCount: number;
+  readonly peakWpm: number;
+  readonly avgResponseMs: number;
+  readonly letters: ReadonlyArray<{
+    readonly char: string;
+    readonly typed: string;
+    readonly outcome: KaraokeOutcome;
+  }>;
 }
 
 export interface ChaseTrainingActiveSnapshot {
   readonly status: 'starting' | 'running' | 'completing' | 'failed' | 'paused';
   readonly sessionId: number;
   readonly startedAt: number;
-  readonly target: ChaseTargetSnapshot | null;
-  readonly lastResolvedTarget: ChaseResolvedTargetSnapshot | null;
-  readonly userInput: string;
-  readonly lives: number;
+  readonly notes: readonly ChaseNoteSnapshot[];
+  readonly recentLetters: readonly ChaseRecentLetterSnapshot[];
+  readonly wpm: number;
+  readonly calm: boolean;
   readonly level: number;
   readonly score: number;
-  readonly streak: number;
-  readonly bestStreak: number;
+  readonly combo: number;
+  readonly bestCombo: number;
   readonly correctInLevel: number;
-  readonly groupsCompleted: number;
+  readonly lettersHeard: number;
+  readonly correctCount: number;
+  readonly wrongCount: number;
+  readonly missedCount: number;
   readonly errorMessage?: string;
   readonly pauseReason?: string;
 }
@@ -60,10 +78,30 @@ export type ChaseTrainingRuntimeState =
   | ChaseTrainingActiveSnapshot
   | ChaseTrainingResultsSnapshot;
 
+/** Fields the session loop may update while a run is active. */
+export type ChaseTrainingRuntimePatch = Partial<
+  Pick<
+    ChaseTrainingActiveSnapshot,
+    | 'notes'
+    | 'recentLetters'
+    | 'wpm'
+    | 'calm'
+    | 'level'
+    | 'score'
+    | 'combo'
+    | 'bestCombo'
+    | 'correctInLevel'
+    | 'lettersHeard'
+    | 'correctCount'
+    | 'wrongCount'
+    | 'missedCount'
+  >
+>;
+
 export interface BeginChaseTrainingSessionInput {
   readonly sessionId: number;
   readonly startedAt: number;
-  readonly lives: number;
+  readonly startWpm: number;
 }
 
 export const IDLE_CHASE_TRAINING_RUNTIME: ChaseTrainingRuntimeState = {
@@ -93,16 +131,19 @@ export function beginChaseTrainingSession(
     status: 'starting',
     sessionId: input.sessionId,
     startedAt: input.startedAt,
-    target: null,
-    lastResolvedTarget: null,
-    userInput: '',
-    lives: input.lives,
+    notes: [],
+    recentLetters: [],
+    wpm: input.startWpm,
+    calm: false,
     level: 1,
     score: 0,
-    streak: 0,
-    bestStreak: 0,
+    combo: 0,
+    bestCombo: 0,
     correctInLevel: 0,
-    groupsCompleted: 0,
+    lettersHeard: 0,
+    correctCount: 0,
+    wrongCount: 0,
+    missedCount: 0,
   };
 }
 
@@ -125,38 +166,10 @@ export function transitionChaseTrainingStatus(
 
 export function patchChaseTrainingRuntime(
   state: ChaseTrainingRuntimeState,
-  patch: Partial<
-    Pick<
-      ChaseTrainingActiveSnapshot,
-      | 'target'
-      | 'lastResolvedTarget'
-      | 'userInput'
-      | 'lives'
-      | 'level'
-      | 'score'
-      | 'streak'
-      | 'bestStreak'
-      | 'correctInLevel'
-      | 'groupsCompleted'
-    >
-  >,
+  patch: ChaseTrainingRuntimePatch,
 ): ChaseTrainingRuntimeState {
   if (!isActiveSnapshot(state)) return state;
-  return {
-    ...state,
-    ...(patch.target !== undefined ? { target: patch.target } : {}),
-    ...(patch.lastResolvedTarget !== undefined
-      ? { lastResolvedTarget: patch.lastResolvedTarget }
-      : {}),
-    ...(patch.userInput !== undefined ? { userInput: patch.userInput } : {}),
-    ...(patch.lives !== undefined ? { lives: patch.lives } : {}),
-    ...(patch.level !== undefined ? { level: patch.level } : {}),
-    ...(patch.score !== undefined ? { score: patch.score } : {}),
-    ...(patch.streak !== undefined ? { streak: patch.streak } : {}),
-    ...(patch.bestStreak !== undefined ? { bestStreak: patch.bestStreak } : {}),
-    ...(patch.correctInLevel !== undefined ? { correctInLevel: patch.correctInLevel } : {}),
-    ...(patch.groupsCompleted !== undefined ? { groupsCompleted: patch.groupsCompleted } : {}),
-  };
+  return { ...state, ...patch };
 }
 
 export function completeChaseTrainingSession(

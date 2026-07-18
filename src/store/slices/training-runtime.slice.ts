@@ -11,6 +11,7 @@ import type {
   BeginChaseTrainingSessionInput,
   ChaseSessionResultSummary,
   ChaseTrainingActiveSnapshot,
+  ChaseTrainingRuntimePatch,
   ChaseTrainingRuntimeState,
 } from '@/lib/training/chaseSessionMachine';
 import {
@@ -142,23 +143,7 @@ export interface TrainingRuntimeSlice {
       readonly errorMessage?: string;
     },
   ) => void;
-  patchChaseTrainingRuntime: (
-    patch: Partial<
-      Pick<
-        ChaseTrainingActiveSnapshot,
-        | 'target'
-        | 'lastResolvedTarget'
-        | 'userInput'
-        | 'lives'
-        | 'level'
-        | 'score'
-        | 'streak'
-        | 'bestStreak'
-        | 'correctInLevel'
-        | 'groupsCompleted'
-      >
-    >,
-  ) => void;
+  patchChaseTrainingRuntime: (patch: ChaseTrainingRuntimePatch) => void;
   completeChaseTrainingSession: (result: ChaseSessionResultSummary) => void;
   cancelChaseTrainingSession: () => void;
   dismissChaseTrainingResults: () => void;

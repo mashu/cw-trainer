@@ -810,7 +810,7 @@ export function TrainingSettingsForm({
               </h4>
               <p className="mt-0.5 text-xs text-slate-500">
                 WPM and group size are shared. The session count below is for Group/Echo sessions;
-                Chase has its own group count setting when Chase is selected.
+                Chase streams single letters and paces itself inside the effective WPM range.
               </p>
             </div>
             <button
@@ -845,7 +845,7 @@ export function TrainingSettingsForm({
                 </li>
                 <li>
                   <span className="font-medium">Number of groups</span>: How many groups per
-                  Group/Echo session. Chase uses “Groups before level-up” in Chase settings.
+                  Group/Echo session. Chase streams letters continuously until you finish.
                 </li>
                 <li>
                   <span className="font-medium">Group size</span>: Min/max characters per group

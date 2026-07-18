@@ -25,9 +25,18 @@ export type TrainingAudioPlaybackResult =
   | { readonly status: 'suspended' }
   | { readonly status: 'failed'; readonly message: string };
 
+export interface TrainingAudioPlaybackOverrides {
+  /** Force a specific side tone (Hz) instead of sampling the settings range. */
+  readonly toneHz?: number;
+}
+
 export interface TrainingAudioEngine {
   /** Play morse code for the given text. */
-  readonly playMorse: (text: string, sessionId: number) => Promise<TrainingAudioPlaybackResult>;
+  readonly playMorse: (
+    text: string,
+    sessionId: number,
+    overrides?: TrainingAudioPlaybackOverrides,
+  ) => Promise<TrainingAudioPlaybackResult>;
   /** Stop any playing audio and tear down the AudioContext. */
   readonly stopAudio: () => void;
   /** Stop current Morse playback without tearing down session ambience. */
@@ -118,7 +127,11 @@ export function useTrainingAudio(
   );
 
   const playMorse = useCallback(
-    async (text: string, sessionId: number): Promise<TrainingAudioPlaybackResult> => {
+    async (
+      text: string,
+      sessionId: number,
+      overrides?: TrainingAudioPlaybackOverrides,
+    ): Promise<TrainingAudioPlaybackResult> => {
       if (trainingAbortRef.current || sessionIdRef.current !== sessionId) {
         return { status: 'skippedBecauseAborted' };
       }
@@ -142,7 +155,7 @@ export function useTrainingAudio(
             extraWordSpaceMultiplier: clampExtraSpacingMultiplier(
               settings.extraWordSpaceMultiplier,
             ),
-            sideTone: pickTrainingToneHz(settings),
+            sideTone: overrides?.toneHz ?? pickTrainingToneHz(settings),
             steepness: settings.steepness,
             envelopeSmoothing: settings.envelopeSmoothing ?? 0,
             volumeMin: settings.volumeMin,

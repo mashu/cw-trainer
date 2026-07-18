@@ -289,18 +289,22 @@ export function TrainingRouter({
   ) {
     return (
       <ChaseTrainingView
-        target={chaseTraining.target}
-        lastResolvedTarget={chaseTraining.lastResolvedTarget}
-        userInput={chaseTraining.userInput}
-        lives={chaseTraining.lives}
+        notes={chaseTraining.notes}
+        recentLetters={chaseTraining.recentLetters}
+        wpm={chaseTraining.wpm}
+        wpmMin={settings.effectiveWpmMin}
+        wpmMax={settings.effectiveWpmMax}
+        calm={chaseTraining.calm}
         level={chaseTraining.level}
         score={chaseTraining.score}
-        streak={chaseTraining.streak}
-        bestStreak={chaseTraining.bestStreak}
+        combo={chaseTraining.combo}
+        bestCombo={chaseTraining.bestCombo}
         levelProgress={chaseTraining.levelProgress}
-        groupsCompleted={chaseTraining.groupsCompleted}
-        onChange={chaseTraining.handleInputChange}
-        onSubmit={chaseTraining.submitAnswer}
+        lettersHeard={chaseTraining.lettersHeard}
+        correctCount={chaseTraining.correctCount}
+        wrongCount={chaseTraining.wrongCount}
+        missedCount={chaseTraining.missedCount}
+        onKeystroke={chaseTraining.handleKeystroke}
         onStop={chaseTraining.stopTraining}
       />
     );

@@ -66,23 +66,25 @@ const echoTraining = {
 const chaseTraining = {
   status: 'idle',
   isTraining: false,
-  target: null,
-  lastResolvedTarget: null,
-  userInput: '',
-  lives: 3,
+  notes: [],
+  recentLetters: [],
+  wpm: 15,
+  calm: false,
   level: 1,
   score: 0,
-  streak: 0,
-  bestStreak: 0,
+  combo: 0,
+  bestCombo: 0,
   correctInLevel: 0,
   levelProgress: 0,
-  groupsCompleted: 0,
+  lettersHeard: 0,
+  correctCount: 0,
+  wrongCount: 0,
+  missedCount: 0,
   lastSessionResult: null,
   startTraining: jest.fn(),
   stopTraining: jest.fn(),
   dismissResults: jest.fn(),
-  handleInputChange: jest.fn(),
-  submitAnswer: jest.fn(),
+  handleKeystroke: jest.fn(),
 } as UseChaseTrainingSessionReturn;
 
 describe('TrainingRouter active session resilience', () => {
@@ -221,6 +223,6 @@ describe('TrainingRouter active session resilience', () => {
     );
 
     expect(screen.getByText(/Chase Mode/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Start Chase/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Start the Stream/i })).toBeInTheDocument();
   });
 });

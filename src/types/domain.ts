@@ -181,19 +181,19 @@ export interface TrainingSettings {
   readonly echoAutoAdjustThreshold: number;
   readonly echoAutoAdjustBelowThresholdCount: number;
   readonly echoAutoAdjustAboveThresholdCount: number;
-  /** Chase-only: lives available at the start of an arcade run. */
+  /** Chase legacy: lives from the retired falling-groups mode (unused by karaoke Chase). */
   readonly chaseLives: number;
-  /** Chase-only: whether completed levels unlock more characters during the run. */
+  /** Chase-only: whether level-ups unlock more characters during the run. */
   readonly chaseAutoLevelEnabled: boolean;
-  /** Chase-only: correct groups needed before level pressure/unlocks advance. */
+  /** Chase-only: correct letters needed per level-up in the karaoke stream. */
   readonly chaseGroupsPerLevel: number;
-  /** Chase-only: initial falling target time budget in milliseconds. */
+  /** Chase legacy: falling-groups start fall time in ms (unused by karaoke Chase). */
   readonly chaseStartFallMs: number;
-  /** Chase-only: lower bound for falling target time budget in milliseconds. */
+  /** Chase legacy: falling-groups minimum fall time in ms (unused by karaoke Chase). */
   readonly chaseMinFallMs: number;
-  /** Chase-only: milliseconds removed from fall time each Chase level. */
+  /** Chase legacy: falling-groups per-level speed-up in ms (unused by karaoke Chase). */
   readonly chaseLevelSpeedupMs: number;
-  /** Chase-only: milliseconds removed from fall time for each completed Chase target. */
+  /** Chase legacy: falling-groups per-group speed-up in ms (unused by karaoke Chase). */
   readonly chaseGroupSpeedupMs: number;
   readonly errorWeightStrength: number;
   /** Biases sampling toward under-practiced characters within a session (0 = off). */
