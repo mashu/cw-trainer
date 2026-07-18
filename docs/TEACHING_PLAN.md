@@ -81,6 +81,21 @@ into the next session's goal.
 - compact speed-certificate progress (current stage + full alphabet; full
   matrix when showing all stages).
 
+## Related surfaces
+
+Teaching stages answer **where you are in the syllabus**. Other UI surfaces answer
+different questions and share one character-health definition where they overlap:
+
+| Surface | Question | Notes |
+|---|---|---|
+| Teaching plan / certificates | Syllabus and exam-speed milestones | Unchanged by diagnostics |
+| Character diagnostics (Stats overview) | Which characters in the **current practice set** are weak, slow, or confused? | Frequentist; mastery = ≥5 attempts at ≥90% (same as trophies) |
+| Letter Performance (Stats) | Per-letter mastery + slow marker | Same mastery bar; speed is a separate flag |
+| Trainer focus (home) | What will the **Bayesian sampler** lean on today? | Predictive sampling weights, not mastery |
+| Trophy “letters mastered” | Collectible progress | Same mastery math as diagnostics |
+
+Stages stay the syllabus. Diagnostics stay coaching inside the set you are practicing.
+
 ## Future extensions
 
 - **Dedicated exam mode**: a locked-settings session (fixed length, no retries,

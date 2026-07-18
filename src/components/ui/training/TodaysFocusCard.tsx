@@ -16,9 +16,10 @@ const MIN_ERROR_TO_SHOW = 0.12;
 const MAX_FOCUS_CHARS = 3;
 
 /**
- * Surfaces the adaptive sampler's judgement on the home screen. The Bayesian
- * weak-character targeting is the trainer's most distinctive feature but was
- * invisible — naming today's weak spots turns it into a daily reason to start.
+ * Surfaces the adaptive sampler's judgement on the home screen. Bayesian
+ * weak-character targeting is what the trainer will emphasize in the current
+ * practice pool — not a syllabus milestone (see Teaching plan) and not the
+ * frequentist mastery/slow diagnostics on the Stats overview.
  */
 export function TodaysFocusCard({ sessions, settings }: TodaysFocusCardProps): JSX.Element | null {
   const focus = useMemo(() => {
@@ -61,16 +62,18 @@ export function TodaysFocusCard({ sessions, settings }: TodaysFocusCardProps): J
 
   return (
     <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white px-4 py-3 flex items-center gap-3 flex-wrap">
-      <span className="text-lg shrink-0" aria-hidden>🧠</span>
+      <span className="text-lg shrink-0" aria-hidden>
+        🧠
+      </span>
       <p className="text-sm text-violet-900">
-        <span className="font-semibold">Today&apos;s focus:</span> the trainer will lean on your
-        current weak spots
+        <span className="font-semibold">Trainer focus (current set):</span> the adaptive sampler will
+        lean on these weak spots — separate from Teaching plan stages
       </p>
       <span className="flex gap-1.5">
         {focus.map(({ character, pError }) => (
           <span
             key={character}
-            title={`Missed ${Math.round(pError * 100)}% of the time recently`}
+            title={`Missed about ${Math.round(pError * 100)}% of the time recently (Bayesian)`}
             className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-1.5 rounded-lg bg-white border border-violet-300 text-violet-800 font-mono font-bold"
           >
             {character}

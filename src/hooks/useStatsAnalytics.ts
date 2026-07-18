@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 
 import { LCWO_SEQUENCE } from '@/lib/morseConstants';
+import { buildCharacterDiagnostics } from '@/lib/scoring/characterDiagnostics';
 import { mapSessionsToHeatmap } from '@/lib/utils/mapSessionsToHeatmap';
 import type { HeatmapSession, SessionResult } from '@/types';
 
@@ -52,7 +53,8 @@ export interface LetterPerformance {
   readonly avgMs: number;
   readonly total: number;
   readonly correct: number;
-  readonly status: 'mastered' | 'learning' | 'needsWork';
+  readonly status: 'mastered' | 'building' | 'weak';
+  readonly isSlow: boolean;
 }
 
 export interface ConfusionEntry {
@@ -281,41 +283,14 @@ export function useStatsAnalytics(
       .sort((a, b) => b.avgMs - a.avgMs); // Slowest first
   }, [sessionsSorted]);
 
-  // Combined letter performance with status indicator
+  // Combined letter performance: shared mastery bar + separate slow flag
   const letterPerformance = useMemo<LetterPerformance[]>(() => {
-    const timingMap = new Map(letterTimingStats.map((t) => [t.letter, t]));
-    
-    return overallLetterStats.map((stat) => {
-      const timing = timingMap.get(stat.letter);
-      const avgMs = timing?.avgMs ?? 0;
-      
-      // Determine status based on accuracy and response time
-      let status: 'mastered' | 'learning' | 'needsWork';
-      if (stat.accuracy >= 90 && avgMs > 0 && avgMs < 800) {
-        status = 'mastered';
-      } else if (stat.accuracy >= 70 || (stat.accuracy >= 50 && avgMs < 1000)) {
-        status = 'learning';
-      } else {
-        status = 'needsWork';
-      }
-      
-      return {
-        letter: stat.letter,
-        accuracy: stat.accuracy,
-        avgMs,
-        total: stat.total,
-        correct: stat.correct,
-        status,
-      };
-    }).sort((a, b) => {
-      // Sort by status (needsWork first), then by accuracy
-      const statusOrder = { needsWork: 0, learning: 1, mastered: 2 };
-      if (statusOrder[a.status] !== statusOrder[b.status]) {
-        return statusOrder[a.status] - statusOrder[b.status];
-      }
-      return a.accuracy - b.accuracy;
+    const avgMsByLetter = new Map(letterTimingStats.map((t) => [t.letter, t.avgMs]));
+    return buildCharacterDiagnostics({
+      sessions: sessionsSorted,
+      avgMsByLetter,
     });
-  }, [overallLetterStats, letterTimingStats]);
+  }, [sessionsSorted, letterTimingStats]);
 
   // Confusion matrix - what was typed when a letter was sent
   const confusionMatrix = useMemo<ConfusionEntry[]>(() => {

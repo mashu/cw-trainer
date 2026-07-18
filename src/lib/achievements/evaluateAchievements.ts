@@ -1,5 +1,6 @@
 import { evaluateSessionSpeedRun } from '@/lib/curriculum';
 import { localDateForTimestamp } from '@/lib/localDate';
+import { getMasteredCharacters } from '@/lib/scoring/characterDiagnostics';
 import type { SessionResult } from '@/types';
 
 import { ACHIEVEMENT_BADGES } from './badges';
@@ -14,8 +15,6 @@ import type {
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const DIGITS = '0123456789'.split('');
-const MASTERED_MIN_ATTEMPTS = 5;
-const MASTERED_MIN_ACCURACY = 0.9;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KOCH_GRADUATE_LEVEL = 40;
 
@@ -98,18 +97,6 @@ const buildCharacterTotals = (
   });
   return totals;
 };
-
-const getMasteredCharacters = (
-  characters: readonly string[],
-  totals: Readonly<Record<string, { readonly correct: number; readonly total: number }>>,
-): string[] =>
-  characters.filter((character) => {
-    const stats = totals[character];
-    if (!stats || stats.total < MASTERED_MIN_ATTEMPTS) {
-      return false;
-    }
-    return stats.correct / stats.total >= MASTERED_MIN_ACCURACY;
-  });
 
 export const calculateAchievementProgress = (
   sessions: readonly SessionResult[],

@@ -31,8 +31,15 @@ import {
 } from '@/hooks/useStatsAnalytics';
 import { useTrainingSettingsState } from '@/hooks/useTrainingSettings';
 import { createGroupDisplayAlignment } from '@/lib/groupAlignment';
+import {
+  MASTERED_MIN_ACCURACY,
+  MASTERED_MIN_ATTEMPTS,
+  SLOW_AVG_MS,
+  buildCharacterDiagnostics,
+} from '@/lib/scoring/characterDiagnostics';
 import { buildBigramHeatmapData, buildUnigramStats } from '@/lib/scoring/letterErrorStats';
 import { formatSessionLevelLabel } from '@/lib/sessionLevelSnapshot';
+import { computeCharPool } from '@/lib/trainingUtils';
 
 import { AchievementTrophyCase } from './AchievementTrophyCase';
 import { BigramHeatmapView } from './BigramHeatmap';
@@ -64,7 +71,7 @@ const STATS_TABS: ReadonlyArray<{
   {
     id: 'overview',
     label: 'Overview',
-    description: 'Summary and recommendations',
+    description: 'Summary and character diagnostics',
     icon: '📊',
     activeClass: 'from-sky-500 to-indigo-600',
   },
@@ -470,6 +477,57 @@ export function GroupTrainingStats({
       };
     }, [rangeFilteredSessions, rangeLetterStats]);
 
+  const practicePool = useMemo(() => {
+    const settings = trainingSettings;
+    const customSet = Array.isArray(settings.customSet) ? settings.customSet : [];
+    const customSequence = Array.isArray(settings.customSequence) ? settings.customSequence : [];
+    return computeCharPool({
+      kochLevel: settings.kochLevel,
+      charSetMode: settings.charSetMode,
+      digitsLevel: settings.digitsLevel,
+      ...(customSet.length > 0 ? { customSet: [...customSet] } : {}),
+      ...(customSequence.length > 0 ? { customSequence: [...customSequence] } : {}),
+      ...(settings.slidingWindowStart !== undefined
+        ? { slidingWindowStart: settings.slidingWindowStart }
+        : {}),
+      ...(settings.slidingWindowEnd !== undefined
+        ? { slidingWindowEnd: settings.slidingWindowEnd }
+        : {}),
+    });
+  }, [trainingSettings]);
+
+  const poolDiagnostics = useMemo(
+    () =>
+      buildCharacterDiagnostics({
+        sessions: rangeFilteredSessions,
+        pool: practicePool,
+      }),
+    [rangeFilteredSessions, practicePool],
+  );
+
+  const poolWeak = useMemo(
+    () => poolDiagnostics.filter((d) => d.status === 'weak'),
+    [poolDiagnostics],
+  );
+  const poolSlow = useMemo(
+    () => poolDiagnostics.filter((d) => d.isSlow),
+    [poolDiagnostics],
+  );
+  const poolMastered = useMemo(
+    () => poolDiagnostics.filter((d) => d.status === 'mastered'),
+    [poolDiagnostics],
+  );
+  const poolConfusions = useMemo(() => {
+    const poolSet = new Set(practicePool.map((c) => c.toUpperCase()));
+    return confusionMatrix.filter((c) => poolSet.has(c.sent)).slice(0, 5);
+  }, [confusionMatrix, practicePool]);
+
+  const hasPoolDiagnostics =
+    poolWeak.length > 0 ||
+    poolSlow.length > 0 ||
+    poolMastered.length > 0 ||
+    poolConfusions.length > 0;
+
   // Date range presets
   const applyRangePreset = (days: number | 'all'): void => {
     if (sessionsSorted.length === 0) {
@@ -494,7 +552,7 @@ export function GroupTrainingStats({
   const activeTabDetails = STATS_TABS.find((item) => item.id === tab) ?? {
     id: 'overview' as const,
     label: 'Overview',
-    description: 'Summary and recommendations',
+    description: 'Summary and character diagnostics',
     icon: '📊',
     activeClass: 'from-sky-500 to-indigo-600',
   };
@@ -679,53 +737,80 @@ export function GroupTrainingStats({
               <ActivityHeatmap sessions={activitySessions} />
             )}
 
-            {/* Practice Recommendations */}
-            {hasTrainingSessions && (letterPerformance.length > 0 || confusionMatrix.length > 0) && (
+            {/* Character diagnostics (current practice set) */}
+            {hasTrainingSessions && hasPoolDiagnostics && (
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">📋 Practice Recommendations</h3>
+                <h3 className="text-sm font-semibold text-slate-700 mb-1">Character diagnostics</h3>
+                <p className="text-xs text-slate-500 mb-3">
+                  Within your current practice set. Stage and certificate progress live in the Teaching
+                  plan — this is where individual characters need attention.
+                </p>
                 <div className="space-y-3">
-                  {letterTimingStats.length > 0 && (
-                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                      <div className="text-xs font-semibold text-amber-800 mb-1">⏱️ Slowest Response (focus on these)</div>
-                      <div className="flex flex-wrap gap-2">
-                        {letterTimingStats.slice(0, 5).map((lt) => (
-                          <span key={lt.letter} className="px-2 py-1 bg-amber-100 rounded text-sm font-mono font-semibold text-amber-900">
-                            {lt.letter} <span className="text-xs font-normal">({lt.avgMs}ms)</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {letterPerformance.filter((lp) => lp.status === 'needsWork').length > 0 && (
+                  {poolWeak.length > 0 && (
                     <div className="p-3 rounded-lg bg-rose-50 border border-rose-200">
-                      <div className="text-xs font-semibold text-rose-800 mb-1">🎯 Needs More Practice</div>
+                      <div className="text-xs font-semibold text-rose-800 mb-1">Weak accuracy</div>
                       <div className="flex flex-wrap gap-2">
-                        {letterPerformance.filter((lp) => lp.status === 'needsWork').slice(0, 5).map((lp) => (
-                          <span key={lp.letter} className="px-2 py-1 bg-rose-100 rounded text-sm font-mono font-semibold text-rose-900">
-                            {lp.letter} <span className="text-xs font-normal">({lp.accuracy.toFixed(0)}%)</span>
+                        {poolWeak.slice(0, 8).map((lp) => (
+                          <span
+                            key={lp.letter}
+                            className="px-2 py-1 bg-rose-100 rounded text-sm font-mono font-semibold text-rose-900"
+                          >
+                            {lp.letter}{' '}
+                            <span className="text-xs font-normal">({lp.accuracy.toFixed(0)}%)</span>
                           </span>
                         ))}
                       </div>
                     </div>
                   )}
-                  {confusionMatrix.length > 0 && (
+                  {poolSlow.length > 0 && (
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                      <div className="text-xs font-semibold text-amber-800 mb-1">
+                        Accurate but slow (≥{SLOW_AVG_MS} ms)
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {poolSlow.slice(0, 8).map((lp) => (
+                          <span
+                            key={lp.letter}
+                            className="px-2 py-1 bg-amber-100 rounded text-sm font-mono font-semibold text-amber-900"
+                          >
+                            {lp.letter}{' '}
+                            <span className="text-xs font-normal">({lp.avgMs} ms)</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {poolConfusions.length > 0 && (
                     <div className="p-3 rounded-lg bg-violet-50 border border-violet-200">
-                      <div className="text-xs font-semibold text-violet-800 mb-1">🔄 Common Confusions</div>
+                      <div className="text-xs font-semibold text-violet-800 mb-1">Common confusions</div>
                       <div className="flex flex-wrap gap-2">
-                        {confusionMatrix.slice(0, 5).map((c, i) => (
-                          <span key={i} className="px-2 py-1 bg-violet-100 rounded text-sm font-mono text-violet-900">
-                            {c.sent}→{c.typed} <span className="text-xs font-normal">({c.count}×)</span>
+                        {poolConfusions.map((c, i) => (
+                          <span
+                            key={`${c.sent}-${c.typed}-${i}`}
+                            className="px-2 py-1 bg-violet-100 rounded text-sm font-mono text-violet-900"
+                          >
+                            {c.sent}→{c.typed}{' '}
+                            <span className="text-xs font-normal">({c.count}×)</span>
                           </span>
                         ))}
                       </div>
                     </div>
                   )}
-                  {letterPerformance.filter((lp) => lp.status === 'mastered').length > 0 && (
+                  {poolMastered.length > 0 && (
                     <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                      <div className="text-xs font-semibold text-emerald-800 mb-1">✨ Mastered ({letterPerformance.filter((lp) => lp.status === 'mastered').length} letters)</div>
+                      <div className="text-xs font-semibold text-emerald-800 mb-1">
+                        Mastered in this set ({poolMastered.length}) — same bar as trophies (≥
+                        {MASTERED_MIN_ATTEMPTS} attempts, ≥{Math.round(MASTERED_MIN_ACCURACY * 100)}%)
+                      </div>
                       <div className="flex flex-wrap gap-1">
-                        {letterPerformance.filter((lp) => lp.status === 'mastered').map((lp) => (
-                          <span key={lp.letter} className="px-1.5 py-0.5 bg-emerald-100 rounded text-xs font-mono font-semibold text-emerald-900">{lp.letter}</span>
+                        {poolMastered.map((lp) => (
+                          <span
+                            key={lp.letter}
+                            className="px-1.5 py-0.5 bg-emerald-100 rounded text-xs font-mono font-semibold text-emerald-900"
+                          >
+                            {lp.letter}
+                            {lp.isSlow ? '·' : ''}
+                          </span>
                         ))}
                       </div>
                     </div>
@@ -842,19 +927,40 @@ export function GroupTrainingStats({
                 <div className="mb-3">
                   <h3 className="text-sm font-semibold text-slate-700">Letter Performance Dashboard</h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    Accuracy % — frequentist performance across all saved sessions (group, echo,
-                    chase). Not the same as P(error) on the Sampling tab.
+                    Mastery matches trophies: ≥{MASTERED_MIN_ATTEMPTS} attempts at ≥
+                    {Math.round(MASTERED_MIN_ACCURACY * 100)}% accuracy. Speed is separate — a dot
+                    marks accurate-but-slow (≥{SLOW_AVG_MS} ms).
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>Mastered
-                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500 ml-3 mr-1"></span>Learning
-                    <span className="inline-block w-2 h-2 rounded-full bg-rose-500 ml-3 mr-1"></span>Needs Work
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>
+                    Mastered
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500 ml-3 mr-1"></span>
+                    Building
+                    <span className="inline-block w-2 h-2 rounded-full bg-rose-500 ml-3 mr-1"></span>
+                    Weak
                   </p>
                 </div>
                 <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
                   {letterPerformance.map((lp) => (
-                    <div key={lp.letter} className={`p-2 rounded-lg border text-center ${lp.status === 'mastered' ? 'bg-emerald-50 border-emerald-200' : lp.status === 'learning' ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200'}`} title={`${lp.letter}: ${lp.accuracy.toFixed(1)}% acc, ${lp.avgMs}ms`}>
-                      <div className="text-lg font-bold font-mono">{lp.letter}</div>
+                    <div
+                      key={lp.letter}
+                      className={`p-2 rounded-lg border text-center ${
+                        lp.status === 'mastered'
+                          ? 'bg-emerald-50 border-emerald-200'
+                          : lp.status === 'building'
+                            ? 'bg-amber-50 border-amber-200'
+                            : 'bg-rose-50 border-rose-200'
+                      }`}
+                      title={`${lp.letter}: ${lp.accuracy.toFixed(1)}% acc, ${lp.avgMs}ms${lp.isSlow ? ' (slow)' : ''}`}
+                    >
+                      <div className="text-lg font-bold font-mono">
+                        {lp.letter}
+                        {lp.isSlow ? (
+                          <span className="text-amber-600 text-xs ml-0.5" aria-label="slow">
+                            ·
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="text-xs text-slate-600">{lp.accuracy.toFixed(0)}%</div>
                       <div className="text-xs text-slate-500">{lp.avgMs}ms</div>
                     </div>
