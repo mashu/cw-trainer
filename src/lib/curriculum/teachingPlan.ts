@@ -10,9 +10,10 @@ import { LCWO_SEQUENCE } from '@/lib/morseConstants';
  * least {@link COPY_TEST_MIN_CHARS} characters at ≥{@link QUALITY_ACCURACY}
  * accuracy with the stage's alphabet.
  *
- * Speed certificates mirror the historic FCC licence exams (5 / 13 / 20 WPM
- * received code): they are earned by a solid-copy session at or above the
- * certificate speed, independent of stage progress.
+ * Speed certificates are solid-copy milestones at the historic FCC exam
+ * speeds (5 / 13 / 20 WPM). They are independent of stage progress and are
+ * earned only after repeated quality sessions at or above the certificate
+ * speed — not a single lucky run.
  */
 
 export interface CurriculumStage {
@@ -37,6 +38,11 @@ export const QUALITY_SESSIONS_TARGET = 2;
 export const COPY_TEST_MIN_CHARS = 100;
 /** Minimum characters for a speed-certificate session (≈5 minutes of 5-char words at 5 WPM). */
 export const CERTIFICATE_MIN_CHARS = 125;
+/**
+ * Qualifying solid-copy sessions required at/above a certificate speed before
+ * that certificate is earned. Keeps certificates from being one-session flukes.
+ */
+export const CERTIFICATE_SESSIONS_TARGET = 3;
 /** Historic FCC code-test speeds (Novice / General / Extra), in WPM. */
 export const CERTIFICATE_SPEEDS_WPM: readonly number[] = [5, 13, 20];
 

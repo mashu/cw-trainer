@@ -2,6 +2,7 @@ import type { SessionResult } from '@/types';
 
 import {
   CERTIFICATE_MIN_CHARS,
+  CERTIFICATE_SESSIONS_TARGET,
   CERTIFICATE_SPEEDS_WPM,
   COPY_TEST_MIN_CHARS,
   QUALITY_ACCURACY,
@@ -34,7 +35,10 @@ export interface StageProgress {
 export interface SpeedCertificateProgress {
   readonly wpm: number;
   readonly earned: boolean;
-  /** Timestamp of the earning session, when earned. */
+  /** Qualifying solid-copy sessions counted toward this certificate. */
+  readonly current: number;
+  readonly target: number;
+  /** Timestamp of the session that completed the threshold, when earned. */
   readonly sessionTimestamp?: number;
 }
 
@@ -143,17 +147,24 @@ export function evaluateTeachingPlan(
   }
 
   const certificates: SpeedCertificateProgress[] = CERTIFICATE_SPEEDS_WPM.map((wpm) => {
-    const earningSession = sessions.find(
-      (session) =>
-        isGroupSession(session) &&
-        typeof session.charWpm === 'number' &&
-        session.charWpm >= wpm &&
-        session.totalChars >= CERTIFICATE_MIN_CHARS &&
-        session.accuracy >= QUALITY_ACCURACY,
-    );
+    const qualifying = sessions
+      .filter(
+        (session) =>
+          isGroupSession(session) &&
+          typeof session.charWpm === 'number' &&
+          session.charWpm >= wpm &&
+          session.totalChars >= CERTIFICATE_MIN_CHARS &&
+          session.accuracy >= QUALITY_ACCURACY,
+      )
+      .slice()
+      .sort((a, b) => a.timestamp - b.timestamp);
+    const earned = qualifying.length >= CERTIFICATE_SESSIONS_TARGET;
+    const earningSession = earned ? qualifying[CERTIFICATE_SESSIONS_TARGET - 1] : undefined;
     return {
       wpm,
-      earned: earningSession !== undefined,
+      earned,
+      current: Math.min(qualifying.length, CERTIFICATE_SESSIONS_TARGET),
+      target: CERTIFICATE_SESSIONS_TARGET,
       ...(earningSession !== undefined ? { sessionTimestamp: earningSession.timestamp } : {}),
     };
   });

@@ -43,16 +43,15 @@ reading-by-rhythm skill shows.
 
 ### Speed certificates
 
-Independent of stage progress, three certificates mirror the historic FCC
-licence code tests — **5, 13 and 20 WPM** (Novice / General / Amateur Extra).
-A certificate is earned by one session of 125+ characters at ≥90% accuracy with
-a character speed at or above the certificate speed.
+Independent of stage progress, three certificates mark solid-copy milestones at
+the historic FCC licence speeds — **5, 13 and 20 WPM** (Novice / General /
+Amateur Extra). They are not one-session awards: a certificate is earned only
+after **three** qualifying group sessions of 125+ characters at ≥90% accuracy
+with a recorded character speed at or above the certificate speed.
 
-Sessions now snapshot their character/effective WPM (`charWpm`,
-`effectiveWpm` on `SessionResult`, captured from the settings' lower range
-bound), so certificates are only awarded from sessions where the speed is
-actually known. Historical sessions without a speed snapshot never earn
-certificates — the plan does not guess.
+Unearned certificates stay out of the badge row; the panel explains the
+criteria and shows progress toward the next speed. Sessions without a recorded
+`charWpm` never count — speed must be known.
 
 ## UI
 
@@ -60,7 +59,8 @@ certificates — the plan does not guess.
 
 - overall plan progress (stages completed, progress bar),
 - the active stage with its goal checklist and best copy-test accuracy,
-- the certificate row with earned/unearned state.
+- the speed-certificate section (criteria, progress toward the next speed, and
+  earned badges only).
 
 ## Future extensions
 
