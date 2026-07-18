@@ -298,6 +298,33 @@ export const ACHIEVEMENT_BADGES = [
     rarity: 'epic',
     category: 'mastery',
   },
+  {
+    id: 'solid-copy-5wpm',
+    title: 'Novice Copy (5 WPM)',
+    description: 'Solid copy over the full alphabet at 5 WPM — the historic Novice test.',
+    criteria: 'In one full-alphabet session, copy 100+ characters correctly at ≥5 WPM with ≥90% accuracy.',
+    tier: 'silver',
+    rarity: 'uncommon',
+    category: 'performance',
+  },
+  {
+    id: 'solid-copy-13wpm',
+    title: 'General Copy (13 WPM)',
+    description: 'Solid copy over the full alphabet at 13 WPM — the historic General test.',
+    criteria: 'In one full-alphabet session, copy 100+ characters correctly at ≥13 WPM with ≥90% accuracy.',
+    tier: 'gold',
+    rarity: 'rare',
+    category: 'performance',
+  },
+  {
+    id: 'solid-copy-20wpm',
+    title: 'Extra Copy (20 WPM)',
+    description: 'Solid copy over the full alphabet at 20 WPM — the historic Amateur Extra test.',
+    criteria: 'In one full-alphabet session, copy 100+ characters correctly at ≥20 WPM with ≥90% accuracy.',
+    tier: 'diamond',
+    rarity: 'epic',
+    category: 'performance',
+  },
 ] as const satisfies readonly AchievementBadgeDefinition[];
 
 export const ACHIEVEMENT_BADGE_BY_ID: Readonly<Record<AchievementId, AchievementBadgeDefinition>> =

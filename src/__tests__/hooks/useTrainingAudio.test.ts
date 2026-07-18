@@ -31,6 +31,8 @@ describe('useTrainingAudio', () => {
       durationSec: 0.5,
       startTime: 0,
       stop: jest.fn(),
+      resolvedCharWpm: 20,
+      resolvedEffectiveWpm: 20,
     });
   });
 
@@ -50,7 +52,7 @@ describe('useTrainingAudio', () => {
 
     const playback = await result.current.playMorse('KM', 0);
 
-    expect(playback).toEqual({ status: 'played', durationSec: 0.5 });
+    expect(playback).toEqual({ status: 'played', durationSec: 0.5, charWpm: 20, effectiveWpm: 20 });
     expect(mockPlayMorse).toHaveBeenCalled();
   });
 
@@ -68,7 +70,7 @@ describe('useTrainingAudio', () => {
         const stop = jest.fn();
         onStopReady?.(stop);
         capturedStop = stop;
-        return { durationSec: 0.5, startTime: 0, stop };
+        return { durationSec: 0.5, startTime: 0, stop, resolvedCharWpm: 20, resolvedEffectiveWpm: 20 };
       },
     );
 

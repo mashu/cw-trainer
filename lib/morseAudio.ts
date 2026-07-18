@@ -118,14 +118,29 @@ export async function playMorseCodeControlled(
   shouldStop: () => boolean,
   outputNode?: AudioNode,
   onStopReady?: (stop: () => void) => void,
-): Promise<{ durationSec: number; startTime: number; stop: () => void }> {
-  if (shouldStop()) return { durationSec: 0, startTime: ctx.currentTime, stop: () => {} };
-
-  await ensureContext(ctx);
-
+): Promise<{
+  durationSec: number;
+  startTime: number;
+  stop: () => void;
+  /** Character speed this playback actually used (ranges are sampled per call). */
+  resolvedCharWpm: number;
+  /** Effective (Farnsworth) speed this playback actually used. */
+  resolvedEffectiveWpm: number;
+}> {
   // Determine timing based on Farnsworth (supports random ranges)
   const resolvedCharWpm = resolveCharWpm(settings);
   const resolvedEffWpm = resolveEffectiveWpm(settings, resolvedCharWpm);
+
+  if (shouldStop())
+    return {
+      durationSec: 0,
+      startTime: ctx.currentTime,
+      stop: () => {},
+      resolvedCharWpm,
+      resolvedEffectiveWpm: resolvedEffWpm,
+    };
+
+  await ensureContext(ctx);
   const extraWordSpaceMultiplier = clampExtraSpacingMultiplier(settings.extraWordSpaceMultiplier);
 
   const dotChar = 1.2 / resolvedCharWpm; // seconds
@@ -256,7 +271,13 @@ export async function playMorseCodeControlled(
 
   // Return duration and the actual start time (AudioContext) used for scheduling,
   // so callers can compute precise end time (startTime + durationSec) for reaction timing.
-  return { durationSec: currentTime - startTime, startTime, stop };
+  return {
+    durationSec: currentTime - startTime,
+    startTime,
+    stop,
+    resolvedCharWpm,
+    resolvedEffectiveWpm: resolvedEffWpm,
+  };
 }
 
 

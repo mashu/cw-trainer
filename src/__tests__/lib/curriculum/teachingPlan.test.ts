@@ -118,36 +118,10 @@ describe('evaluateTeachingPlan', () => {
     expect(quality.current).toBe(0);
   });
 
-  it('awards speed certificates only after repeated solid-copy sessions at speed', () => {
-    const oneSession = [
-      makeSession({ timestamp: 1, kochLevel: 3, charWpm: 15, accuracy: 0.94, totalChars: 130 }),
-    ];
-    const afterOne = evaluateTeachingPlan(oneSession, 3);
-    const byWpmAfterOne = new Map(afterOne.certificates.map((c) => [c.wpm, c]));
-    expect(byWpmAfterOne.get(5)!.earned).toBe(false);
-    expect(byWpmAfterOne.get(5)!.current).toBe(1);
-    expect(byWpmAfterOne.get(13)!.current).toBe(1);
-    expect(byWpmAfterOne.get(20)!.current).toBe(0);
-
-    const threeSessions = [
-      makeSession({ timestamp: 1, kochLevel: 3, charWpm: 15, accuracy: 0.94, totalChars: 130 }),
-      makeSession({ timestamp: 2, kochLevel: 3, charWpm: 15, accuracy: 0.91, totalChars: 130 }),
-      makeSession({ timestamp: 3, kochLevel: 3, charWpm: 14, accuracy: 0.93, totalChars: 140 }),
-    ];
-    const progress = evaluateTeachingPlan(threeSessions, 3);
-    const byWpm = new Map(progress.certificates.map((c) => [c.wpm, c]));
-    expect(byWpm.get(5)!.earned).toBe(true);
-    expect(byWpm.get(13)!.earned).toBe(true);
-    expect(byWpm.get(20)!.earned).toBe(false);
-    expect(byWpm.get(5)!.sessionTimestamp).toBe(3);
-  });
-
-  it('does not award certificates without volume or speed data', () => {
-    const sessions = [
-      makeSession({ timestamp: 1, kochLevel: 3, accuracy: 0.99, totalChars: 500 }), // no charWpm
-      makeSession({ timestamp: 2, kochLevel: 3, charWpm: 25, accuracy: 0.99, totalChars: 50 }), // too short
-    ];
-    const progress = evaluateTeachingPlan(sessions, 3);
-    expect(progress.certificates.every((c) => !c.earned && c.current === 0)).toBe(true);
+  it('exposes the speed-certificate matrix with one row per stage', () => {
+    const progress = evaluateTeachingPlan([], 1);
+    expect(progress.certificates.rows.length).toBe(progress.stages.length);
+    expect(progress.certificates.earnedCount).toBe(0);
+    expect(progress.certificates.rows[0]!.cells.map((c) => c.speed)).toEqual([5, 13, 20]);
   });
 });

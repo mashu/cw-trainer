@@ -14,7 +14,13 @@ import { pickTrainingToneHz } from '@/lib/trainingSessionPlayback';
 import type { TrainingSettings } from '@/types';
 
 export type TrainingAudioPlaybackResult =
-  | { readonly status: 'played'; readonly durationSec: number }
+  | {
+      readonly status: 'played';
+      readonly durationSec: number;
+      /** Character speed this group was actually played at (ranges sample per group). */
+      readonly charWpm: number;
+      readonly effectiveWpm: number;
+    }
   | { readonly status: 'skippedBecauseAborted' }
   | { readonly status: 'suspended' }
   | { readonly status: 'failed'; readonly message: string };
@@ -125,7 +131,7 @@ export function useTrainingAudio(
           resumeAudioContextFromUserGesture(ctx);
         }
         const bandConditions = ensureBandConditions(ctx);
-        const { durationSec, stop } = await playMorseCodeControlled(
+        const { durationSec, stop, resolvedCharWpm, resolvedEffectiveWpm } = await playMorseCodeControlled(
           ctx,
           text,
           {
@@ -151,7 +157,12 @@ export function useTrainingAudio(
           },
         );
         currentStopRef.current = stop;
-        return { status: 'played', durationSec };
+        return {
+          status: 'played',
+          durationSec,
+          charWpm: resolvedCharWpm,
+          effectiveWpm: resolvedEffectiveWpm,
+        };
       } catch (error) {
         console.error('[TrainingAudio] Playback error:', error);
         return {

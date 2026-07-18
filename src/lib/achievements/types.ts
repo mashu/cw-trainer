@@ -39,7 +39,10 @@ export type AchievementId =
   | 'score-2500'
   | 'score-5000'
   | 'megawatt'
-  | 'koch-graduate';
+  | 'koch-graduate'
+  | 'solid-copy-5wpm'
+  | 'solid-copy-13wpm'
+  | 'solid-copy-20wpm';
 
 export type AchievementBadgeDefinition = {
   readonly id: AchievementId;

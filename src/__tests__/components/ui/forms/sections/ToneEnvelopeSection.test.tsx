@@ -40,6 +40,8 @@ describe('ToneEnvelopeSection', () => {
       durationSec: 0.1,
       startTime: 0,
       stop: jest.fn(),
+      resolvedCharWpm: 20,
+      resolvedEffectiveWpm: 20,
     });
     class MockAudioContext {
       public readonly close = jest.fn().mockResolvedValue(undefined);

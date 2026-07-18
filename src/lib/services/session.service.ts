@@ -65,6 +65,7 @@ export class SessionService {
       groupTimings: groupTimings.map(t => ({
         timeToCompleteMs: t.timeToCompleteMs,
         ...(t.perCharMs !== undefined ? { perCharMs: t.perCharMs } : {}),
+        ...(t.charWpm !== undefined ? { charWpm: t.charWpm } : {}),
       })),
       ...(mode !== undefined ? { mode } : {}),
       ...(firestoreId !== undefined ? { firestoreId } : {}),
@@ -166,6 +167,7 @@ export class SessionService {
         groupTimings: groupTimings.map(t => ({
           timeToCompleteMs: t.timeToCompleteMs,
           ...(t.perCharMs !== undefined ? { perCharMs: t.perCharMs } : {}),
+          ...(t.charWpm !== undefined ? { charWpm: t.charWpm } : {}),
         })),
         ...(mode !== undefined ? { mode } : {}),
         ...(firestoreId !== undefined ? { firestoreId } : {}),

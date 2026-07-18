@@ -16,6 +16,7 @@ const sessionGroupSchema = z.object({
 const sessionTimingSchema = z.object({
   timeToCompleteMs: z.number().min(0),
   perCharMs: z.number().min(0).optional(),
+  charWpm: z.number().min(1).max(100).optional(),
 });
 
 const sessionCharSetModeSchema = z.enum(['koch', 'digits', 'custom', 'mixed']);

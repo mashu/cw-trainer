@@ -43,15 +43,31 @@ reading-by-rhythm skill shows.
 
 ### Speed certificates
 
-Independent of stage progress, three certificates mark solid-copy milestones at
-the historic FCC licence speeds — **5, 13 and 20 WPM** (Novice / General /
-Amateur Extra). They are not one-session awards: a certificate is earned only
-after **three** qualifying group sessions of 125+ characters at ≥90% accuracy
-with a recorded character speed at or above the certificate speed.
+Certificates form a **matrix of (stage × speed)** with the historic FCC exam
+speeds — **5, 13 and 20 WPM** (Novice / General / Amateur Extra). The historic
+tests presumed the complete alphabet, so the final row (full character set) is
+the true equivalent; it also unlocks trophy-case achievements
+(`solid-copy-5wpm` / `-13wpm` / `-20wpm`). Earlier rows give learners a
+certificate target at every stage of the ladder.
 
-Unearned certificates stay out of the badge row; the panel explains the
-criteria and shows progress toward the next speed. Sessions without a recorded
-`charWpm` never count — speed must be known.
+A cell is earned by a **single session** — one sustained run, like the real
+exam, never an accumulation across sessions:
+
+- 100+ characters copied **correctly** from groups that were actually *played*
+  at or above the certificate speed,
+- ≥90% accuracy among those at-speed characters,
+- in a session at or above the stage's exit level.
+
+Because speed settings can be ranges, each group records the speed it was
+actually played at (`groupTimings[].charWpm`) — with variable speed, only the
+groups that met the certificate speed count toward the run. Legacy sessions
+without per-group speeds fall back to the session-level snapshot (the range
+minimum, conservative); history with no speed data never earns certificates —
+the plan does not guess.
+
+The panel shows best-attempt progress per cell (e.g. `87/100`), and the
+results screen calls out near-misses ("13 short — one more run?") so a failed
+attempt turns into the next session's goal.
 
 ## UI
 
@@ -59,8 +75,7 @@ criteria and shows progress toward the next speed. Sessions without a recorded
 
 - overall plan progress (stages completed, progress bar),
 - the active stage with its goal checklist and best copy-test accuracy,
-- the speed-certificate section (criteria, progress toward the next speed, and
-  earned badges only).
+- the certificate row with earned/unearned state.
 
 ## Future extensions
 
