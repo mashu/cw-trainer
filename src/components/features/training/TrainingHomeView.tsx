@@ -55,6 +55,60 @@ function TrainingTipsCarousel({ tips }: { readonly tips: readonly string[] }): J
   );
 }
 
+function SectionLabel({ children }: { readonly children: React.ReactNode }): JSX.Element {
+  return (
+    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+      {children}
+    </h3>
+  );
+}
+
+function formatWpmRange(min: number, max: number): string {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return '—';
+  return min === max ? `${min}` : `${min}–${max}`;
+}
+
+function HeaderContextChips({ settings }: { readonly settings: TrainingSettings }): JSX.Element {
+  const charSetMode = settings.charSetMode ?? 'koch';
+  const modeLabel =
+    charSetMode === 'digits'
+      ? 'Digits'
+      : charSetMode === 'mixed'
+        ? 'Letters + digits'
+        : charSetMode === 'custom'
+          ? 'Custom set'
+          : 'Koch';
+  const levelValue =
+    charSetMode === 'digits'
+      ? `Digits ${settings.digitsLevel ?? 10}`
+      : charSetMode === 'mixed'
+        ? `L${settings.kochLevel} · D${settings.digitsLevel ?? 10}`
+        : `Level ${settings.kochLevel}`;
+  const charWpm = formatWpmRange(settings.charWpmMin, settings.charWpmMax);
+  const effWpm = formatWpmRange(settings.effectiveWpmMin, settings.effectiveWpmMax);
+
+  const chips: ReadonlyArray<{ readonly icon: string; readonly text: string }> = [
+    { icon: '📚', text: modeLabel },
+    { icon: '🎚️', text: levelValue },
+    { icon: '⚡', text: `${charWpm} WPM char` },
+    { icon: '🐢', text: `${effWpm} WPM eff` },
+  ];
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {chips.map((chip) => (
+        <span
+          key={chip.text}
+          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm"
+        >
+          <span aria-hidden>{chip.icon}</span>
+          {chip.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export interface TrainingHomeViewProps {
   readonly sessions: ReadonlyArray<{
     readonly date: string;
@@ -118,9 +172,10 @@ export function TrainingHomeView({
 
   return (
     <div className="space-y-6">
-      <header>
+      <header className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 sm:p-5">
         <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
         <p className="text-sm text-slate-600 mt-1">{description}</p>
+        <HeaderContextChips settings={settings} />
       </header>
 
       <StreakCard practiceDates={sessions.map((s) => s.date)} />
@@ -136,32 +191,38 @@ export function TrainingHomeView({
       </section>
 
       {sessionCount > 0 && (
-        <div
-          className={`grid grid-cols-2 gap-3 ${rankProgress ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}
-        >
-          <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
-            <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
-              Last accuracy
-            </p>
-            <p className="text-2xl font-extrabold text-emerald-800 mt-0.5">
-              {lastAccuracyPercent}%
-            </p>
+        <section aria-label="Your progress at a glance">
+          <SectionLabel>Overview</SectionLabel>
+          <div
+            className={`grid grid-cols-2 gap-3 ${rankProgress ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}
+          >
+            <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
+              <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
+                Last accuracy
+              </p>
+              <p className="text-2xl font-extrabold text-emerald-800 mt-0.5">
+                {lastAccuracyPercent}%
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
+              <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">
+                Sessions
+              </p>
+              <p className="text-2xl font-extrabold text-blue-800 mt-0.5">{sessionCount}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-gradient-to-br from-purple-50 to-white border border-purple-100">
+              <p className="text-xs uppercase tracking-wide text-purple-700 font-semibold">
+                {levelKpiLabel}
+              </p>
+              <p className="text-2xl font-extrabold text-purple-800 mt-0.5">{levelKpiValue}</p>
+            </div>
+            {rankProgress ? <OperatorRankTile progress={rankProgress} /> : null}
           </div>
-          <div className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
-            <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Sessions</p>
-            <p className="text-2xl font-extrabold text-blue-800 mt-0.5">{sessionCount}</p>
-          </div>
-          <div className="p-3 rounded-xl bg-gradient-to-br from-purple-50 to-white border border-purple-100">
-            <p className="text-xs uppercase tracking-wide text-purple-700 font-semibold">
-              {levelKpiLabel}
-            </p>
-            <p className="text-2xl font-extrabold text-purple-800 mt-0.5">{levelKpiValue}</p>
-          </div>
-          {rankProgress ? <OperatorRankTile progress={rankProgress} /> : null}
-        </div>
+        </section>
       )}
 
-      <section className="flex flex-col gap-3 min-w-0" aria-label="Character preview">
+      <section className="flex flex-col gap-3 min-w-0" aria-label="Warm up">
+        <SectionLabel>Warm up</SectionLabel>
         <div className="flex flex-col gap-3 p-3 rounded-xl border border-blue-100 bg-blue-50/50 min-w-0">
           <p className="text-sm text-slate-600">{listeningPrompt}</p>
           <div className="w-full min-w-0 overflow-x-auto">
@@ -177,16 +238,16 @@ export function TrainingHomeView({
 
       <TrainingTipsCarousel tips={tips} />
 
-      <div className="flex justify-center gap-3 flex-wrap pt-1">
+      <div className="flex flex-col sm:flex-row justify-center gap-3 pt-1">
         <button
           onClick={onStartTraining}
-          className="px-12 py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-xl font-bold rounded-xl hover:from-emerald-600 hover:to-green-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+          className="flex-1 sm:flex-none px-12 py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-xl font-bold rounded-xl hover:from-emerald-600 hover:to-green-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
         >
           {startLabel}
         </button>
         <button
           onClick={onViewStats}
-          className="px-12 py-4 bg-white text-slate-700 text-xl font-semibold rounded-xl border border-slate-200 hover:bg-slate-50 transition-all duration-200 shadow-sm hover:shadow"
+          className="flex-1 sm:flex-none px-12 py-4 bg-white text-slate-700 text-xl font-semibold rounded-xl border border-slate-200 hover:bg-slate-50 transition-all duration-200 shadow-sm hover:shadow"
         >
           {viewStatsLabel}
         </button>
