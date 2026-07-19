@@ -121,11 +121,14 @@ export function TrainingRouter({
     ...echoSessions,
     ...chaseSessions,
   ];
-  const latestGroupSession = groupSessions.reduce<SessionResult | null>(
-    (latest, session) =>
-      latest === null || session.timestamp > latest.timestamp ? session : latest,
-    null,
-  );
+  const latestByTimestamp = (list: readonly SessionResult[]): SessionResult | null =>
+    list.reduce<SessionResult | null>(
+      (latest, session) =>
+        latest === null || session.timestamp > latest.timestamp ? session : latest,
+      null,
+    );
+  const latestGroupSession = latestByTimestamp(groupSessions);
+  const latestEchoSession = latestByTimestamp(echoSessions);
   const rankProgress = computeOperatorProgress(allSessions);
 
   // ── Group mode: results screen ──
@@ -240,6 +243,13 @@ export function TrainingRouter({
     return (
       <EchoSessionResultsView
         result={echoTraining.lastSessionResult}
+        {...(latestEchoSession !== null
+          ? {
+              nextUpSlot: (
+                <SessionXpCard allSessions={allSessions} latestSession={latestEchoSession} />
+              ),
+            }
+          : {})}
         onTrainAgain={() => {
           echoTraining.dismissResults();
           void echoTraining.startTraining();

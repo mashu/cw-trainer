@@ -10,6 +10,8 @@ interface EchoSessionResultsViewProps {
   readonly onTrainAgain: () => void;
   readonly onViewStats: () => void;
   readonly onBack: () => void;
+  /** Optional "what's next" region (e.g. the session XP receipt). */
+  readonly nextUpSlot?: React.ReactNode;
 }
 
 export function EchoSessionResultsView({
@@ -17,13 +19,12 @@ export function EchoSessionResultsView({
   onTrainAgain,
   onViewStats,
   onBack,
+  nextUpSlot,
 }: EchoSessionResultsViewProps): JSX.Element {
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold text-slate-800">
-          Echo Session Complete
-        </h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-slate-800">Echo Session Complete</h2>
         <p className="text-slate-600 mt-1">
           Sending accuracy and character recall from your latest run
         </p>
@@ -39,26 +40,17 @@ export function EchoSessionResultsView({
                 : 'bg-rose-50 border-rose-200'
           }`}
         >
-          <p className="text-xs uppercase tracking-wide text-slate-600 font-semibold">
-            Accuracy
-          </p>
-          <p className="text-3xl font-extrabold mt-1">
-            {Math.round(result.accuracy * 100)}%
-          </p>
+          <p className="text-xs uppercase tracking-wide text-slate-600 font-semibold">Accuracy</p>
+          <p className="text-3xl font-extrabold mt-1">{Math.round(result.accuracy * 100)}%</p>
         </div>
         <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200">
-          <p className="text-xs uppercase tracking-wide text-slate-600 font-semibold">
-            Characters
-          </p>
+          <p className="text-xs uppercase tracking-wide text-slate-600 font-semibold">Characters</p>
           <p className="text-3xl font-extrabold text-blue-700 mt-1">
-            {result.correctCharacters}/
-            {result.correctCharacters + result.incorrectCharacters}
+            {result.correctCharacters}/{result.correctCharacters + result.incorrectCharacters}
           </p>
         </div>
         <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200">
-          <p className="text-xs uppercase tracking-wide text-slate-600 font-semibold">
-            Avg Time
-          </p>
+          <p className="text-xs uppercase tracking-wide text-slate-600 font-semibold">Avg Time</p>
           <p className="text-3xl font-extrabold text-purple-700 mt-1">
             {Math.round(result.avgResponseMs)}
             <span className="text-base font-normal">ms</span>
@@ -79,25 +71,16 @@ export function EchoSessionResultsView({
         </div>
       </div>
 
+      {nextUpSlot != null ? nextUpSlot : null}
+
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">
-          Group Results
-        </h3>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Group Results</h3>
         <div className="max-h-[60vh] overflow-y-auto space-y-2">
           {result.groups.map((group, index) => (
-            <div
-              key={index}
-              className="p-3 rounded-lg border bg-slate-50/50 border-slate-200"
-            >
+            <div key={index} className="p-3 rounded-lg border bg-slate-50/50 border-slate-200">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-500">
-                  Group {index + 1}
-                </span>
-                <span
-                  className={`text-sm ${
-                    group.correct ? 'text-emerald-600' : 'text-rose-600'
-                  }`}
-                >
+                <span className="text-xs text-slate-500">Group {index + 1}</span>
+                <span className={`text-sm ${group.correct ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {group.correct ? '✓' : '✗'}
                 </span>
               </div>
