@@ -95,11 +95,11 @@ function HeaderContextChips({ settings }: { readonly settings: TrainingSettings 
   ];
 
   return (
-    <div className="mt-3 flex flex-wrap gap-1.5">
+    <div className="mt-2 -mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5">
       {chips.map((chip) => (
         <span
           key={chip.text}
-          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm"
+          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600"
         >
           <span aria-hidden>{chip.icon}</span>
           {chip.text}
@@ -171,10 +171,10 @@ export function TrainingHomeView({
         : String(settings.kochLevel);
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 sm:p-5">
+    <div className="space-y-5">
+      <header>
         <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
-        <p className="text-sm text-slate-600 mt-1">{description}</p>
+        <p className="mt-0.5 text-sm text-slate-600">{description}</p>
         <HeaderContextChips settings={settings} />
       </header>
 

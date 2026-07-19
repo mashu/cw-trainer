@@ -87,19 +87,15 @@ export function RankLadder({ sessions }: RankLadderProps): JSX.Element {
                     : 'border-slate-200 bg-slate-50/60'
               }`}
             >
-              {/* Medallion */}
+              {/* Medallion — number only, so wide insignia never overflows the circle */}
               <div
-                className={`flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-1 rounded-full ${
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-black ${
                   achieved || current
                     ? 'bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 text-amber-950'
                     : 'bg-slate-200 text-slate-400'
                 }`}
               >
-                <span className="text-sm font-black leading-none">{rank.index + 1}</span>
-                <MorseInsignia
-                  pattern={rank.insignia}
-                  className={achieved || current ? 'bg-amber-950/80' : 'bg-slate-400'}
-                />
+                {rank.index + 1}
               </div>
 
               <div className="min-w-0 flex-1">
@@ -109,6 +105,12 @@ export function RankLadder({ sessions }: RankLadderProps): JSX.Element {
                   >
                     {rank.title}
                   </span>
+                  <MorseInsignia
+                    pattern={rank.insignia}
+                    className={
+                      current ? 'bg-amber-500' : achieved ? 'bg-amber-400' : 'bg-slate-300'
+                    }
+                  />
                   {current && (
                     <span className="shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-white">
                       You
