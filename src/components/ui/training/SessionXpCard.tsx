@@ -60,52 +60,60 @@ export function SessionXpCard({
   return (
     <section
       aria-label="Experience earned"
-      className="relative overflow-hidden rounded-2xl border border-slate-700/70 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-5 text-white shadow-lg"
+      className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 sm:p-5"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-amber-400/20 blur-3xl"
-      />
-
       {rankUp && (
-        <div className="relative mb-4 flex items-center gap-3 rounded-xl border border-amber-300/40 bg-gradient-to-r from-amber-400/20 via-yellow-300/20 to-amber-400/20 px-4 py-3 animate-xp-pop">
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-100/70 px-4 py-3 animate-xp-pop">
           <span className="text-2xl" aria-hidden>
             ⬆️
           </span>
           <div>
-            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-300">
+            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700">
               Rank up
             </p>
-            <p className="text-lg font-extrabold text-amber-100">
-              You are now <span className="text-white">{after.rank.title}</span>{' '}
+            <p className="text-lg font-extrabold text-amber-900">
+              You are now <span className="text-slate-900">{after.rank.title}</span>{' '}
               <MorseInsignia pattern={after.rank.insignia} />
             </p>
           </div>
         </div>
       )}
 
-      <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2">
-        <p className="text-4xl font-black tracking-tight text-amber-300 animate-xp-pop">
-          +{formatXp(breakdown.totalXp)} <span className="text-xl font-extrabold">XP</span>
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div>
+          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700">
+            Earned this session
+          </p>
+          <p className="text-4xl font-black leading-none tracking-tight text-amber-700 animate-xp-pop">
+            +{formatXp(breakdown.totalXp)} <span className="text-xl font-extrabold">XP</span>
+          </p>
+        </div>
         <div className="flex flex-wrap gap-1.5 text-xs">
-          <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 font-semibold text-slate-200">
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-semibold text-slate-600">
             {breakdown.correctChars} chars copied
           </span>
           {accuracyBonusPercent > 0 && (
-            <span className="rounded-full border border-emerald-300/30 bg-emerald-400/15 px-2.5 py-1 font-semibold text-emerald-200">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
               +{accuracyBonusPercent}% accuracy
             </span>
           )}
           {speedBonusPercent > 0 && (
-            <span className="rounded-full border border-sky-300/30 bg-sky-400/15 px-2.5 py-1 font-semibold text-sky-200">
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-semibold text-sky-700">
               +{speedBonusPercent}% speed
             </span>
           )}
         </div>
       </div>
 
-      <div className="relative mt-4">
+      <div className="mt-4">
+        <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+          <span className="font-semibold text-slate-700">
+            {after.rank.title} <MorseInsignia pattern={after.rank.insignia} />
+          </span>
+          <span className="text-slate-500">
+            <span className="font-bold text-amber-700">{formatXp(after.totalXp)} XP</span> lifetime
+          </span>
+        </div>
         <div
           role="progressbar"
           aria-label={
@@ -114,31 +122,25 @@ export function SessionXpCard({
           aria-valuenow={after.percentToNextRank}
           aria-valuemin={0}
           aria-valuemax={100}
-          className="h-3 w-full overflow-hidden rounded-full bg-slate-700/70 shadow-inner"
+          className="h-2.5 w-full overflow-hidden rounded-full bg-amber-100"
         >
           <div
-            className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 transition-all duration-1000 ease-out"
+            className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-1000 ease-out"
             style={{ width: `${Math.max(barPercent, 2)}%` }}
-          >
-            <div
-              aria-hidden
-              className="absolute inset-y-0 w-1/3 -skew-x-12 bg-white/40 animate-shimmer"
-            />
-          </div>
+          />
         </div>
-        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-          <span className="text-slate-400">
-            {after.rank.title} · {formatXp(after.totalXp)} XP total
-          </span>
+        <p className="mt-1.5 text-xs text-slate-500">
           {after.nextRank ? (
-            <span className="text-slate-300">
-              <span className="font-bold text-amber-200">{formatXp(after.xpToNextRank)} XP</span> to{' '}
-              <span className="font-semibold text-white">{after.nextRank.title}</span>
-            </span>
+            <>
+              <span className="font-semibold text-slate-700">
+                {formatXp(after.xpToNextRank)} XP
+              </span>{' '}
+              to reach <span className="font-semibold text-slate-700">{after.nextRank.title}</span>
+            </>
           ) : (
-            <span className="font-semibold text-amber-300">Highest rank achieved 🏆</span>
+            <span className="font-semibold text-amber-700">Highest rank achieved 🏆</span>
           )}
-        </div>
+        </p>
       </div>
     </section>
   );

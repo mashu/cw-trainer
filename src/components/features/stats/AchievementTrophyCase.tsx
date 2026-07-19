@@ -6,8 +6,10 @@ import {
   AchievementBadgeMedallion,
   achievementTierCardClasses,
 } from '@/components/ui/achievements/AchievementBadgeMedallion';
+import { RankLadder } from '@/components/ui/training/RankLadder';
 import { useAchievementsState } from '@/hooks/useAchievements';
 import { ACHIEVEMENT_BADGES } from '@/lib/achievements';
+import { computeOperatorProgress } from '@/lib/progression';
 import type { SessionResult } from '@/types';
 
 export function AchievementTrophyCase({
@@ -16,13 +18,23 @@ export function AchievementTrophyCase({
   readonly sessions: readonly SessionResult[];
 }): JSX.Element {
   const { achievements, progress, achievementsSyncing } = useAchievementsState(sessions);
-  const unlockedById = new Map(achievements.map((achievement) => [achievement.id, achievement] as const));
+  const unlockedById = new Map(
+    achievements.map((achievement) => [achievement.id, achievement] as const),
+  );
   const unlockedCount = achievements.length;
   const totalCount = ACHIEVEMENT_BADGES.length;
+  const rankProgress = computeOperatorProgress(sessions);
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Rank</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">{rankProgress.rank.title}</div>
+          <div className="mt-0.5 text-xs text-amber-700/90">
+            {rankProgress.totalXp.toLocaleString('en-US')} XP
+          </div>
+        </div>
         <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
             Trophies
@@ -57,13 +69,15 @@ export function AchievementTrophyCase({
         </div>
       </div>
 
+      <RankLadder sessions={sessions} />
+
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-slate-800">Trophy Case</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Trophies unlock and stay visible locally on this device. Sign in only if you want
-              sync and public profile sharing.
+              Trophies unlock and stay visible locally on this device. Sign in only if you want sync
+              and public profile sharing.
             </p>
           </div>
           {achievementsSyncing && <span className="text-xs text-slate-500">Syncing...</span>}

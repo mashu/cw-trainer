@@ -52,7 +52,7 @@ describe('SessionXpCard', () => {
 
     expect(screen.getByText(/rank up/i)).toBeInTheDocument();
     expect(screen.getByText(/you are now/i)).toBeInTheDocument();
-    expect(screen.getByText('Novice')).toBeInTheDocument();
+    expect(screen.getAllByText('Novice').length).toBeGreaterThan(0);
   });
 
   it('renders nothing for an empty session', () => {
@@ -64,7 +64,8 @@ describe('SessionXpCard', () => {
   it('counts the finished session even when history has not caught up yet', () => {
     const latest = makeSession({ timestamp: 5, accuracy: 0.9, totalChars: 100 });
     render(<SessionXpCard allSessions={[]} latestSession={latest} />);
-    // 234 XP total after inclusion — shown in the footer line.
-    expect(screen.getByText(/234 XP total/)).toBeInTheDocument();
+    // 234 XP lifetime after inclusion — shown in the footer line.
+    expect(screen.getByText(/234 XP/)).toBeInTheDocument();
+    expect(screen.getByText(/lifetime/)).toBeInTheDocument();
   });
 });
