@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { MorseInsignia } from '@/components/ui/training/OperatorRankCard';
+import { MorseInsignia } from '@/components/ui/training/MorseInsignia';
 import { operatorProgressForXp, sessionXpBreakdown, totalXp } from '@/lib/progression';
 import type { SessionResult } from '@/types';
 

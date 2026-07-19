@@ -9,13 +9,13 @@ import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSetting
 import { LazyBoundary } from '@/components/ui/layouts/LazyBoundary';
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
 import { NextGoalCard } from '@/components/ui/training/NextGoalCard';
-import { OperatorRankCard } from '@/components/ui/training/OperatorRankCard';
 import { SessionXpCard } from '@/components/ui/training/SessionXpCard';
 import { TodaysFocusCard } from '@/components/ui/training/TodaysFocusCard';
 import type { UseChaseTrainingSessionReturn } from '@/hooks/useChaseTrainingSession';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
 import type { UseTrainingSessionReturn } from '@/hooks/useTrainingSession';
 import type { UnlockedAchievement } from '@/lib/achievements';
+import { computeOperatorProgress } from '@/lib/progression';
 import type { SharedAudioFromSettings } from '@/lib/settingsToSharedAudioProps';
 import { lazyWithRetry } from '@/lib/utils/lazyWithRetry';
 import type {
@@ -126,6 +126,7 @@ export function TrainingRouter({
       latest === null || session.timestamp > latest.timestamp ? session : latest,
     null,
   );
+  const rankProgress = computeOperatorProgress(allSessions);
 
   // ── Group mode: results screen ──
   if (training.showResults && !training.isTraining && training.lastSessionResult) {
@@ -213,7 +214,7 @@ export function TrainingRouter({
         lastAccuracyPercent={lastAccuracyPercent}
         sessionCount={groupSessions.length}
         autoAdjustProfile="group"
-        rankSlot={<OperatorRankCard sessions={allSessions} />}
+        rankProgress={rankProgress}
         onStartTraining={() => void training.startTraining()}
         onViewStats={() => {
           stopTrainingIfActive();
@@ -262,7 +263,7 @@ export function TrainingRouter({
         lastAccuracyPercent={lastEchoAccuracyPercent}
         sessionCount={echoSessions.length}
         autoAdjustProfile="echo"
-        rankSlot={<OperatorRankCard sessions={allSessions} />}
+        rankProgress={rankProgress}
         title="Echo Sending"
         description="Hear each character, then send it back with your paddle. The groups come from the same character set and group settings as normal training."
         startLabel="🎯 Start Echo Mode"
