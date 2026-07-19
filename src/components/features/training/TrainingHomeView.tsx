@@ -20,11 +20,7 @@ const DEFAULT_TIPS = [
 
 const ROTATE_MS = 5000;
 
-function TrainingTipsCarousel({
-  tips,
-}: {
-  readonly tips: readonly string[];
-}): JSX.Element {
+function TrainingTipsCarousel({ tips }: { readonly tips: readonly string[] }): JSX.Element {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -42,10 +38,7 @@ function TrainingTipsCarousel({
       <span className="text-amber-600 shrink-0" aria-hidden>
         💡
       </span>
-      <p
-        className="flex-1 min-w-0 text-sm text-slate-700 break-words"
-        aria-live="polite"
-      >
+      <p className="flex-1 min-w-0 text-sm text-slate-700 break-words" aria-live="polite">
         {tips[index] ?? ''}
       </p>
       <div className="flex gap-1 shrink-0" aria-hidden>
@@ -80,6 +73,8 @@ export interface TrainingHomeViewProps {
   readonly viewStatsLabel?: string;
   readonly listeningPrompt?: string;
   readonly tips?: readonly string[];
+  /** Optional progression hero (operator rank / XP card) rendered right under the header. */
+  readonly rankSlot?: React.ReactNode;
   /** Optional region (e.g. echo-mode Morse decoder warm-up) rendered between the intro card and tips. */
   readonly beforeTipsSlot?: React.ReactNode;
   /** Which auto-adjust profile counters to show (group vs echo). */
@@ -99,6 +94,7 @@ export function TrainingHomeView({
   viewStatsLabel = '📊 View Stats',
   listeningPrompt = 'New to this level? Listen to the letters:',
   tips = DEFAULT_TIPS,
+  rankSlot,
   beforeTipsSlot,
   autoAdjustProfile = 'group',
 }: TrainingHomeViewProps): JSX.Element {
@@ -110,11 +106,7 @@ export function TrainingHomeView({
   const profileLabel = autoAdjustProfile === 'echo' ? 'Echo' : 'Group';
   const charSetMode = settings.charSetMode ?? 'koch';
   const levelKpiLabel =
-    charSetMode === 'digits'
-      ? 'Digits level'
-      : charSetMode === 'mixed'
-        ? 'Levels'
-        : 'Koch level';
+    charSetMode === 'digits' ? 'Digits level' : charSetMode === 'mixed' ? 'Levels' : 'Koch level';
   const levelKpiValue =
     charSetMode === 'digits'
       ? String(settings.digitsLevel ?? 10)
@@ -128,6 +120,8 @@ export function TrainingHomeView({
         <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
         <p className="text-sm text-slate-600 mt-1">{description}</p>
       </header>
+
+      {rankSlot != null ? rankSlot : null}
 
       <StreakCard practiceDates={sessions.map((s) => s.date)} />
 
@@ -152,9 +146,7 @@ export function TrainingHomeView({
             </p>
           </div>
           <div className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
-            <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">
-              Sessions
-            </p>
+            <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Sessions</p>
             <p className="text-2xl font-extrabold text-blue-800 mt-0.5">{sessionCount}</p>
           </div>
           <div className="p-3 rounded-xl bg-gradient-to-br from-purple-50 to-white border border-purple-100">
@@ -174,10 +166,7 @@ export function TrainingHomeView({
           </div>
         </div>
         {levelAdjustProgress !== null ? (
-          <AutoLevelAdjustProgressCard
-            progress={levelAdjustProgress}
-            profileLabel={profileLabel}
-          />
+          <AutoLevelAdjustProgressCard progress={levelAdjustProgress} profileLabel={profileLabel} />
         ) : null}
       </section>
 

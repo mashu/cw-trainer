@@ -9,6 +9,8 @@ import type { FormTrainingSettings } from '@/components/ui/forms/TrainingSetting
 import { LazyBoundary } from '@/components/ui/layouts/LazyBoundary';
 import { SwipeContainer } from '@/components/ui/navigation/SwipeContainer';
 import { NextGoalCard } from '@/components/ui/training/NextGoalCard';
+import { OperatorRankCard } from '@/components/ui/training/OperatorRankCard';
+import { SessionXpCard } from '@/components/ui/training/SessionXpCard';
 import { TodaysFocusCard } from '@/components/ui/training/TodaysFocusCard';
 import type { UseChaseTrainingSessionReturn } from '@/hooks/useChaseTrainingSession';
 import type { UseEchoTrainingSessionReturn } from '@/hooks/useEchoTrainingSession';
@@ -47,7 +49,6 @@ function LazyFallback(): JSX.Element {
     </div>
   );
 }
-
 
 import { ActiveTrainingView } from './ActiveTrainingView';
 import { EchoDecoderPractice } from './EchoDecoderPractice';
@@ -113,6 +114,18 @@ export function TrainingRouter({
   const [playerModalOpen, setPlayerModalOpen] = useState(false);
   const clearLatestUnlockedAchievements =
     onClearLatestUnlockedAchievements ?? ((): void => undefined);
+  // Lifetime XP counts every mode, so switching between Group / Echo / Chase
+  // still moves the same rank ladder.
+  const allSessions: readonly SessionResult[] = [
+    ...groupSessions,
+    ...echoSessions,
+    ...chaseSessions,
+  ];
+  const latestGroupSession = groupSessions.reduce<SessionResult | null>(
+    (latest, session) =>
+      latest === null || session.timestamp > latest.timestamp ? session : latest,
+    null,
+  );
 
   // ── Group mode: results screen ──
   if (training.showResults && !training.isTraining && training.lastSessionResult) {
@@ -121,11 +134,16 @@ export function TrainingRouter({
         result={training.lastSessionResult}
         unlockedAchievements={latestUnlockedAchievements}
         nextUpSlot={
-          <NextGoalCard
-            sessions={groupSessions}
-            settings={settings}
-            lastScore={training.lastSessionResult.score}
-          />
+          <div className="space-y-4">
+            {latestGroupSession !== null && (
+              <SessionXpCard allSessions={allSessions} latestSession={latestGroupSession} />
+            )}
+            <NextGoalCard
+              sessions={groupSessions}
+              settings={settings}
+              lastScore={training.lastSessionResult.score}
+            />
+          </div>
         }
         onTrainAgain={() => {
           clearLatestUnlockedAchievements();
@@ -195,6 +213,7 @@ export function TrainingRouter({
         lastAccuracyPercent={lastAccuracyPercent}
         sessionCount={groupSessions.length}
         autoAdjustProfile="group"
+        rankSlot={<OperatorRankCard sessions={allSessions} />}
         onStartTraining={() => void training.startTraining()}
         onViewStats={() => {
           stopTrainingIfActive();
@@ -243,6 +262,7 @@ export function TrainingRouter({
         lastAccuracyPercent={lastEchoAccuracyPercent}
         sessionCount={echoSessions.length}
         autoAdjustProfile="echo"
+        rankSlot={<OperatorRankCard sessions={allSessions} />}
         title="Echo Sending"
         description="Hear each character, then send it back with your paddle. The groups come from the same character set and group settings as normal training."
         startLabel="🎯 Start Echo Mode"
