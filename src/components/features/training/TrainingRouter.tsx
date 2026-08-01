@@ -54,7 +54,7 @@ import { EchoDecoderPractice } from './EchoDecoderPractice';
 import { EchoSessionResultsView } from './EchoSessionResultsView';
 import { EchoTrainingView } from './EchoTrainingView';
 import { SessionResultsView } from './SessionResultsView';
-import { TeachingPlanPanel } from './TeachingPlanPanel';
+import { TeachingPlanCompactCard } from './TeachingPlanCompactCard';
 import { TrainingHomeView } from './TrainingHomeView';
 
 interface TrainingRouterProps {
@@ -203,7 +203,7 @@ export function TrainingRouter({
         beforeTipsSlot={
           <div className="space-y-3">
             <TodaysFocusCard sessions={groupSessions} settings={settings} />
-            <TeachingPlanPanel sessions={groupSessions} settings={settings} />
+            <TeachingPlanCompactCard sessions={groupSessions} settings={settings} />
           </div>
         }
       />

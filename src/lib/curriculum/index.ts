@@ -6,6 +6,12 @@ export {
   QUALITY_SESSIONS_TARGET,
 } from './teachingPlan';
 export type { CurriculumStage } from './teachingPlan';
+export {
+  evaluateCharacterCoverage,
+  hasCharacterCoverage,
+  sessionPracticedCharacters,
+} from './characterCoverage';
+export type { CharacterCoverage } from './characterCoverage';
 export { evaluateTeachingPlan } from './progress';
 export type {
   StageGoalId,

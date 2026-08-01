@@ -10,6 +10,7 @@ const makeSession = ({
   charWpm,
   mode,
   charSetMode,
+  sentCharacters = LCWO_SEQUENCE,
 }: {
   readonly timestamp: number;
   readonly accuracy?: number;
@@ -18,15 +19,22 @@ const makeSession = ({
   readonly charWpm?: number;
   readonly mode?: 'group' | 'echo' | 'chase';
   readonly charSetMode?: 'koch' | 'digits' | 'custom' | 'mixed';
+  readonly sentCharacters?: readonly string[];
 }): SessionResult => ({
   date: '2026-07-01',
   timestamp,
   startedAt: timestamp - 60_000,
   finishedAt: timestamp,
-  groups: [{ sent: 'KM', received: 'KM', correct: true }],
+  groups: [
+    {
+      sent: sentCharacters.join(''),
+      received: sentCharacters.join(''),
+      correct: true,
+    },
+  ],
   groupTimings: [{ timeToCompleteMs: 1500 }],
   accuracy,
-  letterAccuracy: { K: { correct: 1, total: 1 }, M: { correct: 1, total: 1 } },
+  letterAccuracy: {},
   alphabetSize: 2,
   avgResponseMs: 1500,
   totalChars,
@@ -94,6 +102,36 @@ describe('evaluateTeachingPlan', () => {
     const copyTest = progress.stages[0]!.goals.find((g) => g.id === 'copy-test')!;
     expect(copyTest.achieved).toBe(false);
     expect(progress.stages[0]!.status).toBe('active');
+  });
+
+  it('uses sent groups rather than letter accuracy as proof of stage coverage', () => {
+    const sessions = [
+      {
+        ...makeSession({
+          timestamp: 1,
+          kochLevel: 5,
+          sentCharacters: ['K', 'M'],
+        }),
+        letterAccuracy: Object.fromEntries(
+          LCWO_SEQUENCE.map((character) => [character, { correct: 1, total: 1 }]),
+        ),
+      },
+      {
+        ...makeSession({
+          timestamp: 2,
+          kochLevel: 5,
+          sentCharacters: ['K', 'M'],
+        }),
+        letterAccuracy: Object.fromEntries(
+          LCWO_SEQUENCE.map((character) => [character, { correct: 1, total: 1 }]),
+        ),
+      },
+    ];
+    const progress = evaluateTeachingPlan(sessions, 5);
+
+    expect(progress.stages[0]!.status).toBe('active');
+    expect(progress.stages[0]!.goals.every((goal) => goal.achieved)).toBe(false);
+    expect(progress.stages[0]!.coverage.missingCharacters).toEqual(['U', 'R', 'E', 'S']);
   });
 
   it('retroactively completes earlier stages from high-level sessions', () => {

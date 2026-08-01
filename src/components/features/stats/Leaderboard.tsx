@@ -429,6 +429,10 @@ export function Leaderboard({ limitCount = 20 }: { limitCount?: number }): JSX.E
         </div>
         <div className="text-xs text-slate-500">Top {limitCount}</div>
       </div>
+      <p className="text-xs text-slate-500 mb-2">
+        Competitive milestone — scores track difficulty × accuracy × speed. Not tied to teaching
+        plan progress. Trophies celebrate score milestones.
+      </p>
       {showHelp && (
         <div className="absolute right-3 top-10 z-50 w-[min(32rem,calc(100vw-2rem))] max-w-[32rem] p-3 rounded-xl border border-slate-200 bg-white shadow-xl">
           <div className="flex items-start justify-between mb-2">

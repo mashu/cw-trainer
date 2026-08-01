@@ -197,23 +197,35 @@ describe('Leaderboard', (): void => {
       render(<Leaderboard />);
     });
 
-    await waitFor(async () => {
-      const helpButton = screen.queryByRole('button', { name: /help|\?/i });
-      if (helpButton) {
-        await user.click(helpButton);
-      }
-      return helpButton !== null;
+    // Wait for help button to appear
+    const helpButton = await waitFor(() => {
+      const btn = screen.queryByRole('button', { name: /help|\?/i });
+      if (!btn) throw new Error('Help button not found');
+      return btn;
     });
 
-    await waitFor(async () => {
-      const closeButton = screen.queryByText(/×/);
-      if (closeButton) {
-        await user.click(closeButton);
-        // Help should be closed
-        const helpContent = screen.queryByText(/score formula/i);
-        expect(helpContent).not.toBeInTheDocument();
-      }
-      return closeButton !== null;
+    // Click help button to open help
+    await user.click(helpButton);
+
+    // Wait for help content to appear
+    await waitFor(() => {
+      const helpTitle = screen.queryByText(/Leaderboard score formula/i);
+      if (!helpTitle) throw new Error('Help content not shown');
+    });
+
+    // Find and click close button
+    const closeButton = await waitFor(() => {
+      const btn = screen.queryByText('×');
+      if (!btn) throw new Error('Close button not found');
+      return btn;
+    });
+
+    await user.click(closeButton);
+
+    // Help content should be gone
+    await waitFor(() => {
+      const helpTitle = screen.queryByText(/Leaderboard score formula/i);
+      expect(helpTitle).not.toBeInTheDocument();
     });
   });
 

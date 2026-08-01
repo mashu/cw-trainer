@@ -1,3 +1,7 @@
+import {
+  DEFAULT_SLIDING_WINDOW_END,
+  DEFAULT_SLIDING_WINDOW_START,
+} from '@/lib/morseConstants';
 import type { IcrSettings, TrainingSettings } from '@/types';
 
 export const DEFAULT_TRAINING_SETTINGS: TrainingSettings = {
@@ -7,8 +11,8 @@ export const DEFAULT_TRAINING_SETTINGS: TrainingSettings = {
   mixedLettersPercent: 70,
   mixedAutoLevelNextAxis: 'letters',
   customSet: [],
-  slidingWindowStart: 1,
-  slidingWindowEnd: 40,
+  slidingWindowStart: DEFAULT_SLIDING_WINDOW_START,
+  slidingWindowEnd: DEFAULT_SLIDING_WINDOW_END,
   sideToneMin: 400,
   sideToneMax: 600,
   volumeMin: 0.7,

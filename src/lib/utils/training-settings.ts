@@ -1,4 +1,9 @@
 import { normalizeAutoAdjustDirectionCounts } from '@/lib/autoAdjustCountSettings';
+import {
+  DEFAULT_SLIDING_WINDOW_END,
+  DEFAULT_SLIDING_WINDOW_START,
+  SLIDING_WINDOW_INDEX_MAX,
+} from '@/lib/morseConstants';
 import { trainingSettingsSchema } from '@/lib/validators';
 import type { TrainingSettings } from '@/types';
 
@@ -6,8 +11,7 @@ const DIGITS_LEVEL_MIN = 1;
 const DIGITS_LEVEL_MAX = 10;
 const MIXED_LETTERS_PERCENT_MIN = 0;
 const MIXED_LETTERS_PERCENT_MAX = 100;
-const SLIDING_WINDOW_INDEX_MIN = 1;
-const SLIDING_WINDOW_INDEX_MAX = 40;
+const SLIDING_WINDOW_INDEX_MIN = DEFAULT_SLIDING_WINDOW_START;
 const AUDIO_REALISM_LEVEL_MIN = 0;
 const AUDIO_REALISM_LEVEL_MAX = 1;
 const QSB_RATE_MIN = 0.03;
@@ -739,14 +743,14 @@ export const normalizeTrainingSettings = (
       Math.max(SLIDING_WINDOW_INDEX_MIN, Math.trunc(candidate['slidingWindowEnd'])),
     );
   }
-  // Backward compat: old slidingWindowSize → treat as full range (start=1, end=40)
+  // Backward compat: old slidingWindowSize → treat as the full built-in LCWO range.
   if (
     typeof candidate['slidingWindowSize'] === 'number' &&
     candidate['slidingWindowStart'] === undefined &&
     candidate['slidingWindowEnd'] === undefined
   ) {
-    partialResult.slidingWindowStart = 1;
-    partialResult.slidingWindowEnd = 40;
+    partialResult.slidingWindowStart = DEFAULT_SLIDING_WINDOW_START;
+    partialResult.slidingWindowEnd = DEFAULT_SLIDING_WINDOW_END;
   }
 
   // Validate the partial result

@@ -4,6 +4,7 @@ import {
   evaluateSessionSpeedRun,
   evaluateSpeedCertificateMatrix,
 } from '@/lib/curriculum';
+import { KOCH_LEVEL_MAX, LCWO_SEQUENCE } from '@/lib/morseConstants';
 import type { SessionResult, SessionGroup, SessionTiming } from '@/types';
 
 /** Build a session from parallel groups/timings; defaults to a full-alphabet level. */
@@ -11,7 +12,7 @@ const makeSession = ({
   timestamp,
   groups,
   timings,
-  kochLevel = 40,
+  kochLevel = KOCH_LEVEL_MAX,
   sessionCharWpm,
   mode,
 }: {
@@ -42,12 +43,13 @@ const makeSession = ({
 
 const correctGroup = (sent: string): SessionGroup => ({ sent, received: sent, correct: true });
 
-/** N correct 5-char groups at the given per-group speed. */
+/** N correct groups at the given per-group speed. */
 const groupsAtSpeed = (
   count: number,
   wpm: number,
+  sent = 'KMURE',
 ): { groups: SessionGroup[]; timings: SessionTiming[] } => ({
-  groups: Array.from({ length: count }, () => correctGroup('KMURE')),
+  groups: Array.from({ length: count }, () => correctGroup(sent)),
   timings: Array.from({ length: count }, () => ({ timeToCompleteMs: 1000, charWpm: wpm })),
 });
 
@@ -101,7 +103,7 @@ describe('evaluateSpeedCertificateMatrix', () => {
   const plan = buildTeachingPlan();
 
   it('credits the stage bracket the session level reaches, and all below it', () => {
-    const { groups, timings } = groupsAtSpeed(12, 13);
+    const { groups, timings } = groupsAtSpeed(12, 13, 'KMURESNAPTLW');
     const sessions = [makeSession({ timestamp: 1, groups, timings, kochLevel: 12 })];
     const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
     // Level 12 covers stages with exit level <= 12 (stages 1 and 2)
@@ -114,7 +116,14 @@ describe('evaluateSpeedCertificateMatrix', () => {
 
   it('tracks the best near-miss attempt for progress display', () => {
     const { groups, timings } = groupsAtSpeed(7, 20); // 35 correct chars — short of 50
-    const sessions = [makeSession({ timestamp: 1, groups, timings, kochLevel: 40 })];
+    const sessions = [
+      makeSession({
+        timestamp: 1,
+        groups: [correctGroup(LCWO_SEQUENCE.join('')), ...groups],
+        timings: [{ timeToCompleteMs: 1000, charWpm: 1 }, ...timings],
+        kochLevel: KOCH_LEVEL_MAX,
+      }),
+    ];
     const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
     const lastRow = matrix.rows[matrix.rows.length - 1]!;
     const cell = lastRow.cells.find((c) => c.speed === 20)!;
@@ -124,7 +133,14 @@ describe('evaluateSpeedCertificateMatrix', () => {
 
   it('marks full-alphabet certificates from the final stage row', () => {
     const { groups, timings } = groupsAtSpeed(10, 20);
-    const sessions = [makeSession({ timestamp: 1, groups, timings, kochLevel: 40 })];
+    const sessions = [
+      makeSession({
+        timestamp: 1,
+        groups: [correctGroup(LCWO_SEQUENCE.join('')), ...groups],
+        timings: [{ timeToCompleteMs: 1000, charWpm: 1 }, ...timings],
+        kochLevel: KOCH_LEVEL_MAX,
+      }),
+    ];
     const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
     expect(matrix.fullAlphabetEarnedSpeeds).toEqual([5, 13, 20]);
   });
@@ -135,6 +151,21 @@ describe('evaluateSpeedCertificateMatrix', () => {
     const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
     expect(matrix.earnedCount).toBe(0);
   });
+
+  it('requires the certificate session to include every stage character', () => {
+    const { groups, timings } = groupsAtSpeed(10, 20, 'KMMMM');
+    const sessions = [
+      makeSession({
+        timestamp: 1,
+        groups,
+        timings,
+        kochLevel: 5,
+      }),
+    ];
+    const matrix = evaluateSpeedCertificateMatrix(sessions, plan);
+
+    expect(matrix.rows[0]!.cells.find((cell) => cell.speed === 20)!.earned).toBe(false);
+  });
 });
 
 describe('attemptedStageForLevel', () => {
@@ -144,6 +175,6 @@ describe('attemptedStageForLevel', () => {
     expect(attemptedStageForLevel(plan, 3)).toBeNull(); // below first exit level (5)
     expect(attemptedStageForLevel(plan, 5)!.index).toBe(0);
     expect(attemptedStageForLevel(plan, 12)!.index).toBe(1);
-    expect(attemptedStageForLevel(plan, 40)!.index).toBe(plan.length - 1);
+    expect(attemptedStageForLevel(plan, KOCH_LEVEL_MAX)!.index).toBe(plan.length - 1);
   });
 });

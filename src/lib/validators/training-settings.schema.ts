@@ -1,10 +1,15 @@
 import { z } from 'zod';
 
 import { EXTRA_SPACING_MULTIPLIER_MIN } from '@/lib/extraSpacing';
+import {
+  DEFAULT_SLIDING_WINDOW_END,
+  DEFAULT_SLIDING_WINDOW_START,
+  KOCH_LEVEL_MAX,
+  KOCH_LEVEL_MIN,
+  SLIDING_WINDOW_INDEX_MAX,
+} from '@/lib/morseConstants';
 import type { CharacterSetMode } from '@/types';
 
-const KOCH_LEVEL_MIN = 1; // Level 1 = 2 characters, Level 2 = 3 characters, etc.
-const KOCH_LEVEL_MAX = 40;
 const DIGITS_LEVEL_MIN = 1;
 const DIGITS_LEVEL_MAX = 10;
 const WPM_MIN = 1;
@@ -29,8 +34,7 @@ const CHASE_FALL_MS_MIN = 500;
 const CHASE_FALL_MS_MAX = 60000;
 const CHASE_SPEEDUP_MS_MIN = 0;
 const CHASE_SPEEDUP_MS_MAX = 5000;
-const SLIDING_WINDOW_INDEX_MIN = 1;
-const SLIDING_WINDOW_INDEX_MAX = 40;
+const SLIDING_WINDOW_INDEX_MIN = DEFAULT_SLIDING_WINDOW_START;
 const MIXED_LETTERS_PERCENT_MIN = 0;
 const MIXED_LETTERS_PERCENT_MAX = 100;
 const VOLUME_MIN = 0.1;
@@ -83,14 +87,14 @@ export const trainingSettingsSchema = z
       .min(SLIDING_WINDOW_INDEX_MIN)
       .max(SLIDING_WINDOW_INDEX_MAX)
       .optional()
-      .default(1),
+      .default(DEFAULT_SLIDING_WINDOW_START),
     slidingWindowEnd: z
       .number()
       .int()
       .min(SLIDING_WINDOW_INDEX_MIN)
       .max(SLIDING_WINDOW_INDEX_MAX)
       .optional()
-      .default(40),
+      .default(DEFAULT_SLIDING_WINDOW_END),
     sideToneMin: z.number().int().min(TONE_MIN).max(TONE_MAX),
     sideToneMax: z.number().int().min(TONE_MIN).max(TONE_MAX),
     volumeMin: z.number().min(VOLUME_MIN).max(VOLUME_MAX),
@@ -255,8 +259,8 @@ export const trainingSettingsSchema = z
       });
     }
 
-    const start = value.slidingWindowStart ?? 1;
-    const end = value.slidingWindowEnd ?? 40;
+    const start = value.slidingWindowStart ?? DEFAULT_SLIDING_WINDOW_START;
+    const end = value.slidingWindowEnd ?? DEFAULT_SLIDING_WINDOW_END;
     if (end < start) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

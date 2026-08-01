@@ -128,7 +128,7 @@ export interface TrainingSettings {
   readonly customSequence?: readonly string[]; // Custom sequence order for Koch mode
   /** 1-based start index of character range within unlocked sequence (1 = first). Default 1. */
   readonly slidingWindowStart?: number;
-  /** 1-based end index (inclusive) within unlocked sequence. Default = last unlocked (e.g. 40). */
+  /** 1-based end index (inclusive) within unlocked sequence. */
   readonly slidingWindowEnd?: number;
   readonly sideToneMin: number;
   readonly sideToneMax: number;

@@ -13,7 +13,12 @@ import {
   nextMixedUnlockPreviewChar,
   unlockedCharCountForLevel,
 } from '@/lib/levelUnlock';
-import { LCWO_SEQUENCE, MORSE_CODE } from '@/lib/morseConstants';
+import {
+  DEFAULT_SLIDING_WINDOW_END,
+  KOCH_LEVEL_MAX,
+  LCWO_SEQUENCE,
+  MORSE_CODE,
+} from '@/lib/morseConstants';
 import { SEQUENCE_PRESETS } from '@/lib/sequencePresets';
 import { computeCharPool } from '@/lib/trainingUtils';
 
@@ -178,7 +183,7 @@ export function TrainingSettingsForm({
     if (charMode === 'koch' || charMode === 'mixed') {
       return Math.max(1, currentSequence.length - 1);
     }
-    return 40;
+    return KOCH_LEVEL_MAX;
   }, [charMode, currentSequence.length]);
 
   const [charWpmMinInput, setCharWpmMinInput] = useState<string>(String(settings.charWpmMin));
@@ -482,7 +487,10 @@ export function TrainingSettingsForm({
                       Math.min(unlockedCharCountForLevel(settings.kochLevel), currentSequence.length),
                     );
                     const start = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, nLetters));
-                    const end = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, nLetters));
+                    const end = Math.max(
+                      1,
+                      Math.min(settings.slidingWindowEnd ?? DEFAULT_SLIDING_WINDOW_END, nLetters),
+                    );
                     const startIdx = Math.min(start, end);
                     const endIdx = Math.max(start, end);
                     const isAll = startIdx === 1 && endIdx >= nLetters;
@@ -577,7 +585,10 @@ export function TrainingSettingsForm({
                 ((): JSX.Element => {
                   const nDigits = digitsUnlockedCount(settings.digitsLevel ?? 1);
                   const start = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, nDigits));
-                  const end = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, nDigits));
+                  const end = Math.max(
+                    1,
+                    Math.min(settings.slidingWindowEnd ?? DEFAULT_SLIDING_WINDOW_END, nDigits),
+                  );
                   const startIdx = Math.min(start, end);
                   const endIdx = Math.max(start, end);
                   const isAll = startIdx === 1 && endIdx >= nDigits;

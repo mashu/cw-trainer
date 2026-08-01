@@ -1,3 +1,8 @@
+import {
+  DEFAULT_SLIDING_WINDOW_END,
+  KOCH_LEVEL_MAX,
+  LCWO_SEQUENCE,
+} from '@/lib/morseConstants';
 import { computeCharPool, weightedRandomPick, generateGroup } from '@/lib/trainingUtils';
 
 describe('weightedRandomPick', () => {
@@ -88,6 +93,15 @@ describe('computeCharPool digits mode', () => {
       digitsLevel: 1,
     });
     expect(pool).toEqual(['0', '1']);
+  });
+});
+
+describe('computeCharPool Koch mode', () => {
+  it('includes the full LCWO sequence at the canonical maximum level by default', () => {
+    expect(computeCharPool({ kochLevel: KOCH_LEVEL_MAX, charSetMode: 'koch' })).toEqual(
+      LCWO_SEQUENCE,
+    );
+    expect(DEFAULT_SLIDING_WINDOW_END).toBe(LCWO_SEQUENCE.length);
   });
 });
 

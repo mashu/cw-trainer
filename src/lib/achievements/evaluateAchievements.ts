@@ -1,5 +1,6 @@
 import { evaluateSessionSpeedRun } from '@/lib/curriculum';
 import { localDateForTimestamp } from '@/lib/localDate';
+import { KOCH_LEVEL_MAX } from '@/lib/morseConstants';
 import { getMasteredCharacters } from '@/lib/scoring/characterDiagnostics';
 import type { SessionResult } from '@/types';
 
@@ -16,7 +17,7 @@ import type {
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const DIGITS = '0123456789'.split('');
 const DAY_MS = 24 * 60 * 60 * 1000;
-const KOCH_GRADUATE_LEVEL = 40;
+const KOCH_GRADUATE_LEVEL = KOCH_LEVEL_MAX;
 
 type UnlockCandidate = {
   readonly id: AchievementId;

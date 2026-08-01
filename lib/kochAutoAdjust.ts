@@ -1,6 +1,5 @@
 import {
   MAX_DIGITS_LEVEL,
-  MAX_KOCH_LEVEL_GUESS,
   MIN_DIGITS_LEVEL,
   MIN_KOCH_LEVEL,
 } from './constants';
@@ -8,6 +7,7 @@ import {
   flipMixedAutoLevelAxis,
   type MixedAutoLevelAxis,
 } from './levelUnlock';
+import { KOCH_LEVEL_MAX } from './morseConstants';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export interface AutoLevelAdjustConfig {
    * Alphabet level when mode is mixed / echo-mixed.
    */
   readonly currentLevel: number;
-  /** Upper bound for alphabet level (defaults to MAX_KOCH_LEVEL_GUESS). */
+  /** Upper bound for alphabet level (defaults to KOCH_LEVEL_MAX from LCWO_SEQUENCE). */
   readonly maxLevel?: number;
   /** Digits level when mode is mixed / echo-mixed. */
   readonly pairedDigitsLevel?: number;
@@ -395,7 +395,7 @@ export function evaluateAutoLevelAdjust(
   const mixed = isMixedAdjustMode(mode);
   const digitsLevel = mixed ? mixedDigitsLevel(config) : undefined;
   const threshold = Math.max(0, Math.min(100, config.threshold));
-  const maxKochLevel = config.maxLevel ?? MAX_KOCH_LEVEL_GUESS;
+  const maxKochLevel = config.maxLevel ?? KOCH_LEVEL_MAX;
   const maxDigits = config.maxDigitsLevel ?? MAX_DIGITS_LEVEL;
   const accuracyPct = (accuracyFraction || 0) * 100;
 

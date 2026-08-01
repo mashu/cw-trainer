@@ -1,5 +1,5 @@
 import { digitsUnlockedCount, unlockedCharCountForLevel } from './levelUnlock';
-import { LCWO_SEQUENCE } from './morseConstants';
+import { DEFAULT_SLIDING_WINDOW_END, LCWO_SEQUENCE } from './morseConstants';
 
 const DIGITS_SET = new Set<string>(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
 
@@ -51,7 +51,7 @@ export function computeCharPool(settings: CharPoolSettingsInput): string[] {
     const n = fullUnlocked.length;
     if (n === 0) return fullUnlocked;
     const start1 = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, n));
-    const end1 = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, n));
+    const end1 = Math.max(1, Math.min(settings.slidingWindowEnd ?? DEFAULT_SLIDING_WINDOW_END, n));
     const startIdx = Math.min(start1, end1);
     const endIdx = Math.max(start1, end1);
     const pool = fullUnlocked.slice(startIdx - 1, endIdx);
@@ -76,7 +76,7 @@ export function computeCharPool(settings: CharPoolSettingsInput): string[] {
   const n = fullUnlocked.length;
   if (n === 0) return fullUnlocked;
   const start1 = Math.max(1, Math.min(settings.slidingWindowStart ?? 1, n));
-  const end1 = Math.max(1, Math.min(settings.slidingWindowEnd ?? 40, n));
+  const end1 = Math.max(1, Math.min(settings.slidingWindowEnd ?? DEFAULT_SLIDING_WINDOW_END, n));
   const startIdx = Math.min(start1, end1);
   const endIdx = Math.max(start1, end1);
   const pool = fullUnlocked.slice(startIdx - 1, endIdx);

@@ -32,8 +32,8 @@ function CompactBar({
   const hint = disabled
     ? 'Disabled — level will not change in this direction'
     : tone === 'up'
-      ? `Sessions ≥ ${threshold}% toward level up`
-      : `Sessions < ${threshold}% toward level down`;
+      ? `Sessions ≥ ${threshold}% session accuracy toward level up`
+      : `Sessions < ${threshold}% session accuracy toward level down`;
 
   return (
     <div
@@ -88,7 +88,7 @@ export function AutoLevelAdjustProgressCard({
 
   const mixedHint =
     alternatingMixedLevels && nextMixedAxis !== undefined
-      ? `Alternates letter/digit — next: ${nextMixedAxis === 'letters' ? 'letter' : 'digit'}`
+      ? `Alternating letters/digits — next: ${nextMixedAxis === 'letters' ? 'Letters' : 'Digits'}`
       : alternatingMixedLevels
         ? 'Alternates letter/digit level'
         : 'Resets on level change';
@@ -99,12 +99,15 @@ export function AutoLevelAdjustProgressCard({
       aria-label="Automatic level adjustment progress"
     >
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-semibold text-slate-700">Auto level</span>
+        <span className="text-xs font-semibold text-slate-700">Auto level adjust</span>
         {profileLabel ? (
           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
             {profileLabel}
           </span>
         ) : null}
+        <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+          {threshold}% session accuracy
+        </span>
       </div>
       <div className="flex gap-3">
         <CompactBar

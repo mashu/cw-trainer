@@ -1,3 +1,8 @@
+import {
+  DEFAULT_SLIDING_WINDOW_END,
+  KOCH_LEVEL_MAX,
+  LCWO_SEQUENCE,
+} from '@/lib/morseConstants';
 import { trainingSettingsSchema } from '@/lib/validators';
 import type { TrainingSettingsInput } from '@/lib/validators';
 
@@ -63,6 +68,22 @@ describe('trainingSettingsSchema', () => {
     const result = trainingSettingsSchema.safeParse(buildValidSettings());
 
     expect(result.success).toBe(true);
+  });
+
+  it('uses the LCWO curriculum for the maximum level and default window', () => {
+    const atMaximum = trainingSettingsSchema.safeParse({
+      ...buildValidSettings(),
+      kochLevel: KOCH_LEVEL_MAX,
+      slidingWindowEnd: DEFAULT_SLIDING_WINDOW_END,
+    });
+    const beyondMaximum = trainingSettingsSchema.safeParse({
+      ...buildValidSettings(),
+      kochLevel: KOCH_LEVEL_MAX + 1,
+    });
+
+    expect(KOCH_LEVEL_MAX).toBe(LCWO_SEQUENCE.length - 1);
+    expect(atMaximum.success).toBe(true);
+    expect(beyondMaximum.success).toBe(false);
   });
 
   it('defaults echoKeyerMode when omitted', () => {

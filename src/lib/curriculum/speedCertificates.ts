@@ -1,6 +1,7 @@
 import { alignGroup } from '@/lib/groupAlignment';
 import type { SessionResult } from '@/types';
 
+import { hasCharacterCoverage } from './characterCoverage';
 import { CERTIFICATE_SPEEDS_WPM, buildTeachingPlan, type CurriculumStage } from './teachingPlan';
 
 /**
@@ -12,7 +13,8 @@ import { CERTIFICATE_SPEEDS_WPM, buildTeachingPlan, type CurriculumStage } from 
  * {@link CERT_MIN_CORRECT_CHARS} correctly copied characters from groups that
  * were actually PLAYED at or above the certificate speed, with at-speed
  * accuracy of at least {@link CERT_MIN_ACCURACY}, in a session at or above the
- * stage's exit level. Fifty characters is roughly a default 20-group session
+ * stage's exit level and that included every character introduced by the stage.
+ * Fifty characters is roughly a default 20-group session
  * at 3-char groups (or ~10 five-char groups) — long enough to prove solid
  * copy without demanding a 100-group slog. With variable-speed settings only
  * the groups that met the speed count — per-group speeds are in
@@ -59,9 +61,7 @@ export function evaluateSessionSpeedRun(session: SessionResult, speed: number): 
   session.groups.forEach((group, index) => {
     const timing = session.groupTimings[index];
     const groupSpeed =
-      typeof timing?.charWpm === 'number' && timing.charWpm >= 1
-        ? timing.charWpm
-        : session.charWpm;
+      typeof timing?.charWpm === 'number' && timing.charWpm >= 1 ? timing.charWpm : session.charWpm;
     if (typeof groupSpeed !== 'number' || groupSpeed < speed) return;
     const alignment = alignGroup(group.sent, group.received);
     alignment.forEach((pair) => {
@@ -130,7 +130,9 @@ export function evaluateSpeedCertificateMatrix(
   const rows: CertificateStageRow[] = stages.map((stage) => {
     const qualifying = eligible.filter(
       (session) =>
-        typeof session.kochLevel === 'number' && session.kochLevel >= stage.levelEnd,
+        typeof session.kochLevel === 'number' &&
+        session.kochLevel >= stage.levelEnd &&
+        hasCharacterCoverage([session], stage.characters),
     );
     const cells: CertificateCell[] = speeds.map((speed) => {
       let earned = false;
@@ -139,8 +141,10 @@ export function evaluateSpeedCertificateMatrix(
       let bestAccuracy = 0;
       qualifying.forEach((session) => {
         const run = evaluateSessionSpeedRun(session, speed);
-        if (run.correctChars > bestCorrectChars ||
-            (run.correctChars === bestCorrectChars && run.accuracy > bestAccuracy)) {
+        if (
+          run.correctChars > bestCorrectChars ||
+          (run.correctChars === bestCorrectChars && run.accuracy > bestAccuracy)
+        ) {
           bestCorrectChars = run.correctChars;
           bestAccuracy = run.accuracy;
         }

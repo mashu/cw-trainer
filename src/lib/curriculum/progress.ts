@@ -1,9 +1,7 @@
 import type { SessionResult } from '@/types';
 
-import {
-  evaluateSpeedCertificateMatrix,
-  type SpeedCertificateMatrix,
-} from './speedCertificates';
+import { evaluateCharacterCoverage, type CharacterCoverage } from './characterCoverage';
+import { evaluateSpeedCertificateMatrix, type SpeedCertificateMatrix } from './speedCertificates';
 import {
   COPY_TEST_MIN_CHARS,
   QUALITY_ACCURACY,
@@ -29,6 +27,12 @@ export interface StageProgress {
   readonly stage: CurriculumStage;
   readonly status: StageStatus;
   readonly goals: readonly StageGoalProgress[];
+  /** Stage characters transmitted by sessions eligible for this stage. */
+  readonly coverage: CharacterCoverage;
+  /** Stage characters transmitted by qualifying quality sessions. */
+  readonly qualityCoverage: CharacterCoverage;
+  /** Stage characters transmitted by passed copy tests. */
+  readonly copyTestCoverage: CharacterCoverage;
   /** Best copy-test accuracy achieved at this stage's level (0..1), if attempted. */
   readonly bestCopyTestAccuracy?: number;
 }
@@ -86,9 +90,15 @@ export function evaluateTeachingPlan(
     const copyTests = qualifying.filter(isCopyTestSession);
     const copyTestAttempts = qualifying.filter((s) => s.totalChars >= COPY_TEST_MIN_CHARS);
 
-    const reachedLevel = currentKochLevel >= stage.levelEnd || qualifying.length > 0;
-    const qualityAchieved = qualitySessions.length >= QUALITY_SESSIONS_TARGET;
-    const copyTestPassed = copyTests.length > 0;
+    const levelReached = currentKochLevel >= stage.levelEnd || qualifying.length > 0;
+    const coverage = evaluateCharacterCoverage(qualifying, stage.characters);
+    const qualityCoverage = evaluateCharacterCoverage(qualitySessions, stage.characters);
+    const copyTestCoverage = evaluateCharacterCoverage(copyTests, stage.characters);
+    const reachedLevel = levelReached && coverage.missingCharacters.length === 0;
+    const qualityAchieved =
+      qualitySessions.length >= QUALITY_SESSIONS_TARGET &&
+      qualityCoverage.missingCharacters.length === 0;
+    const copyTestPassed = copyTests.length > 0 && copyTestCoverage.missingCharacters.length === 0;
 
     const goals: StageGoalProgress[] = [
       {
@@ -100,14 +110,14 @@ export function evaluateTeachingPlan(
       },
       {
         id: 'quality-sessions',
-        label: `${QUALITY_SESSIONS_TARGET} sessions at ≥${Math.round(QUALITY_ACCURACY * 100)}% accuracy`,
+        label: `${QUALITY_SESSIONS_TARGET} sessions at ≥${Math.round(QUALITY_ACCURACY * 100)}% session accuracy`,
         achieved: qualityAchieved,
         current: Math.min(qualitySessions.length, QUALITY_SESSIONS_TARGET),
         target: QUALITY_SESSIONS_TARGET,
       },
       {
         id: 'copy-test',
-        label: `Copy test: ${COPY_TEST_MIN_CHARS}+ characters at ≥${Math.round(QUALITY_ACCURACY * 100)}%`,
+        label: `Copy test: ${COPY_TEST_MIN_CHARS}+ characters at ≥${Math.round(QUALITY_ACCURACY * 100)}% session accuracy`,
         achieved: copyTestPassed,
         current: copyTestPassed ? 1 : 0,
         target: 1,
@@ -124,6 +134,9 @@ export function evaluateTeachingPlan(
       stage,
       status: complete ? 'complete' : 'upcoming',
       goals,
+      coverage,
+      qualityCoverage,
+      copyTestCoverage,
       ...(bestCopyTestAccuracy !== undefined ? { bestCopyTestAccuracy } : {}),
     });
   });

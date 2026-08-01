@@ -1,3 +1,5 @@
+import { KOCH_LEVEL_MAX } from '@/lib/morseConstants';
+
 import type { AchievementBadgeDefinition, AchievementId } from './types';
 
 export const ACHIEVEMENT_BADGES = [
@@ -293,7 +295,7 @@ export const ACHIEVEMENT_BADGES = [
     id: 'koch-graduate',
     title: 'Koch Graduate',
     description: 'Copied confidently at the full Koch curriculum.',
-    criteria: 'Finish a Group session at Koch level 40 with 80%+ accuracy.',
+    criteria: `Finish a Group session at Koch level ${KOCH_LEVEL_MAX} with 80%+ accuracy.`,
     tier: 'platinum',
     rarity: 'epic',
     category: 'mastery',
